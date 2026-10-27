@@ -1,0 +1,214 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A10000000000000000000001 /* Morde/MordeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000002 /* Morde/MordeApp.swift */; };
+		A10000000000000000000017 /* Morde/MordeCredentialExpiry.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000018 /* Morde/MordeCredentialExpiry.swift */; };
+		A10000000000000000000019 /* ../../../LICENSE in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000023 /* ../../../LICENSE */; };
+		A1000000000000000000001A /* ../../../NOTICE in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000024 /* ../../../NOTICE */; };
+		A1000000000000000000001B /* ../../../THIRD_PARTY_NOTICES.md in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000025 /* ../../../THIRD_PARTY_NOTICES.md */; };
+		A1000000000000000000001C /* ../../MORDE_THIRD_PARTY_LICENSES.md in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000026 /* ../../MORDE_THIRD_PARTY_LICENSES.md */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		A10000000000000000000002 /* Morde/MordeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Morde/MordeApp.swift; sourceTree = "<group>"; };
+		A10000000000000000000003 /* Morde.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Morde.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000000000000000000018 /* Morde/MordeCredentialExpiry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Morde/MordeCredentialExpiry.swift; sourceTree = "<group>"; };
+		A10000000000000000000023 /* ../../../LICENSE */ = {isa = PBXFileReference; lastKnownFileType = text; path = ../../../LICENSE; sourceTree = "<group>"; };
+		A10000000000000000000024 /* ../../../NOTICE */ = {isa = PBXFileReference; lastKnownFileType = text; path = ../../../NOTICE; sourceTree = "<group>"; };
+		A10000000000000000000025 /* ../../../THIRD_PARTY_NOTICES.md */ = {isa = PBXFileReference; lastKnownFileType = text; path = ../../../THIRD_PARTY_NOTICES.md; sourceTree = "<group>"; };
+		A10000000000000000000026 /* ../../MORDE_THIRD_PARTY_LICENSES.md */ = {isa = PBXFileReference; lastKnownFileType = text; path = ../../MORDE_THIRD_PARTY_LICENSES.md; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A10000000000000000000007 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A10000000000000000000004 = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000002 /* Morde/MordeApp.swift */,
+				A10000000000000000000005 /* Products */,
+				A10000000000000000000018 /* Morde/MordeCredentialExpiry.swift */,
+				A10000000000000000000023 /* ../../../LICENSE */,
+				A10000000000000000000024 /* ../../../NOTICE */,
+				A10000000000000000000025 /* ../../../THIRD_PARTY_NOTICES.md */,
+				A10000000000000000000026 /* ../../MORDE_THIRD_PARTY_LICENSES.md */,
+			);
+			sourceTree = "<group>";
+		};
+		A10000000000000000000005 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000003 /* Morde.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A10000000000000000000009 /* Morde */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A10000000000000000000011 /* Build configuration list for PBXNativeTarget "Morde" */;
+			buildPhases = (
+				A10000000000000000000006 /* Sources */,
+				A10000000000000000000007 /* Frameworks */,
+				A10000000000000000000008 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Morde;
+			productName = Morde;
+			productReference = A10000000000000000000003 /* Morde.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A10000000000000000000010 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					A10000000000000000000009 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+				};
+			};
+			buildConfigurationList = A10000000000000000000012 /* Build configuration list for PBXProject "Morde" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = A10000000000000000000004;
+			productRefGroup = A10000000000000000000005 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A10000000000000000000009 /* Morde */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A10000000000000000000008 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000019 /* ../../../LICENSE in Resources */,
+				A1000000000000000000001A /* ../../../NOTICE in Resources */,
+				A1000000000000000000001B /* ../../../THIRD_PARTY_NOTICES.md in Resources */,
+				A1000000000000000000001C /* ../../MORDE_THIRD_PARTY_LICENSES.md in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A10000000000000000000006 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000001 /* Morde/MordeApp.swift in Sources */,
+				A10000000000000000000017 /* Morde/MordeCredentialExpiry.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		A10000000000000000000013 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MordeInfo.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.morde.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A10000000000000000000014 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MordeInfo.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.morde.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		A10000000000000000000015 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		A10000000000000000000016 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A10000000000000000000011 /* Build configuration list for PBXNativeTarget "Morde" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A10000000000000000000013 /* Debug */,
+				A10000000000000000000014 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A10000000000000000000012 /* Build configuration list for PBXProject "Morde" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A10000000000000000000015 /* Debug */,
+				A10000000000000000000016 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = A10000000000000000000010 /* Project object */;
+}

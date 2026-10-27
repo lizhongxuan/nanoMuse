@@ -1,5 +1,7 @@
 # Third-Party Licenses
 
+> 以下为上游 OpenMinis 源码的历史依赖清单，仅供本地参考。Morde Android `:morde` 和 iOS `Morde.xcodeproj` 不链接原本地 Agent、iSH、proot、FFmpeg、rclone、Swift Package 或其资源。发行前需针对 Morde 实际构建重新生成许可清单，不能直接把本表当成 Morde 包清单。
+
 OpenMinis bundles, links, or depends on the following third-party components. Versions reflect the current source tree; license types were verified against each project's repository (GitHub license metadata / LICENSE files).
 
 ## Native C/C++ dependencies (`deps/`)

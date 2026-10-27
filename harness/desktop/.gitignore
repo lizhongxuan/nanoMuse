@@ -1,6 +1,8 @@
 node_modules/
 out/
 dist/
+dist-verification/
+bin/
 # staged by scripts/prepare-dsh.mjs and scripts/desktop-app/build-runtime.py --target
 dsh/
 runtime/
