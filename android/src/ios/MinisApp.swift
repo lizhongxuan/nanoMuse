@@ -87,7 +87,6 @@ struct MinisApp: App {
     @AppStorage("appearanceMode") private var appearanceMode: Int = 0
     @AppStorage("appLanguage") private var appLanguage: String = ""
     @StateObject private var shareCoordinator = ShareCoordinator.shared
-    @ObservedObject private var fontSettings = FontSettings.shared
     @ObservedObject private var configConfirmGate = ConfigConfirmationGate.shared
     /// [review S14] Drives the root-level restore sheet for a `.minisbak`
     /// opened from outside the app.
@@ -100,10 +99,6 @@ struct MinisApp: App {
     /// immersive WebView (back-edge swipe / programmatic dismiss).
     @State private var pendingWebAppPresentation: WebAppPresentation?
     @State private var pendingURLWhileLocked: URL?
-
-    #if DEBUG
-    let debugServer = DebugServer()
-    #endif
 
     /// Tracks when the app entered background for duration logging.
     @State private var backgroundEntryDate: Date?
@@ -129,10 +124,17 @@ struct MinisApp: App {
         // `install` is idempotent, so the later onAppLaunch() call is a no-op.
         CrashSignalHandler.install()
         // nanoMuse: join the devices hub once the account is signed in (a no-op otherwise).
-        Task { @MainActor in NanoMuseHub.shared.autoStart() }
+        Task { @MainActor in
+            guard MordeLocalExecutionPolicy.isEnabled else { return }
+            NanoMuseHub.shared.autoStart()
+        }
         // nanoMuse: routines and goal check-ins — the BGAppRefreshTask must be registered before launch finishes.
-        NanoMuseScheduler.registerBackgroundTask()
-        Task { @MainActor in NanoMuseModelMenu.startFollowingPicks() } // nanoMuse: a pick in a chat's picker moves to the front of the Cloud group
+        if MordeLocalExecutionPolicy.isEnabled {
+            NanoMuseScheduler.registerBackgroundTask()
+        }
+        if MordeLocalExecutionPolicy.isEnabled {
+            Task { @MainActor in NanoMuseModelMenu.startFollowingPicks() }
+        }
         Task { @MainActor in NanoMuseProxy.refreshHosts() } // nanoMuse: the provider hosts Settings → Network's proxy routes
         // [T-auto-grouping-default-on] Auto-grouping ships ON. `bool(forKey:)`
         // returns false for an unregistered key, so the default has to be
@@ -149,9 +151,6 @@ struct MinisApp: App {
         // [T-voice-input-mode-preference-ios] Pin the lazy static to the real
         // launch instant.
         _ = Self.processLaunchedAt
-        #if DEBUG
-        try? debugServer.start(port: 8321)
-        #endif
         // Install the NSTextContainer setSize: reentrancy guard before any
         // UITextView gets created. Breaks the iOS 26 TextKit1 fillLayoutHole
         // storm that has caused 0x8BADF00D scene-update watchdog kills on
@@ -172,8 +171,6 @@ struct MinisApp: App {
         // .onAppear refresh) locks the sidebar title to the default even when the
         // user set a custom name. refreshCache() only reads the tiny SOUL.md file.
         SoulStore.refreshCache()
-        // Pre-warm KaTeX WKWebView as fallback for formulas SwiftMath can't render
-        KaTeXRenderer.shared.warmUp()
         // Pre-warm the biometric capability probe off the main thread. The
         // first LAContext.canEvaluatePolicy call cold-starts the
         // LocalAuthentication XPC daemon (~500 ms); without this it would run
@@ -190,11 +187,10 @@ struct MinisApp: App {
     var body: some Scene {
         WindowGroup {
             ZStack {
-                NanoMuseRoot() // nanoMuse: the first run, then the Muse shell on iPhone and iPad; upstream ContentView when the shell is off and from the drawer
+                NanoMuseRoot() // nanoMuse: the first run, then the Muse shell with Morde-backed chat.
                     .overlay(alignment: .top) {
                         BackgroundInterruptionBanner()
                     }
-                AudioPiPCapsule()
                 // Global read-replies capsule — a SINGLE app-root instance driven by
                 // VoiceOutputState, so it persists across chat → home (no per-session
                 // copy). It lays itself out full-screen (bottom-trailing capsule +
@@ -281,7 +277,7 @@ struct MinisApp: App {
                     appearanceMode == 1 ? .light : appearanceMode == 2 ? .dark : nil
                 )
                 .environment(\.locale, appLanguage.isEmpty ? .current : Locale(identifier: appLanguage))
-                .dynamicTypeSize(fontSettings.appBaseScale.dynamicTypeSize)
+                .appFontScale()
                 .onOpenURL { url in
                     shareLog.info("[Share] onOpenURL: \(url.absoluteString)")
                     guard !SessionLockStore.shared.appIsLocked else {
@@ -333,12 +329,12 @@ struct MinisApp: App {
                     // Populate ConfigRegistry once. Idempotent — every
                     // appearance after the first is a no-op.
                     ConfigRegistry.shared.registerBuiltinsIfNeeded()
-                    // Register notification delegate for shortcut task tap-to-open
-                    ShortcutNotificationDelegate.shared.register()
                     // Register App Shortcuts with the system so Siri and Spotlight discover them
+                    #if MORDE_LOCAL_EXECUTION_ENABLED
                     if #available(iOS 17.0, *) {
                         MinisShortcutsProvider.updateAppShortcutParameters()
                     }
+                    #endif
                     // Start logging if previously enabled
                     LoggingManager.shared.startIfEnabled()
                     // HangFix(2026-05-14) — always-on hang detector. Was
@@ -385,19 +381,16 @@ struct MinisApp: App {
                     // in BackupRunController.finished(token:).
                     // Migrate legacy provider config on first launch after upgrade
                     ProviderMigration.migrateIfNeeded(store: ProviderConfigStore.shared)
-                    // Refresh model lists once per day to keep them current
-                    ProviderConfigStore.shared.refreshAllModelsIfNeeded()
-                    // [T-mimo-shadow-voice] One-time upgrade fix: force-refresh
-                    // mixed-modality providers (MiMo/DashScope) mis-classified by
-                    // the old voice-only whitelist, so their text models + shadow
-                    // voice rows recover promptly without waiting for a natural refresh.
-                    ProviderConfigStore.shared.migrateVoiceModalityIfNeeded()
-                    // For existing users with no model groups, create a default group silently
-                    Task { await ProviderConfigStore.shared.createDefaultGroupIfNeeded() }
+                    if MordeLocalExecutionPolicy.isEnabled {
+                        // Refresh model lists once per day to keep them current.
+                        ProviderConfigStore.shared.refreshAllModelsIfNeeded()
+                        ProviderConfigStore.shared.migrateVoiceModalityIfNeeded()
+                        Task { await ProviderConfigStore.shared.createDefaultGroupIfNeeded() }
+                    }
                     shareLog.info("[Share] onAppear — checking for pending share")
                     shareCoordinator.checkForPendingShare()
                     // Set up background keep-alive manager
-                    BackgroundKeepAliveManager.shared.setup()
+                    if MordeLocalExecutionPolicy.isEnabled { BackgroundKeepAliveManager.shared.setup() }
                     // Monitor network changes to keep iSH DNS up to date
                     NetworkMonitor.shared.start()
                     // Register FileProvider domain for shared files
@@ -413,22 +406,34 @@ struct MinisApp: App {
                     AppGroupChangeWatcher.shared.start()
                     // Activate security scopes for user-mounted external folders
                     // (e.g. Obsidian vault in iCloud Drive). Held for app lifetime.
+                    // nanoMuse: FileProvider and scoped folder access remain available when iSH is off.
                     MountedFoldersManager.shared.activateAll()
                     // Create /var/minis/mounts/<name> symlinks in the fakefs now
                     // that the rootfs exists and mounts are active.
-                    AIChatViewModel.refreshMountedFolderSymlinks()
                     // Start iCloud sync engine. v2 takes precedence when its
                     // feature flag is on (see SyncV2Bootstrap); v1 stays
                     // paused while v2 is active. When v2 is off, v1 boots
                     // exactly as before.
+#if !MINIS_CLOUD_ONLY
                     if #available(iOS 17.0, *) {
                         Task { @MainActor in
+                            // Keep local file change detection alive while the
+                            // CloudKit policy is closed so edits stay dirty for
+                            // a later opt-in, without starting network sync.
+                            if !MordeCloudKitSyncPolicy.isEnabled {
+                                SyncDirtyScanner.shared.start()
+                            }
                             await SyncV2Bootstrap.startIfEnabled()
+                            guard MordeCloudKitSyncPolicy.isEnabled else {
+                                CloudSyncEngine.shared.stopCloudKitSync()
+                                return
+                            }
                             if !SyncV2Bootstrap.shouldPauseV1() {
                                 await CloudSyncEngine.shared.start()
                             }
                         }
                     }
+#endif
                 }
         }
         .commands {
@@ -449,7 +454,9 @@ struct MinisApp: App {
     private func handleScenePhaseChange(_ phase: ScenePhase) {
         switch phase {
         case .active:
-            NanoMuseScheduler.shared.appBecameActive() // nanoMuse: run what came due while the phone slept
+            if MordeLocalExecutionPolicy.isEnabled {
+                NanoMuseScheduler.shared.appBecameActive() // nanoMuse: run what came due while the phone slept
+            }
             let remaining = UIApplication.shared.backgroundTimeRemaining
             if let entry = backgroundEntryDate {
                 let elapsed = Date().timeIntervalSince(entry)
@@ -488,8 +495,6 @@ struct MinisApp: App {
             Task { @MainActor in
                 await Task.yield()
 
-                ViewModelCache.shared.resumeAllStreamingUI()
-
                 SessionLockStore.shared.evaluateAppLock()
 
                 CrashReporter.shared.onAppLaunch()
@@ -522,25 +527,13 @@ struct MinisApp: App {
                     interruptedSessions.subtracting(activeNow),
                     entryDates: interruptedWithDates,
                     trigger: "launch-or-foreground")
-                ISHKernel.shared.refreshDns()
-
-                #if DEBUG
-                debugServer.restartIfDead(port: 8321)
-                #endif
+                // nanoMuse: The Morde target does not include iSH guest networking.
+#if !MINIS_CLOUD_ONLY
+                if MordeLocalExecutionPolicy.isEnabled { ISHKernel.shared.refreshDns() }
+#endif
 
                 try? await UNUserNotificationCenter.current().setBadgeCount(0)
                 BackgroundInterruptionTracker.shared.checkOnForeground()
-                // [T-shortcuts-diag-and-pending] Scan for AppIntent runs that
-                // were marked pending but never cleared (i.e. the process was
-                // suspended before the completion path ran). Records where the
-                // user hadn't enabled Background Keep-Alive at the time get a
-                // one-shot guidance notification with the setting to turn on;
-                // stale (>24h) records are dropped silently.
-                // [T-shortcut-orphan-false-positive] Now async: it verifies
-                // against ChatStore whether each orphan actually completed before
-                // warning. Wrapped in a Task so scenePhase handling stays
-                // synchronous; the scan is advisory and nothing below depends on it.
-                Task { await ShortcutRunTracker.checkPendingOnForeground() }
                 AgentLiveActivityManager.shared.cleanupStaleActivities(source: "scenePhase.active")
                 // [T-ios-live-activity-soft-finish] If a completed task's Live
                 // Activity is lingering (soft-finished, awaiting the user), the
@@ -585,8 +578,14 @@ struct MinisApp: App {
             // active tick, observed as endless `[iCloud] mergeRemoteMessage
             // SKIP (local newer)` log spam plus continuous v1-side dirty
             // drain that competes with v2's send pipeline.
+#if !MINIS_CLOUD_ONLY
             if #available(iOS 17.0, *) {
                 Task { @MainActor in
+                    guard MordeCloudKitSyncPolicy.isEnabled else {
+                        await SyncCore.shared.stop()
+                        CloudSyncEngine.shared.stopCloudKitSync()
+                        return
+                    }
                     if SyncV2Bootstrap.shouldPauseV1() {
                         await SyncCore.shared.fetchNow(trigger: .foregroundTimer)
                         await SyncCore.shared.sendNow(trigger: .foregroundTimer)
@@ -596,19 +595,21 @@ struct MinisApp: App {
                     }
                 }
             }
+#endif
 
         case .inactive:
             let remaining = UIApplication.shared.backgroundTimeRemaining
             lifecycleLog.info("[Lifecycle] → Inactive (remaining: \(Self.formatTimeRemaining(remaining)))")
             CrashReporter.shared.updateMarkerPhase(phase: "inactive")
-            ViewModelCache.shared.suspendAllStreamingUI()
             // Privacy screen in task switcher when app lock is enabled
             if SessionLockStore.shared.appLockEnabled {
                 SessionLockStore.shared.showPrivacyScreen = true
             }
 
         case .background:
-            NanoMuseScheduler.shared.appWentBackground() // nanoMuse: ask for a background refresh, post the due-time notifications
+            if MordeLocalExecutionPolicy.isEnabled {
+                NanoMuseScheduler.shared.appWentBackground() // nanoMuse: ask for a background refresh, post the due-time notifications
+            }
             backgroundEntryDate = Date()
             let remaining = UIApplication.shared.backgroundTimeRemaining
             lifecycleLog.info("[Lifecycle] → Background (remaining: \(Self.formatTimeRemaining(remaining)))")
@@ -665,7 +666,7 @@ struct MinisApp: App {
 
     private static let fileProviderDomain = NSFileProviderDomain(
         identifier: NSFileProviderDomainIdentifier("io.github.nanomuse.app.files"),
-        displayName: "nanoMuse"
+        displayName: "morde"
     )
 
     /// Bumped when we need to force-rebuild the FileProvider domain on next launch
@@ -728,7 +729,7 @@ struct MinisApp: App {
 
     private static func registerFileProviderDomain() {
         logAppUpdateMarkerForFPTrace()
-        let root = AIChatViewModel.minisAppGroupRoot
+        let root = MinisStoragePaths.minisAppGroupRoot
         let fm = FileManager.default
         // Ensure all three subdirectories exist.
         for sub in ["memory", "skills", "shared"] {
@@ -787,7 +788,7 @@ struct MinisApp: App {
                 // `MinisConfig/_reset_backup_v3/` first and restore if we
                 // detect any of the three subdirs are missing afterwards.
                 lifecycleLog.info("[FileProvider] force-reset gen=\(fileProviderResetGeneration) snapshotting providerRoot before remove(.removeAll)")
-                let backupRoot = AIChatViewModel.minisConfigRoot.appendingPathComponent("_reset_backup_v3", isDirectory: true)
+                let backupRoot = MinisStoragePaths.minisConfigRoot.appendingPathComponent("_reset_backup_v3", isDirectory: true)
                 let snapshotResult = Self.snapshotProviderSubdirs(to: backupRoot)
                 guard snapshotResult.ok else {
                     lifecycleLog.error("[FileProvider] force-reset SNAPSHOT FAILED — aborting reset to avoid risk of data loss")
@@ -805,7 +806,7 @@ struct MinisApp: App {
                     lifecycleLog.info("[FileProvider] force-reset remove(.removeAll) OK preservedLocation=\(preservedPath)")
 
                     // Theory check: did .removeAll touch our hardcoded path?
-                    let providerRoot = AIChatViewModel.minisAppGroupRoot
+                    let providerRoot = MinisStoragePaths.minisAppGroupRoot
                     let fm = FileManager.default
                     let allSubdirsPresent = ["memory", "skills", "shared"].allSatisfy {
                         fm.fileExists(atPath: providerRoot.appendingPathComponent($0).path)
@@ -910,7 +911,7 @@ struct MinisApp: App {
     /// Returns total file count and bytes; `ok=false` if any copy fails.
     private static func snapshotProviderSubdirs(to backupRoot: URL) -> (ok: Bool, files: Int, bytes: Int64) {
         let fm = FileManager.default
-        let providerRoot = AIChatViewModel.minisAppGroupRoot
+        let providerRoot = MinisStoragePaths.minisAppGroupRoot
 
         // Reset any leftover snapshot from a previous attempt.
         if fm.fileExists(atPath: backupRoot.path) {
@@ -962,7 +963,7 @@ struct MinisApp: App {
             lifecycleLog.warning("[FileProvider] restoreProviderSubdirs: backup not found at \(backupRoot.path)")
             return
         }
-        let providerRoot = AIChatViewModel.minisAppGroupRoot
+        let providerRoot = MinisStoragePaths.minisAppGroupRoot
         for sub in ["memory", "skills", "shared"] {
             try? fm.createDirectory(at: providerRoot.appendingPathComponent(sub, isDirectory: true),
                                     withIntermediateDirectories: true)
@@ -1058,16 +1059,16 @@ struct MinisApp: App {
         let migrations: [(source: URL, dest: URL, label: String)] = [
             // Legacy Library/MinisChat/shared → new shared
             (library.appendingPathComponent("MinisChat/shared", isDirectory: true),
-             AIChatViewModel.minisSharedPersistentDir, "shared"),
+             MinisStoragePaths.minisSharedPersistentDir, "shared"),
             // Legacy Library/MinisChat/memory → new memory
             (library.appendingPathComponent("MinisChat/memory", isDirectory: true),
-             AIChatViewModel.minisMemoryPersistentDir, "memory"),
+             MinisStoragePaths.minisMemoryPersistentDir, "memory"),
             // Legacy Library/MinisChat/skills → new skills
             (library.appendingPathComponent("MinisChat/skills", isDirectory: true),
-             AIChatViewModel.minisSkillsPersistentDir, "skills"),
+             MinisStoragePaths.minisSkillsPersistentDir, "skills"),
             // Old App Group MinisShared → new shared
             (container.appendingPathComponent("MinisShared", isDirectory: true),
-             AIChatViewModel.minisSharedPersistentDir, "MinisShared→shared"),
+             MinisStoragePaths.minisSharedPersistentDir, "MinisShared→shared"),
         ]
 
         for migration in migrations {
@@ -1100,13 +1101,13 @@ struct MinisApp: App {
         let resolvedContainer = containerURL?.resolvingSymlinksInPath().path ?? "<nil>"
         lifecycleLog.info("[FPSyncTrace] appGroup=\(groupID) container=\(containerPath) resolved=\(resolvedContainer)")
 
-        let providerRoot = AIChatViewModel.minisAppGroupRoot
+        let providerRoot = MinisStoragePaths.minisAppGroupRoot
         lifecycleLog.info("[FPSyncTrace] providerRoot=\(providerRoot.path) resolved=\(providerRoot.resolvingSymlinksInPath().path)")
 
         let roots: [(name: String, url: URL)] = [
-            ("shared", AIChatViewModel.minisSharedPersistentDir),
-            ("skills", AIChatViewModel.minisSkillsPersistentDir),
-            ("memory", AIChatViewModel.minisMemoryPersistentDir),
+            ("shared", MinisStoragePaths.minisSharedPersistentDir),
+            ("skills", MinisStoragePaths.minisSkillsPersistentDir),
+            ("memory", MinisStoragePaths.minisMemoryPersistentDir),
         ]
         for (name, url) in roots {
             let exists = fm.fileExists(atPath: url.path)

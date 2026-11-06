@@ -27,9 +27,10 @@
  */
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { isIP } from 'node:net'
 import { ApprovalDesk, appOf, type ApprovalScope, isOwnApp, checkForUpdate, compareVersions, DEVICE_GRANT_PREFIX, grantCovers, HoldDesk, modelFor, pickChatModel, pickHandsModel, REMOTE_CONTROL_GRANT_ID, scheduleRunIds, sharedConnectors, standingGrants, takesImages, UPDATE_RETRY_MS, updateCacheFresh, withGrant, type Grant, type Hold, type HoldTool, type PendingApproval, type StandingGrant, type UpdateInfo } from './desk.ts'
 import { arch, homedir, hostname, release, type, userInfo } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { createHash, createHmac, randomBytes, randomUUID } from 'node:crypto'
 import { Service, type Context } from '@deepseek-ai/cordis'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
@@ -45,7 +46,19 @@ import z from '@deepseek-ai/schemastery'
 import { mountGuarded } from './admit.ts'
 import { brief, REMOTE_ACTIONS, run as runAction, type RemoteAction } from './actions.ts'
 import { CODING_ACTIONS, CodingService, codingBrief, GATED_CODING_ACTIONS } from './coding.ts'
-import { helloLlm, HubClient, HubError, type Caller, type HubDevice } from './hub.ts'
+import { helloLlm, HubClient, HubError, type CallOptions, type Caller, type HubDevice } from './hub.ts'
+import {
+  mordeHubCommandAvailable,
+  mordeHubCommand,
+  mordeHubFileGet,
+  mordeHubFiles,
+  mordeHubFilesAvailable,
+  mordeHubScreenshot,
+  mordeHubScreenshotAvailable,
+  mordeHubSelectedRoot,
+  requireMordeHubTaskGrant,
+  type MordeHubFileRoot,
+} from './morde-hub-actions.ts'
 import { ProfileStore, type Profile } from './profile.ts'
 import { cloudOffFailure, relayFailure, transportFailure, type RelayRefusal } from './refusals.ts'
 import { Relay, RelayError, type Account, type Estimate, type Invite, type ProfileWrite, type RelayModel, type SignIn } from './relay.ts'
@@ -70,6 +83,8 @@ declare module '@deepseek-ai/cordis' {
 
 /** The credential reference the `nanomuse` provider row names. */
 export const TOKEN_REF = 'NANOMUSE_CLOUD_TOKEN'
+/** Morde's installation-bound Client credential, kept apart from the nanoMuse account key. */
+export const MORDE_CLIENT_CREDENTIAL = 'MORDE_CLIENT_CREDENTIAL'
 /** The provider id inside `llm-pi-ai`; permanent, sessions record it. */
 export const PROVIDER_ID = 'nanomuse'
 /** The profile row the Models page edits too. */
@@ -147,6 +162,104 @@ export interface CloudStatus {
   error?: { code: string; message: string }
 }
 
+/** The separate Morde Client Installation login, never the nanoMuse Cloud account. */
+export interface MordeHubStatus {
+  signedIn: boolean
+  connected: boolean
+  baseURL: string
+  deviceID?: string
+  devices: MordeHubDevice[]
+  targetGrantVersion: number
+  grants: { screenshot: boolean; files: boolean; command: boolean; fileRoot: string | null }
+  capabilities: { screenshot: boolean; files: boolean; command: boolean }
+  accountName?: string
+  installationID?: string
+  expiresAt?: string
+  lastError?: string
+}
+
+export interface MordeHubDevice {
+  id: string
+  name: string
+  platform: 'desktop' | 'android' | 'ios'
+  online: boolean
+  revoked: boolean
+  expiresAt: string
+}
+
+export interface MordePersonalObject {
+  object_type: string
+  object_id: string
+  revision: number
+  body: Record<string, unknown>
+}
+
+export interface MordePersonalMutationReceipt {
+  object_type: string
+  object_id: string
+  result_revision: number
+  account_change_sequence: number
+  replay: boolean
+}
+
+export interface MordeAvailableModel {
+  id: string
+  name: string
+  model_name: string
+  capabilities: { text: boolean; tools: boolean; vision: boolean }
+}
+
+export type MordeScheduleTiming =
+  | { kind: 'once'; run_at: string; time_zone: string }
+  | { kind: 'daily'; starts_on: string; local_time: string; time_zone: string }
+  | { kind: 'weekly'; starts_on: string; local_time: string; time_zone: string; weekdays: number[] }
+  | { kind: 'every_n_hours'; interval_hours: number; time_zone: string; anchor_at?: string }
+
+export interface MordeScheduleCreateInput {
+  title?: string
+  model_id: string
+  objective: string
+  host_id: null
+  timing: MordeScheduleTiming
+  budget: { active_seconds: number; tool_calls: number; model_tokens: number }
+  misfire_policy: 'skip'
+  notification_events: ['completed', 'failed', 'waiting_user']
+  observation: null
+}
+
+export interface MordeScheduleReceipt {
+  id: string
+  version: number
+  status: string
+  title: string
+  timing: MordeScheduleTiming
+  next_run_at: string | null
+}
+
+export interface MordeGoalPage {
+  items: MordePersonalObject[]
+  next_cursor: string | null
+}
+
+export interface MordePersonalSnapshotPage {
+  watermark: number
+  items: MordePersonalObject[]
+  next_cursor: string | null
+}
+
+interface MordeHubState {
+  baseURL: string
+  targetGrantVersion: number
+  grants: { screenshot: boolean; files: boolean; command: boolean }
+  fileRoot?: MordeHubFileRoot
+  clientInstanceID?: string
+  attemptGeneration: number
+  accountID?: string
+  accountName?: string
+  installationID?: string
+  expiresAt?: string
+}
+
 export interface HubState {
   connected: boolean
   deviceId: string
@@ -179,9 +292,11 @@ export interface Ask {
   action: string
   text: string
   at: number
+  onceOnly?: boolean
 }
 
 export type AskAnswer = 'once' | 'always' | 'deny'
+type AskResult = AskAnswer | 'timeout' | 'cancelled'
 
 /** How long a question from another device waits on this screen (the hub call itself waits about as long). */
 export const ASK_TIMEOUT_MS = 110_000
@@ -191,7 +306,7 @@ export const ASK_TIMEOUT_MS = 110_000
  * `'timeout'` when nobody answered in time; `onChange` fires whenever the list changes (for the live state).
  */
 export class AskDesk {
-  private readonly pending = new Map<string, { ask: Ask; finish(answer: AskAnswer | 'timeout'): void }>()
+  private readonly pending = new Map<string, { ask: Ask; finish(answer: AskResult): void }>()
 
   constructor(private readonly onChange: () => void = () => undefined) {}
 
@@ -199,17 +314,21 @@ export class AskDesk {
     return [...this.pending.values()].map((p) => p.ask)
   }
 
-  ask(from: Caller, action: string, text: string, timeoutMs = ASK_TIMEOUT_MS): Promise<AskAnswer | 'timeout'> {
-    const ask: Ask = { id: `ask_${randomUUID().slice(0, 8)}`, from: from.name || 'a device', fromId: from.id, action, text, at: Date.now() }
+  ask(from: Caller, action: string, text: string, timeoutMs = ASK_TIMEOUT_MS, onceOnly = false, signal?: AbortSignal): Promise<AskResult> {
+    const ask: Ask = { id: `ask_${randomUUID().slice(0, 8)}`, from: from.name || 'a device', fromId: from.id, action, text, at: Date.now(), ...(onceOnly ? { onceOnly: true } : {}) }
     return new Promise((resolve) => {
-      const finish = (answer: AskAnswer | 'timeout') => {
+      const finish = (answer: AskResult) => {
         clearTimeout(timer)
+        signal?.removeEventListener('abort', onAbort)
         this.pending.delete(ask.id)
         this.onChange()
         resolve(answer)
       }
+      const onAbort = () => finish('cancelled')
+      if (signal?.aborted) return resolve('cancelled')
       const timer = setTimeout(() => finish('timeout'), timeoutMs)
       this.pending.set(ask.id, { ask, finish })
+      signal?.addEventListener('abort', onAbort, { once: true })
       this.onChange()
     })
   }
@@ -275,6 +394,7 @@ export interface LiveState {
   cloud: { signedIn: boolean; hint: string }
   profile: Profile
   hub: HubState
+  mordeHub?: MordeHubStatus
   /**
    * The calls in flight, the step count, and `run`: the session that has this computer's
    * screen, from its first `computer_*` call to its turn's end (null between runs). The
@@ -423,6 +543,8 @@ interface State {
   media?: MediaState
   /** Own-key providers written by the plugin (C11), by provider row id; the keys are in the credential store. */
   providers?: Record<string, OwnProvider>
+  /** One-time removal of the desktop's old own-provider routes and their exact credential refs. */
+  ownProviderKeyCleanup?: { version: 1; status: 'pending' | 'complete'; targets?: unknown }
   /** The ChatGPT sign-in (C11): a subscription signed in through the runtime's `nanomuse chatgpt` flow. */
   chatgpt?: ChatGptState
   /** The pool size (yuan) the 80 % heads-up was shown for; it comes back only once the pool has grown. */
@@ -434,6 +556,220 @@ interface State {
    * account page). Only *Use nanoMuse Cloud this time* spends the allowance while this is set.
    */
   cloudModelsOff?: boolean
+  /** Server and ordered-login metadata only; the Client credential lives in Credential Store. */
+  mordeHub?: MordeHubState
+}
+
+interface OwnProviderKeyCleanupTarget {
+  id: string
+  provider: string
+  keyRef: string
+}
+
+function mordeBaseURL(value: string): string {
+  let url: URL
+  try {
+    url = new URL(value.trim())
+  } catch {
+    throw new RelayError(400, 'invalid_base_url', 'Enter a valid Morde server address')
+  }
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '')
+  const loopback = host === 'localhost' || host === '::1' || (isIP(host) === 4 && host.startsWith('127.'))
+  if ((url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback)) || url.username || url.password || url.search || url.hash || value.length > 2048) {
+    throw new RelayError(400, 'invalid_base_url', 'Use HTTPS, or HTTP on this computer only')
+  }
+  return `${url.origin}${url.pathname.replace(/\/+$/, '')}`
+}
+
+function mordeAPIURL(baseURL: string, route: string): string {
+  const base = new URL(baseURL)
+  return new URL(`${base.pathname.replace(/\/+$/, '')}/api/${route}`, base.origin).href
+}
+
+function mordeHubURL(baseURL: string): string {
+  const url = new URL(mordeAPIURL(baseURL, 'hub'))
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+  return url.href
+}
+
+function mordeHubDevicesOf(value: unknown): MordeHubDevice[] {
+  const items = value && typeof value === 'object' && !Array.isArray(value) ? (value as { items?: unknown }).items : undefined
+  if (!Array.isArray(items) || items.length > 256) throw new RelayError(502, 'bad_response', 'Morde server sent an invalid device list')
+  return items.map((item) => {
+    const device = item && typeof item === 'object' && !Array.isArray(item) ? item as Record<string, unknown> : {}
+    if (typeof device.id !== 'string' || !/^i[a-z0-9]{7}$/.test(device.id) ||
+      typeof device.display_name !== 'string' || !device.display_name.trim() || Buffer.byteLength(device.display_name) > 100 ||
+      !['desktop', 'android', 'ios'].includes(String(device.platform)) || typeof device.online !== 'boolean' ||
+      typeof device.revoked !== 'boolean' || typeof device.expires_at !== 'string' || !Number.isFinite(Date.parse(device.expires_at))) {
+      throw new RelayError(502, 'bad_response', 'Morde server sent an invalid device list')
+    }
+    return {
+      id: device.id, name: device.display_name, platform: device.platform as MordeHubDevice['platform'],
+      online: device.online, revoked: device.revoked, expiresAt: new Date(device.expires_at).toISOString(),
+    }
+  })
+}
+
+function mordeHubStateOf(value: unknown): MordeHubState | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const raw = value as Record<string, unknown>
+  if (typeof raw.baseURL !== 'string') return undefined
+  let baseURL: string
+  try {
+    baseURL = mordeBaseURL(raw.baseURL)
+  } catch {
+    return undefined
+  }
+  const generation = Number(raw.attemptGeneration)
+  const grants = raw.grants && typeof raw.grants === 'object' && !Array.isArray(raw.grants)
+    ? raw.grants as Record<string, unknown>
+    : {}
+  const savedRoot = raw.fileRoot && typeof raw.fileRoot === 'object' && !Array.isArray(raw.fileRoot)
+    ? raw.fileRoot as Record<string, unknown>
+    : {}
+  const fileRoot = typeof savedRoot.directory === 'string' && savedRoot.directory.length <= 4096 &&
+      isAbsolute(savedRoot.directory) && resolve(savedRoot.directory) === savedRoot.directory &&
+      typeof savedRoot.identity === 'string' && /^[A-Za-z0-9_-]{16,256}$/.test(savedRoot.identity)
+    ? { directory: savedRoot.directory, identity: savedRoot.identity }
+    : undefined
+  const requestedVersion = Number(raw.targetGrantVersion)
+  return {
+    baseURL,
+    targetGrantVersion: Number.isSafeInteger(requestedVersion) && requestedVersion > 0 ? requestedVersion : 1,
+    grants: {
+      screenshot: grants.screenshot === true,
+      files: grants.files === true && Boolean(fileRoot),
+      command: grants.command === true && Boolean(fileRoot),
+    },
+    ...(fileRoot ? { fileRoot } : {}),
+    ...(typeof raw.clientInstanceID === 'string' && /^[0-9a-f-]{36}$/i.test(raw.clientInstanceID) ? { clientInstanceID: raw.clientInstanceID } : {}),
+    attemptGeneration: Number.isSafeInteger(generation) && generation >= 0 ? generation : 0,
+    ...(typeof raw.accountID === 'string' ? { accountID: raw.accountID.slice(0, 128) } : {}),
+    ...(typeof raw.accountName === 'string' ? { accountName: raw.accountName.slice(0, 100) } : {}),
+    ...(typeof raw.installationID === 'string' ? { installationID: raw.installationID.slice(0, 128) } : {}),
+    ...(typeof raw.expiresAt === 'string' && Number.isFinite(Date.parse(raw.expiresAt)) ? { expiresAt: new Date(raw.expiresAt).toISOString() } : {}),
+  }
+}
+
+async function mordeRequest<T>(baseURL: string, route: string, init: RequestInit = {}, maxResponseBytes = 64 * 1024): Promise<T> {
+  const response = await fetch(mordeAPIURL(baseURL, route), {
+    ...init,
+    redirect: 'error',
+    signal: AbortSignal.timeout(30_000),
+  })
+  if (response.status === 204) return undefined as T
+  const text = await response.text()
+  if (Buffer.byteLength(text) > maxResponseBytes) throw new RelayError(502, 'bad_response', 'Morde server response is too large')
+  let body: unknown
+  try {
+    body = text ? JSON.parse(text) : undefined
+  } catch {
+    body = undefined
+  }
+  if (!response.ok) {
+    const error = body && typeof body === 'object' ? (body as { error?: { code?: unknown; message?: unknown } }).error : undefined
+    throw new RelayError(
+      response.status,
+      typeof error?.code === 'string' ? error.code.slice(0, 64) : `http_${response.status}`,
+      typeof error?.message === 'string' ? error.message.slice(0, 500) : `${response.status} ${response.statusText}`.trim(),
+    )
+  }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) throw new RelayError(502, 'bad_response', 'Morde server sent an invalid response')
+  return body as T
+}
+
+function mordeObjectSegment(value: string): string {
+  if (typeof value !== 'string' || !/^[A-Za-z0-9._-]{1,128}$/.test(value) || value === '.' || value === '..') {
+    throw new RelayError(400, 'invalid_personal_object', 'The Morde personal object is invalid')
+  }
+  return encodeURIComponent(value)
+}
+
+function validateMordeMutation(baseRevision: number, mutationID: string): void {
+  if (!Number.isSafeInteger(baseRevision) || baseRevision < 0 || typeof mutationID !== 'string' ||
+    !/^[A-Za-z0-9._~-]{8,128}$/.test(mutationID)) {
+    throw new RelayError(400, 'invalid_personal_mutation', 'The Morde personal mutation is invalid')
+  }
+}
+
+function mordePersonalObjectOf(value: unknown): MordePersonalObject {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new RelayError(502, 'bad_response', 'Morde server sent an invalid personal object')
+  const raw = value as Record<string, unknown>
+  if (typeof raw.object_type !== 'string' || typeof raw.object_id !== 'string' ||
+    !Number.isSafeInteger(raw.revision) || Number(raw.revision) < 1 ||
+    !raw.body || typeof raw.body !== 'object' || Array.isArray(raw.body)) {
+    throw new RelayError(502, 'bad_response', 'Morde server sent an invalid personal object')
+  }
+  return { object_type: raw.object_type, object_id: raw.object_id, revision: Number(raw.revision), body: raw.body as Record<string, unknown> }
+}
+
+function mordeAvailableModelsOf(value: unknown): MordeAvailableModel[] {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || !Array.isArray((value as Record<string, unknown>).items)) {
+    throw new RelayError(502, 'bad_response', 'Morde server sent an invalid model list')
+  }
+  return ((value as { items: unknown[] }).items).flatMap((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return []
+    const raw = item as Record<string, unknown>
+    const capabilities = raw.capabilities && typeof raw.capabilities === 'object' && !Array.isArray(raw.capabilities)
+      ? raw.capabilities as Record<string, unknown>
+      : undefined
+    if (typeof raw.id !== 'string' || !raw.id || typeof raw.name !== 'string' || typeof raw.model_name !== 'string' ||
+      !capabilities || typeof capabilities.text !== 'boolean' || typeof capabilities.tools !== 'boolean' || typeof capabilities.vision !== 'boolean') {
+      throw new RelayError(502, 'bad_response', 'Morde server sent an invalid model list')
+    }
+    return [{ id: raw.id, name: raw.name, model_name: raw.model_name, capabilities: { text: capabilities.text, tools: capabilities.tools, vision: capabilities.vision } }]
+  })
+}
+
+function mordeScheduleReceiptOf(value: unknown): MordeScheduleReceipt {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new RelayError(502, 'bad_response', 'Morde server sent an invalid schedule')
+  const raw = value as Record<string, unknown>
+  const timing = raw.timing && typeof raw.timing === 'object' && !Array.isArray(raw.timing) ? raw.timing as MordeScheduleTiming : null
+  const nextRunAt = raw.next_run_at
+  if (typeof raw.id !== 'string' || !raw.id || !Number.isSafeInteger(raw.version) || Number(raw.version) < 1 ||
+    raw.status !== 'enabled' || typeof raw.title !== 'string' || !raw.title.trim() || Buffer.byteLength(raw.title, 'utf8') > 32768 ||
+    !timing || typeof timing.kind !== 'string' || !Object.hasOwn(raw, 'next_run_at') ||
+    (nextRunAt !== null && (typeof nextRunAt !== 'string' || !Number.isFinite(Date.parse(nextRunAt))))) {
+    throw new RelayError(502, 'bad_response', 'Morde server sent an invalid or disabled schedule response')
+  }
+  return { id: raw.id, version: Number(raw.version), status: raw.status, title: raw.title, timing, next_run_at: nextRunAt as string | null }
+}
+
+function mordeMutationReceiptOf(value: unknown): MordePersonalMutationReceipt {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new RelayError(502, 'bad_response', 'Morde server sent an invalid mutation receipt')
+  const raw = value as Record<string, unknown>
+  if (typeof raw.object_type !== 'string' || typeof raw.object_id !== 'string' ||
+    !Number.isSafeInteger(raw.result_revision) || Number(raw.result_revision) < 1 ||
+    !Number.isSafeInteger(raw.account_change_sequence) || Number(raw.account_change_sequence) < 0 ||
+    typeof raw.replay !== 'boolean') {
+    throw new RelayError(502, 'bad_response', 'Morde server sent an invalid mutation receipt')
+  }
+  return {
+    object_type: raw.object_type, object_id: raw.object_id, result_revision: Number(raw.result_revision),
+    account_change_sequence: Number(raw.account_change_sequence), replay: raw.replay,
+  }
+}
+
+function mordeGoalPageOf(value: unknown): MordeGoalPage {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new RelayError(502, 'bad_response', 'Morde server sent an invalid Goal page')
+  const raw = value as Record<string, unknown>
+  if (!Array.isArray(raw.items) || raw.items.length > 100 ||
+    (raw.next_cursor !== null && typeof raw.next_cursor !== 'string')) {
+    throw new RelayError(502, 'bad_response', 'Morde server sent an invalid Goal page')
+  }
+  const items = raw.items.map(mordePersonalObjectOf)
+  if (items.some((item) => item.object_type !== 'goal')) throw new RelayError(502, 'bad_response', 'Morde server sent an invalid Goal page')
+  return { items, next_cursor: raw.next_cursor as string | null }
+}
+
+function mordePersonalSnapshotOf(value: unknown): MordePersonalSnapshotPage {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new RelayError(502, 'bad_response', 'Morde server sent an invalid Personal snapshot')
+  const raw = value as Record<string, unknown>
+  if (!Number.isSafeInteger(raw.watermark) || Number(raw.watermark) < 0 || !Array.isArray(raw.items) || raw.items.length > 100 ||
+    (raw.next_cursor !== null && typeof raw.next_cursor !== 'string')) {
+    throw new RelayError(502, 'bad_response', 'Morde server sent an invalid Personal snapshot')
+  }
+  return { watermark: Number(raw.watermark), items: raw.items.map(mordePersonalObjectOf), next_cursor: raw.next_cursor as string | null }
 }
 
 /** How often, at most, the account is re-read after a turn for the heads-up. */
@@ -614,6 +950,11 @@ export default class NanomuseCloud extends Service {
   readonly relay: Relay
   readonly profile: ProfileStore
   readonly hub: HubClient
+  private mordeHub: HubClient | undefined
+  private mordeHubHasCredential = false
+  private mordeHubCapabilities = { screenshot: false, files: false, command: false }
+  private mordeHubDevices: MordeHubDevice[] = []
+  private mordeHubDeviceError: string | undefined
   private state: State = {}
   private busy: Promise<unknown> = Promise.resolve()
   private readonly streams = new Set<ServerResponse>()
@@ -771,6 +1112,7 @@ export default class NanomuseCloud extends Service {
     }
     this.catalogue = await loadCatalogue()
     if (!this.catalogue.length) this.ctx.logger.warn('nanomuse: assets/providers.json missing or empty; the own-key step lists nothing')
+    await this.cleanupOwnProviderKeys()
     // Keys saved before the catalogue learned a vendor's thinking levels get them on this start.
     this.refreshOwnRows()
     this.ctx.effect(
@@ -1083,6 +1425,7 @@ export default class NanomuseCloud extends Service {
     })
     this.ctx.effect(() => () => {
       this.hub.stop('shutting down')
+      this.mordeHub?.stop('shutting down')
       this.coding.close()
       this.chatgpt.stop()
       if (this.updateRetry) clearTimeout(this.updateRetry)
@@ -1108,6 +1451,8 @@ export default class NanomuseCloud extends Service {
         this.ctx.logger.warn('nanomuse cloud: could not refresh the account: %s', message(error))
       })
     }
+    this.mordeHubHasCredential = Boolean(await this.credential(MORDE_CLIENT_CREDENTIAL))
+    if (this.mordeHubHasCredential && this.state.mordeHub?.installationID) this.startMordeHub()
     // Once a day, quietly: a newer release puts a badge on Settings and a row in the ••• menu.
     // A check that read nothing (the network down at start) counts for an hour, not a day.
     if (!updateCacheFresh(this.state.update, BUNDLE_VERSION)) {
@@ -1937,12 +2282,218 @@ export default class NanomuseCloud extends Service {
   }
 
   /**
+   * Remove pre-migration own-provider routes and their exact credential refs once on this
+   * computer. Ownership comes from the persisted plugin row plus the provider catalogue; the
+   * adapter settings are read before mutation so only persisted rows are unset. No credential
+   * store enumeration or prefix matching is used.
+   */
+  private async cleanupOwnProviderKeys(): Promise<void> {
+    const saved = this.state.ownProviderKeyCleanup as { version?: unknown; status?: unknown; targets?: unknown } | undefined
+    if (saved) {
+      if (saved.version !== 1 || (saved.status !== 'pending' && saved.status !== 'complete')) {
+        throw new RelayError(503, 'own_provider_cleanup_failed', 'Own-provider cleanup state is invalid. Restart to retry cleanup.')
+      }
+      if (saved.status === 'complete') return
+    }
+
+    if (!this.catalogue.length) {
+      if (!saved) {
+        this.state = { ...this.state, ownProviderKeyCleanup: { version: 1, status: 'pending', targets: [] } }
+        await this.persistOwnProviderCleanupState()
+      }
+      return
+    }
+
+    let targets = saved?.status === 'pending'
+      ? this.ownProviderCleanupTargetsFrom(saved.targets)
+      : this.ownProviderCleanupTargetsFromState()
+    if (!saved) {
+      this.state = { ...this.state, ownProviderKeyCleanup: { version: 1, status: 'pending', targets } }
+      await this.persistOwnProviderCleanupState()
+    }
+    let described: { value?: unknown } | undefined
+    try {
+      described = this.ctx.settings.describe().find((d) => d.ns === LLM_ROW)
+    } catch {
+      if (targets.length) await this.disableOwnProviderReferences(targets)
+      return
+    }
+    if (!described) {
+      if (targets.length) await this.disableOwnProviderReferences(targets)
+      // Do not mark complete without seeing persisted adapter rows; the next start can retry.
+      return
+    }
+    const adapterProviders = (described?.value as { providers?: Record<string, unknown> } | undefined)?.providers ?? {}
+    const fromAdapter = this.ownProviderCleanupTargetsFromAdapter(adapterProviders)
+    const byId = new Map(targets.map((target) => [target.id, target]))
+    for (const target of fromAdapter) if (!byId.has(target.id)) byId.set(target.id, target)
+    targets = [...byId.values()]
+    const pending = { version: 1 as const, status: 'pending' as const, targets }
+    this.state = { ...this.state, ownProviderKeyCleanup: pending }
+    await this.persistOwnProviderCleanupState()
+    if (!targets.length) {
+      this.state = { ...this.state, ownProviderKeyCleanup: { version: 1, status: 'complete' } }
+      await this.persistOwnProviderCleanupState()
+      return
+    }
+
+    const removeRows = targets.filter((target) => Object.hasOwn(adapterProviders, target.id))
+    if (removeRows.length) {
+      try {
+        await this.ctx.settings.mutate(LLM_ROW, removeRows.map(({ id }) => ({ op: 'unset' as const, path: ['providers', id] })))
+      } catch {
+        this.ctx.logger.warn('nanomuse: own-provider routes could not be disabled; cleanup will retry on the next start')
+        throw new RelayError(503, 'own_provider_cleanup_failed', 'Own-provider routes could not be disabled. Restart to retry cleanup.')
+      }
+    }
+
+    await this.disableOwnProviderReferences(targets)
+
+    const failed: OwnProviderKeyCleanupTarget[] = []
+    for (const target of targets) {
+      try {
+        await this.ctx.credentials.unset(credentialRef(target.keyRef))
+      } catch {
+        failed.push(target)
+        this.ctx.logger.warn('nanomuse: own-provider credential cleanup failed for row %s; retry will run on the next start', target.id)
+      }
+    }
+    if (failed.length) {
+      this.state = { ...this.state, ownProviderKeyCleanup: { version: 1, status: 'pending', targets: failed } }
+      await this.persistOwnProviderCleanupState()
+      throw new RelayError(503, 'own_provider_cleanup_failed', 'Some own-provider credentials could not be deleted. Restart to retry cleanup.')
+    }
+
+    const completed = { ...this.state, ownProviderKeyCleanup: { version: 1 as const, status: 'complete' as const } }
+    this.state = completed
+    try {
+      await this.persistOwnProviderCleanupState()
+    } catch {
+      this.state = { ...completed, ownProviderKeyCleanup: pending }
+      throw new RelayError(503, 'own_provider_cleanup_failed', 'Cleanup completion could not be saved. Restart to retry cleanup.')
+    }
+    this.ctx.logger.info('nanomuse: old own-provider routes and credentials were cleaned up')
+  }
+
+  /** Keep in-memory and runtime-owned references off target rows before any credential deletion. */
+  private async disableOwnProviderReferences(targets: OwnProviderKeyCleanupTarget[]): Promise<void> {
+    const providers = { ...this.state.providers }
+    for (const { id } of targets) delete providers[id]
+    this.state = { ...this.state, providers }
+    if (this.state.handsProvider && targets.some(({ id }) => id === this.state.handsProvider)) {
+      delete this.state.handsProvider
+      delete this.state.handsModel
+    }
+    if (this.state.media) {
+      const media: MediaState = { ...this.state.media }
+      if (media.imageProvider && targets.some(({ id }) => id === media.imageProvider)) {
+        delete media.imageProvider
+        delete media.imageModel
+      }
+      if (media.videoProvider && targets.some(({ id }) => id === media.videoProvider)) {
+        delete media.videoProvider
+        delete media.videoModel
+      }
+      this.state = { ...this.state, media }
+    }
+
+    // The persisted adapter rows are now gone (or not ready yet); keep other routes and move
+    // the global chat slot and hands config before any credential deletion.
+    for (const { id } of targets) await this.releaseChatRoute(id, true)
+    const modelService = this.defaultModelService()
+    if (modelService) {
+      let selection: { provider: string; model: string }
+      try {
+        selection = modelService.currentSelection()
+      } catch {
+        throw new RelayError(503, 'own_provider_cleanup_failed', 'The chat route could not be checked. Restart to retry cleanup.')
+      }
+      if (targets.some(({ id }) => id === selection.provider)) {
+        throw new RelayError(503, 'own_provider_cleanup_failed', 'The chat route could not be disabled. Restart to retry cleanup.')
+      }
+    }
+    try {
+      await this.writeHands()
+      await this.persistOwnProviderCleanupState()
+    } catch {
+      throw new RelayError(503, 'own_provider_cleanup_failed', 'Own-provider references could not be saved. Restart to retry cleanup.')
+    }
+  }
+
+  /** Only a catalogue-owned key provider, excluding Cloud and ChatGPT, can enter this ledger. */
+  private ownProviderCleanupTargetsFromState(): OwnProviderKeyCleanupTarget[] {
+    const out: OwnProviderKeyCleanupTarget[] = []
+    for (const [id, row] of Object.entries(this.state.providers ?? {})) {
+      if (id === CHATGPT_PROVIDER || id === PROVIDER_ID || row.provider === CHATGPT_PROVIDER || row.provider === PROVIDER_ID) continue
+      const keyRef = typeof row.keyRef === 'string' ? row.keyRef.trim() : ''
+      const entry = this.catalogue.find((provider) => provider.id === row.provider)
+      if (!keyRef || !entry?.auth.includes('key') || keyRef !== keyRefFor(id)) continue
+      out.push({ id, provider: row.provider, keyRef })
+    }
+    return out
+  }
+
+  /** Adapter-only rows still identify ownership through the catalogue id and our exact generated ref. */
+  private ownProviderCleanupTargetsFromAdapter(raw: Record<string, unknown>): OwnProviderKeyCleanupTarget[] {
+    const out: OwnProviderKeyCleanupTarget[] = []
+    for (const [id, value] of Object.entries(raw)) {
+      if (id === CHATGPT_PROVIDER || id === PROVIDER_ID || !value || typeof value !== 'object') continue
+      const keyRef = (value as { apiKeyEnv?: unknown }).apiKeyEnv
+      if (typeof keyRef !== 'string' || !keyRef || keyRef !== keyRefFor(id)) continue
+      const provider = this.catalogue.find((entry) => entry.id === id && entry.auth.includes('key'))
+        ?? (/^custom(?:-[2-9]\d*)?$/.test(id) ? this.catalogue.find((entry) => entry.id === 'custom' && entry.auth.includes('key')) : undefined)
+      if (!provider) continue
+      const stateRow = this.state.providers?.[id]
+      if (stateRow && stateRow.provider !== provider.id) continue
+      out.push({ id, provider: provider.id, keyRef })
+    }
+    return out
+  }
+
+  /** Retry ledger data is validated again before any adapter or credential mutation. */
+  private ownProviderCleanupTargetsFrom(raw: unknown): OwnProviderKeyCleanupTarget[] {
+    if (!Array.isArray(raw)) throw new RelayError(503, 'own_provider_cleanup_failed', 'Own-provider cleanup retry data is invalid. Restart to retry cleanup.')
+    const targets: OwnProviderKeyCleanupTarget[] = []
+    for (const value of raw) {
+      if (!value || typeof value !== 'object') throw new RelayError(503, 'own_provider_cleanup_failed', 'Own-provider cleanup retry data is invalid. Restart to retry cleanup.')
+      const target = value as Partial<OwnProviderKeyCleanupTarget>
+      const entry = typeof target.provider === 'string' ? this.catalogue.find((provider) => provider.id === target.provider) : undefined
+      if (typeof target.id !== 'string' || !target.id || target.id === CHATGPT_PROVIDER || target.id === PROVIDER_ID || target.provider === CHATGPT_PROVIDER || target.provider === PROVIDER_ID || typeof target.keyRef !== 'string' || target.keyRef !== keyRefFor(target.id) || !entry?.auth.includes('key')) {
+        throw new RelayError(503, 'own_provider_cleanup_failed', 'Own-provider cleanup retry data is invalid. Restart to retry cleanup.')
+      }
+      targets.push({ id: target.id, provider: target.provider!, keyRef: target.keyRef })
+    }
+    return targets
+  }
+
+  private async persistOwnProviderCleanupState(): Promise<void> {
+    try {
+      await this.writeState()
+    } catch {
+      throw new RelayError(503, 'own_provider_cleanup_failed', 'Own-provider cleanup state could not be saved. Restart to retry cleanup.')
+    }
+  }
+
+  /**
    * The saved own-key rows written to the model adapter again, where the row it has differs from
    * what the catalogue now says (a vendor's thinking levels learned after the key was saved).
    * The adapter's settings entry may not be registered yet while the host starts: a few quiet
    * retries, then the next start.
    */
   private refreshOwnRows(attempt = 0): void {
+    if (this.state.ownProviderKeyCleanup?.status === 'pending') {
+      if (attempt < 4) {
+        setTimeout(() => {
+          void this.cleanupOwnProviderKeys()
+            .then(() => this.refreshOwnRows(attempt + 1))
+            .catch(() => {
+              this.ctx.logger.warn('nanomuse: own-provider cleanup remains pending; it will retry on the next start')
+              this.refreshOwnRows(attempt + 1)
+            })
+        }, 1000 * (attempt + 1)).unref?.()
+      }
+      return
+    }
     this.reconcileOwnRows()
     const rows = Object.entries(this.state.providers ?? {}).filter(([id]) => id !== CHATGPT_PROVIDER && id !== PROVIDER_ID)
     if (!rows.length) return
@@ -2043,12 +2594,35 @@ export default class NanomuseCloud extends Service {
 
   /** Removes the row and what pointed at it; true when the account's models had to come back on. */
   private async dropOwnRow(id: string, row: OwnProvider): Promise<boolean> {
+    // Keep the exact model-adapter row so a credential-store failure can restore it without
+    // silently changing hand-edited fields. The key itself lives only in the credential store.
+    const described = this.ctx.settings.describe().find((d) => d.ns === LLM_ROW)
+    const persistedProviders = (described?.value as { providers?: Record<string, unknown> } | undefined)?.providers
+    const originalRow = persistedProviders?.[id]
     try {
       await this.ctx.settings.mutate(LLM_ROW, [{ op: 'unset', path: ['providers', id] }])
-    } catch (error: unknown) {
-      this.ctx.logger.debug('nanomuse: provider row %s not removed: %s', id, message(error))
+    } catch {
+      this.ctx.logger.warn('nanomuse: provider row %s was not removed; its credential was left untouched', id)
+      throw new RelayError(502, 'provider_remove_failed', 'The provider could not be removed from settings. No credential was deleted; retry the removal.')
     }
-    if (row.keyRef) await this.ctx.credentials.unset(credentialRef(row.keyRef)).catch(() => undefined)
+    if (row.keyRef) {
+      try {
+        await this.ctx.credentials.unset(credentialRef(row.keyRef))
+      } catch {
+        // The persisted provider row is gone, but removing its credential failed. Restore
+        // the row and keep the in-memory/cloud.json state unchanged so the user can retry.
+        // Never include the credential value or provider error text in logs or responses.
+        try {
+          await this.ctx.settings.update(LLM_ROW, {
+            providers: { [id]: originalRow ?? ownProviderRow(row, this.catalogue.find((p) => p.id === row.provider)?.reasoning) },
+          })
+        } catch {
+          this.ctx.logger.error('nanomuse: provider row %s could not be restored after credential deletion failed; retry removal', id)
+        }
+        this.ctx.logger.warn('nanomuse: credential for provider row %s was not deleted; removal can be retried', id)
+        throw new RelayError(502, 'credential_delete_failed', 'The provider credential could not be deleted, so removal was not completed. Retry the removal.')
+      }
+    }
     const providers = { ...this.state.providers }
     delete providers[id]
     this.state = { ...this.state, providers }
@@ -2086,7 +2660,7 @@ export default class NanomuseCloud extends Service {
    * adopts again as it does on a fresh profile. The main chat follows when it sat on that
    * route. Returns true when the account's models came back on.
    */
-  private async releaseChatRoute(id: string): Promise<boolean> {
+  private async releaseChatRoute(id: string, safeLogging = false): Promise<boolean> {
     const svc = this.defaultModelService()
     if (!svc) return false
     let cloudModelsOn = false
@@ -2115,7 +2689,8 @@ export default class NanomuseCloud extends Service {
         }
       }
     } catch (error: unknown) {
-      this.ctx.logger.warn('nanomuse: the chat slot could not leave %s: %s', id, message(error))
+      if (safeLogging) this.ctx.logger.warn('nanomuse: the chat slot could not leave an old own-provider route; cleanup will retry on the next start')
+      else this.ctx.logger.warn('nanomuse: the chat slot could not leave %s: %s', id, message(error))
     }
     return cloudModelsOn
   }
@@ -2238,6 +2813,590 @@ export default class NanomuseCloud extends Service {
       profile: this.profile.current(),
       hub: this.hubState(),
     }
+  }
+
+  async mordeHubStatus(): Promise<MordeHubStatus> {
+    const credential = await this.credential(MORDE_CLIENT_CREDENTIAL)
+    const state = this.state.mordeHub
+    this.mordeHubHasCredential = Boolean(credential && state?.installationID)
+    if (credential && state?.installationID) {
+      try {
+        this.mordeHubDevices = await this.loadMordeHubDevices(state.baseURL, credential)
+        this.mordeHubDeviceError = undefined
+      } catch (error) {
+        this.mordeHubDeviceError = message(error)
+      }
+    } else this.mordeHubDevices = []
+    await this.refreshMordeHubCapabilities()
+    return this.mordeHubView()
+  }
+
+  /** Read one owner-scoped account object through Morde's Personal application API. */
+  async mordePersonalObject(objectType: string, objectID: string): Promise<MordePersonalObject | undefined> {
+    const { baseURL, credential } = await this.mordeAPIAuth()
+    try {
+      const value = await mordeRequest<unknown>(baseURL, `personal-data/${mordeObjectSegment(objectType)}/${mordeObjectSegment(objectID)}`, {
+        headers: { authorization: `Bearer ${credential}` },
+      })
+      return mordePersonalObjectOf(value)
+    } catch (error) {
+      if (error instanceof RelayError && error.status === 404 && error.code === 'not_found') return undefined
+      throw error
+    }
+  }
+
+  /** Replace one Personal object with the caller's saved revision and idempotency key. */
+  async mordeReplacePersonalObject(objectType: string, objectID: string, baseRevision: number, body: Record<string, unknown>, mutationID: string): Promise<MordePersonalMutationReceipt> {
+    const { baseURL, credential } = await this.mordeAPIAuth()
+    validateMordeMutation(baseRevision, mutationID)
+    return mordeMutationReceiptOf(await mordeRequest<unknown>(baseURL, `personal-data/${mordeObjectSegment(objectType)}/${mordeObjectSegment(objectID)}`, {
+      method: 'PUT',
+      headers: { authorization: `Bearer ${credential}`, 'content-type': 'application/json', 'idempotency-key': mutationID },
+      body: JSON.stringify({ base_revision: baseRevision, body }),
+    }))
+  }
+
+  async mordeDeletePersonalObject(objectType: string, objectID: string, baseRevision: number, mutationID: string): Promise<MordePersonalMutationReceipt> {
+    const { baseURL, credential } = await this.mordeAPIAuth()
+    validateMordeMutation(baseRevision, mutationID)
+    return mordeMutationReceiptOf(await mordeRequest<unknown>(baseURL, `personal-data/${mordeObjectSegment(objectType)}/${mordeObjectSegment(objectID)}`, {
+      method: 'DELETE',
+      headers: { authorization: `Bearer ${credential}`, 'content-type': 'application/json', 'idempotency-key': mutationID },
+      body: JSON.stringify({ base_revision: baseRevision }),
+    }))
+  }
+
+  /** Read the account's bounded Personal snapshot pages, including memory and profile objects. */
+  async mordePersonalSnapshot(cursor = ''): Promise<MordePersonalSnapshotPage> {
+    const { baseURL, credential } = await this.mordeAPIAuth()
+    const query = new URLSearchParams({ limit: '10', ...(cursor ? { cursor } : {}) })
+    return mordePersonalSnapshotOf(await mordeRequest<unknown>(baseURL, `sync/snapshot?${query}`, {
+      headers: { authorization: `Bearer ${credential}` },
+    }, 12 * 1024 * 1024))
+  }
+
+  /** List account goals through GoalService, preserving its cursor and typed business boundary. */
+  async mordeGoals(cursor = ''): Promise<MordeGoalPage> {
+    const { baseURL, credential } = await this.mordeAPIAuth()
+    const query = new URLSearchParams({ limit: '100', ...(cursor ? { cursor } : {}) })
+    return mordeGoalPageOf(await mordeRequest<unknown>(baseURL, `goals?${query}`, {
+      headers: { authorization: `Bearer ${credential}` },
+    }))
+  }
+
+  async mordeAvailableModels(expectedScope?: string): Promise<MordeAvailableModel[]> {
+    if (expectedScope && this.mordePersonalScope() !== expectedScope) throw new RelayError(401, 'signed_out', 'The Morde account changed; try again')
+    const { baseURL, credential } = await this.mordeAPIAuth()
+    if (expectedScope && this.mordePersonalScope() !== expectedScope) throw new RelayError(401, 'signed_out', 'The Morde account changed; try again')
+    return mordeAvailableModelsOf(await mordeRequest<unknown>(baseURL, 'available-models', {
+      headers: { authorization: `Bearer ${credential}` },
+    }, 256 * 1024))
+  }
+
+  async mordeCreateSchedule(input: MordeScheduleCreateInput, idempotencyKey: string, expectedScope?: string): Promise<MordeScheduleReceipt> {
+    if (expectedScope && this.mordePersonalScope() !== expectedScope) throw new RelayError(401, 'signed_out', 'The Morde account changed; try again')
+    const { baseURL, credential } = await this.mordeAPIAuth()
+    if (expectedScope && this.mordePersonalScope() !== expectedScope) throw new RelayError(401, 'signed_out', 'The Morde account changed; try again')
+    validateMordeMutation(0, idempotencyKey)
+    return mordeScheduleReceiptOf(await mordeRequest<unknown>(baseURL, 'schedules', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${credential}`, 'content-type': 'application/json', 'idempotency-key': idempotencyKey },
+      body: JSON.stringify(input),
+    }))
+  }
+
+  async mordeCreateGoal(id: string, body: Record<string, unknown>, mutationID: string): Promise<MordePersonalMutationReceipt> {
+    const { baseURL, credential } = await this.mordeAPIAuth()
+    mordeObjectSegment(id)
+    validateMordeMutation(0, mutationID)
+    return mordeMutationReceiptOf(await mordeRequest<unknown>(baseURL, 'goals', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${credential}`, 'content-type': 'application/json', 'idempotency-key': mutationID },
+      body: JSON.stringify({ id, body }),
+    }))
+  }
+
+  async mordeUpdateGoal(id: string, baseRevision: number, body: Record<string, unknown>, mutationID: string): Promise<MordePersonalMutationReceipt> {
+    const { baseURL, credential } = await this.mordeAPIAuth()
+    validateMordeMutation(baseRevision, mutationID)
+    return mordeMutationReceiptOf(await mordeRequest<unknown>(baseURL, `goals/${mordeObjectSegment(id)}`, {
+      method: 'PATCH',
+      headers: { authorization: `Bearer ${credential}`, 'content-type': 'application/json', 'idempotency-key': mutationID },
+      body: JSON.stringify({ base_revision: baseRevision, body }),
+    }))
+  }
+
+  async mordeDeleteGoal(id: string, baseRevision: number, mutationID: string): Promise<MordePersonalMutationReceipt> {
+    const { baseURL, credential } = await this.mordeAPIAuth()
+    validateMordeMutation(baseRevision, mutationID)
+    return mordeMutationReceiptOf(await mordeRequest<unknown>(baseURL, `goals/${mordeObjectSegment(id)}`, {
+      method: 'DELETE',
+      headers: { authorization: `Bearer ${credential}`, 'content-type': 'application/json', 'idempotency-key': mutationID },
+      body: JSON.stringify({ base_revision: baseRevision }),
+    }))
+  }
+
+  private async mordeAPIAuth(): Promise<{ baseURL: string; credential: string }> {
+    const state = this.state.mordeHub
+    const credential = await this.credential(MORDE_CLIENT_CREDENTIAL)
+    if (!state?.installationID || !credential) throw new RelayError(401, 'signed_out', 'Sign in to Morde first')
+    return { baseURL: state.baseURL, credential }
+  }
+
+  private async loadMordeHubDevices(baseURL: string, credential: string): Promise<MordeHubDevice[]> {
+    const value = await mordeRequest<unknown>(baseURL, 'devices', { headers: { authorization: `Bearer ${credential}` } })
+    return mordeHubDevicesOf(value)
+  }
+
+  private async refreshMordeHubDevicesFromHub(hub: HubClient): Promise<void> {
+    const state = this.state.mordeHub
+    if (!state?.installationID || this.mordeHub !== hub) return
+    try {
+      const credential = await this.credential(MORDE_CLIENT_CREDENTIAL)
+      if (!credential) return
+      this.mordeHubDevices = await this.loadMordeHubDevices(state.baseURL, credential)
+      this.mordeHubDeviceError = undefined
+    } catch (error) {
+      if (this.mordeHub !== hub) return
+      this.mordeHubDeviceError = message(error)
+    }
+    if (this.mordeHub === hub && this.state.mordeHub === state) this.broadcast()
+  }
+
+  async mordeHubRevokeDevice(input: unknown): Promise<MordeHubStatus> {
+    return this.serialize(async () => {
+      if (typeof input !== 'string' || !/^i[a-z0-9]{7}$/.test(input)) {
+        throw new RelayError(400, 'invalid_device', 'Choose a valid device')
+      }
+      const state = this.state.mordeHub
+      const credential = await this.credential(MORDE_CLIENT_CREDENTIAL)
+      if (!state?.installationID || !credential) throw new RelayError(401, 'signed_out', 'Sign in to Morde Hub first')
+      if (input === state.installationID) throw new RelayError(400, 'current_device', 'Use Disconnect to sign out this computer')
+      const target = this.mordeHubDevices.find((device) => device.id === input)
+      if (!target || target.revoked || Date.parse(target.expiresAt) <= Date.now()) {
+        throw new RelayError(409, 'device_inactive', 'Refresh the device list; this installation is no longer active')
+      }
+      try {
+        await mordeRequest<void>(state.baseURL, `devices/${input}`, {
+          method: 'DELETE', headers: { authorization: `Bearer ${credential}` },
+        })
+      } catch {
+        try {
+          this.mordeHubDevices = await this.loadMordeHubDevices(state.baseURL, credential)
+          const current = this.mordeHubDevices.find((device) => device.id === input)
+          if (current && !current.revoked && Date.parse(current.expiresAt) > Date.now()) {
+            throw new RelayError(409, 'device_revoke_not_confirmed', 'The server still lists this device as active')
+          }
+        } catch (error) {
+          if (error instanceof RelayError && error.code === 'device_revoke_not_confirmed') throw error
+          throw new RelayError(503, 'device_revoke_unknown', 'The revocation result is unknown. Refresh the device list before retrying')
+        }
+      }
+      this.mordeHubDevices = this.mordeHubDevices.map((device) => device.id === input ? { ...device, online: false, revoked: true } : device)
+      this.mordeHub?.refreshDevices()
+      try { this.mordeHubDevices = await this.loadMordeHubDevices(state.baseURL, credential) }
+      catch { /* The 204 response already confirmed revocation. */ }
+      this.broadcast()
+      return this.mordeHubView()
+    })
+  }
+
+  private async refreshMordeHubCapabilities(): Promise<void> {
+    const [screenshot, files, command] = await Promise.all([
+      mordeHubScreenshotAvailable(),
+      mordeHubFilesAvailable(),
+      mordeHubCommandAvailable(),
+    ])
+    this.mordeHubCapabilities = { screenshot, files, command }
+  }
+
+  async mordeHubUpdateGrants(input: unknown): Promise<MordeHubStatus> {
+    return this.serialize(async () => {
+      if (!input || typeof input !== 'object' || Array.isArray(input)) throw new RelayError(400, 'invalid_grant', 'Choose valid Hub permissions')
+      const body = input as Record<string, unknown>
+      if (Object.keys(body).some((key) => key !== 'screenshot' && key !== 'files' && key !== 'command' && key !== 'file_root') ||
+        ('screenshot' in body && typeof body.screenshot !== 'boolean') || ('files' in body && typeof body.files !== 'boolean') ||
+        ('command' in body && typeof body.command !== 'boolean')) {
+        throw new RelayError(400, 'invalid_grant', 'Choose valid Hub permissions')
+      }
+      const current = this.state.mordeHub
+      if (!current?.installationID || !(await this.credential(MORDE_CLIENT_CREDENTIAL))) {
+        throw new RelayError(401, 'signed_out', 'Sign in to Morde Hub first')
+      }
+      this.mordeHubHasCredential = true
+      await this.refreshMordeHubCapabilities()
+      let screenshot = current.grants.screenshot === true
+      let files = current.grants.files === true
+      let command = current.grants.command === true
+      let fileRoot = current.fileRoot
+      if ('screenshot' in body) {
+        screenshot = body.screenshot as boolean
+        if (screenshot && !this.mordeHubCapabilities.screenshot) {
+          throw new RelayError(409, 'capability_unavailable', 'Screen capture is not available or its system permission is off')
+        }
+      }
+      if ('files' in body && body.files === false) {
+        files = false
+      }
+      if ('file_root' in body) {
+        if (body.file_root === null) {
+          fileRoot = undefined
+          files = false
+          command = false
+        } else if (typeof body.file_root !== 'string' || !(this.mordeHubCapabilities.files || this.mordeHubCapabilities.command)) {
+          throw new RelayError(409, 'capability_unavailable', 'The local file helper is unavailable')
+        } else {
+          fileRoot = await mordeHubSelectedRoot(body.file_root)
+        }
+      }
+      if (body.files === true) {
+        if (!fileRoot || !this.mordeHubCapabilities.files) {
+          throw new RelayError(400, 'invalid_grant', 'Choose a folder before allowing file access')
+        }
+        files = true
+      }
+      if ('command' in body) {
+        command = body.command as boolean
+        if (command && (!fileRoot || !this.mordeHubCapabilities.command)) {
+          throw new RelayError(409, 'capability_unavailable', 'Choose a folder and verify command isolation before allowing commands')
+        }
+      }
+      const changed = screenshot !== current.grants.screenshot || files !== current.grants.files || command !== current.grants.command ||
+        fileRoot?.directory !== current.fileRoot?.directory || fileRoot?.identity !== current.fileRoot?.identity
+      if (!changed) return this.mordeHubView()
+      if (current.targetGrantVersion >= Number.MAX_SAFE_INTEGER) throw new RelayError(409, 'grant_version_exhausted', 'Morde Hub permissions need to be reset')
+      const nextHub = {
+        ...current,
+        targetGrantVersion: current.targetGrantVersion + 1,
+        grants: { screenshot, files, command },
+      }
+      if (fileRoot) nextHub.fileRoot = fileRoot
+      else delete nextHub.fileRoot
+      this.state = { ...this.state, mordeHub: nextHub }
+      await this.writeState()
+      this.mordeHub?.restart()
+      this.broadcast()
+      return this.mordeHubView()
+    })
+  }
+
+  mordeHubView(): MordeHubStatus {
+    const state = this.state.mordeHub
+    const lastError = this.mordeHub?.lastError || this.mordeHubDeviceError
+    return {
+      signedIn: this.mordeHubHasCredential,
+      connected: this.mordeHub?.connected ?? false,
+      baseURL: state?.baseURL ?? '',
+      ...(state?.installationID ? { deviceID: this.mordeHub?.deviceId ?? state.installationID } : {}),
+      devices: this.mordeHubDevices,
+      targetGrantVersion: state?.targetGrantVersion ?? 1,
+      grants: {
+        screenshot: state?.grants.screenshot ?? false,
+        files: state?.grants.files ?? false,
+        command: state?.grants.command ?? false,
+        fileRoot: state?.fileRoot?.directory ?? null,
+      },
+      capabilities: { ...this.mordeHubCapabilities },
+      ...(state?.accountName ? { accountName: state.accountName } : {}),
+      ...(state?.installationID ? { installationID: state.installationID } : {}),
+      ...(state?.expiresAt ? { expiresAt: state.expiresAt } : {}),
+      ...(lastError ? { lastError } : {}),
+    }
+  }
+
+  /** Opaque local partition for account-owned DSH cache files; contains no credential or raw user id. */
+  mordePersonalScope(): string {
+    const state = this.state.mordeHub
+    if (!this.mordeHubHasCredential || !state?.installationID) return ''
+    const owner = state.accountID || state.installationID
+    return `morde-${createHash('sha256').update(`${state.baseURL}\0${owner}`).digest('hex').slice(0, 24)}`
+  }
+
+  async mordeHubCall(to: string, action: 'open' | 'notify', args: Record<string, unknown>, options: CallOptions = {}): Promise<Record<string, unknown>> {
+    if (typeof to !== 'string' || !/^i[a-z0-9]{7}$/.test(to) || !args || typeof args !== 'object' || Array.isArray(args)) {
+      throw new HubError('not_allowed', 'The Morde Hub call is invalid')
+    }
+    if (action === 'open') {
+      if (Object.keys(args).length !== 1 || !Object.hasOwn(args, 'url') || typeof args.url !== 'string') {
+        throw new HubError('not_allowed', 'The Morde Hub call is invalid')
+      }
+      const raw = args.url
+      let url: URL
+      try { url = new URL(raw) }
+      catch { throw new HubError('not_allowed', 'Only HTTP(S) URLs can be opened') }
+      if (raw !== raw.trim() || (url.protocol !== 'http:' && url.protocol !== 'https:') || !url.hostname || url.username || url.password || Buffer.byteLength(raw) > 2048) {
+        throw new HubError('not_allowed', 'Only HTTP(S) URLs can be opened')
+      }
+    } else if (action === 'notify') {
+      if (Object.keys(args).some((key) => key !== 'title' && key !== 'text') || !Object.hasOwn(args, 'text') || typeof args.text !== 'string' || !args.text ||
+        Buffer.byteLength(args.text) > 2000 || (Object.hasOwn(args, 'title') && args.title !== undefined && (typeof args.title !== 'string' || Buffer.byteLength(args.title) > 100))) {
+        throw new HubError('not_allowed', 'The Morde Hub notification is invalid')
+      }
+    } else {
+      throw new HubError('not_allowed', 'The Morde Hub call is invalid')
+    }
+
+    const state = this.state.mordeHub
+    const hub = this.mordeHub
+    if (!state?.installationID || !(await this.credential(MORDE_CLIENT_CREDENTIAL))) {
+      throw new HubError('not_allowed', 'Morde Hub is signed out on this computer')
+    }
+    if (!hub?.connected || hub.deviceId !== state.installationID) {
+      throw new HubError('offline', 'This computer is not connected to Morde Hub')
+    }
+    if (to === state.installationID) throw new HubError('not_allowed', 'Choose another Morde Hub device')
+    const device = this.mordeHubDevices.find((item) => item.id === to)
+    const expiresAt = device ? Date.parse(device.expiresAt) : NaN
+    if (!device || device.revoked || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+      throw new HubError('not_allowed', 'Choose an active Morde Hub device')
+    }
+    if (!device.online) throw new HubError('offline', 'The Morde Hub device is offline')
+    if (action === 'open' && device.platform !== 'desktop') throw new HubError('not_allowed', 'URLs can be opened only on Morde Hub desktop devices')
+    if (action === 'notify' && device.platform !== 'desktop') throw new HubError('not_allowed', 'Notifications are available only on Morde Hub desktop devices')
+    const request = action === 'open'
+      ? { url: args.url as string }
+      : { text: args.text as string, ...(Object.hasOwn(args, 'title') && typeof args.title === 'string' ? { title: args.title } : {}) }
+    return hub.call(to, action, request, options)
+  }
+
+  async mordeHubLogin(baseURLInput: string, nameInput: string, password: string): Promise<MordeHubStatus> {
+    return this.serialize(async () => {
+      if (await this.credential(MORDE_CLIENT_CREDENTIAL)) throw new RelayError(409, 'already_signed_in', 'Disconnect the current Morde installation first')
+      const baseURL = mordeBaseURL(baseURLInput)
+      const name = nameInput.trim()
+      if (!name || !password || Buffer.byteLength(password) > 4096) throw new RelayError(400, 'invalid_login', 'Enter a user name and password')
+      const capabilities = await mordeRequest<{ supported_features?: unknown }>(baseURL, 'capabilities')
+      const features = Array.isArray(capabilities.supported_features) ? capabilities.supported_features : []
+      if (!features.includes('ordered_client_login') || !features.includes('hub')) {
+        throw new RelayError(409, 'hub_unavailable', 'This Morde server does not support ordered client login and Hub')
+      }
+
+      const previous = this.state.mordeHub
+      const retrying = previous?.baseURL === baseURL && !previous.installationID
+      const clientInstanceID = retrying && previous.clientInstanceID ? previous.clientInstanceID : randomUUID()
+      const attemptGeneration = retrying ? previous.attemptGeneration + 1 : 1
+      this.state = {
+        ...this.state,
+        mordeHub: { baseURL, clientInstanceID, attemptGeneration, targetGrantVersion: 1, grants: { screenshot: false, files: false, command: false } },
+      }
+      await this.writeState()
+      const result = await mordeRequest<{
+        installation_id?: unknown
+        client_credential?: unknown
+        client_expires_at?: unknown
+        user?: { id?: unknown; name?: unknown }
+      }>(baseURL, 'auth/client-login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'idempotency-key': randomUUID() },
+        body: JSON.stringify({
+          name,
+          password,
+          platform: 'desktop',
+          display_name: this.deviceName().slice(0, 100),
+          client_instance_id: clientInstanceID,
+          attempt_generation: attemptGeneration,
+        }),
+      })
+      if (typeof result.client_credential !== 'string' || !result.client_credential.startsWith('chc_') ||
+          typeof result.installation_id !== 'string' || !result.installation_id || result.installation_id.length > 128) {
+        throw new RelayError(502, 'bad_response', 'Morde server did not return a Client Installation credential')
+      }
+      const expiry = typeof result.client_expires_at === 'string' && Number.isFinite(Date.parse(result.client_expires_at))
+        ? new Date(result.client_expires_at).toISOString()
+        : undefined
+      await this.ctx.credentials.set(credentialRef(MORDE_CLIENT_CREDENTIAL), result.client_credential)
+      this.mordeHubHasCredential = true
+      this.mordeHubDeviceError = undefined
+      this.state = {
+        ...this.state,
+        mordeHub: {
+          baseURL,
+          clientInstanceID,
+          attemptGeneration,
+          targetGrantVersion: 1,
+          grants: { screenshot: false, files: false, command: false },
+          ...(typeof result.user?.id === 'string' ? { accountID: result.user.id.slice(0, 128) } : {}),
+          accountName: typeof result.user?.name === 'string' ? result.user.name.slice(0, 100) : name.slice(0, 100),
+          installationID: result.installation_id,
+          ...(expiry ? { expiresAt: expiry } : {}),
+        },
+      }
+      await this.writeState()
+      this.startMordeHub()
+      await this.refreshMordeHubCapabilities()
+      this.broadcast()
+      return this.mordeHubView()
+    })
+  }
+
+  async mordeHubSignOut(): Promise<MordeHubStatus> {
+    return this.serialize(async () => {
+      const credential = await this.credential(MORDE_CLIENT_CREDENTIAL)
+      const baseURL = this.state.mordeHub?.baseURL
+      if (credential && baseURL) {
+        try {
+          await mordeRequest<void>(baseURL, 'auth/client-logout', {
+            method: 'POST',
+            headers: { authorization: `Bearer ${credential}` },
+          })
+        } catch (error: unknown) {
+          if (!(error instanceof RelayError && error.status === 401)) throw error
+        }
+      }
+      this.mordeHub?.stop('signed out')
+      this.mordeHub = undefined
+      await this.ctx.credentials.unset(credentialRef(MORDE_CLIENT_CREDENTIAL))
+      this.mordeHubHasCredential = false
+      this.mordeHubCapabilities = { screenshot: false, files: false, command: false }
+      this.mordeHubDevices = []
+      this.mordeHubDeviceError = undefined
+      const { mordeHub: _mordeHub, ...state } = this.state
+      this.state = state
+      await this.writeState()
+      this.broadcast()
+      return this.mordeHubView()
+    })
+  }
+
+  private startMordeHub(): void {
+    const state = this.state.mordeHub
+    if (!state?.installationID) return
+    this.mordeHub?.stop('replaced')
+    const hub = new HubClient({
+      url: mordeHubURL(state.baseURL),
+      auth: 'bearer',
+      key: async () => (await this.credential(MORDE_CLIENT_CREDENTIAL)) || undefined,
+      log: (level, text) => this.ctx.logger[level](text),
+    })
+    hub.handle('info', async () => {
+      const bounded = (value: string, bytes: number) => Buffer.from(value).subarray(0, bytes).toString('utf8')
+      await this.refreshMordeHubCapabilities()
+      const state = this.state.mordeHub
+      const actions = ['info', 'open', 'notify']
+      if (state?.grants.screenshot && this.mordeHubCapabilities.screenshot) actions.push('screenshot')
+      if (state?.grants.files && state.fileRoot && this.mordeHubCapabilities.files) actions.push('files', 'file.get')
+      if (state?.grants.command && state.fileRoot && this.mordeHubCapabilities.command) actions.push('command')
+      return {
+        name: bounded(this.deviceName(), 100),
+        platform: 'desktop',
+        os: bounded(`${type()} ${release()}`.trim(), 64),
+        version: bounded(VERSION, 64),
+        actions,
+        target_grant_version: state?.targetGrantVersion ?? 1,
+      }
+    })
+    hub.handle('open', async (args, call) => this.openMordeHub(args, call.from, call.signal))
+    hub.handle('notify', async (args, call) => {
+      const title = typeof args.title === 'string' ? args.title : ''
+      const text = typeof args.text === 'string' ? args.text : ''
+      if (!text || Buffer.byteLength(title) > 100 || Buffer.byteLength(text) > 2000) {
+        throw new HubError('not_allowed', 'The notification is invalid')
+      }
+      this.notice('notify', call.from.name || 'a device', title, text)
+      return { notified: true }
+    })
+    hub.handle('screenshot', async (args, call) => {
+      if (Object.keys(args).length !== 0) throw new HubError('not_allowed', 'Screenshot does not accept arguments')
+      const { targetGrantVersion } = await this.mordeHubTaskGrant('screenshot', call.from)
+      const result = await mordeHubScreenshot(targetGrantVersion)
+      await this.recheckMordeHubTaskGrant('screenshot', call.from)
+      return result
+    })
+    hub.handle('files', async (args, call) => {
+      if (Object.keys(args).some((key) => key !== 'path')) throw new HubError('not_allowed', 'The folder request is invalid')
+      const { state, targetGrantVersion } = await this.mordeHubTaskGrant('files', call.from)
+      if (!state.fileRoot) throw new HubError('not_allowed', 'File access is not allowed on this computer')
+      const result = await mordeHubFiles(state.fileRoot, args.path, targetGrantVersion)
+      await this.recheckMordeHubTaskGrant('files', call.from)
+      return result
+    })
+    hub.handle('file.get', async (args, call) => {
+      if (Object.keys(args).some((key) => key !== 'path' && key !== 'max_bytes') ||
+        typeof args.path !== 'string' || !Number.isSafeInteger(args.max_bytes)) {
+        throw new HubError('not_allowed', 'The file request is invalid')
+      }
+      const { state, targetGrantVersion } = await this.mordeHubTaskGrant('file.get', call.from)
+      if (!state.fileRoot) throw new HubError('not_allowed', 'File access is not allowed on this computer')
+      const result = await mordeHubFileGet(state.fileRoot, args.path, args.max_bytes, targetGrantVersion)
+      await this.recheckMordeHubTaskGrant('file.get', call.from)
+      return result
+    })
+    hub.handle('command', async (args, call) => {
+      if (Object.keys(args).some((key) => key !== 'command' && key !== 'timeout_ms') ||
+        typeof args.command !== 'string' || Buffer.byteLength(args.command) < 1 || Buffer.byteLength(args.command) > 8192 ||
+        args.command.includes('\0') || !Number.isSafeInteger(args.timeout_ms) || Number(args.timeout_ms) < 1000 || Number(args.timeout_ms) > 300000) {
+        throw new HubError('not_allowed', 'The command request is invalid')
+      }
+      const { state, targetGrantVersion } = await this.mordeHubTaskGrant('command', call.from)
+      if (!state.fileRoot) throw new HubError('not_allowed', 'Command access is not allowed on this computer')
+      const result = await mordeHubCommand(state.fileRoot, args.command, Number(args.timeout_ms), targetGrantVersion, call.signal)
+      await this.recheckMordeHubTaskGrant('command', call.from)
+      return result
+    })
+    this.mordeHub = hub
+    hub.onState(() => this.broadcast())
+    hub.onDevices(() => void this.refreshMordeHubDevicesFromHub(hub))
+    hub.onUnauthorized(() => {
+      void this.serialize(() => this.clearMordeHubAuthorization(hub)).catch((error: unknown) =>
+        this.ctx.logger.warn('nanomuse: Morde Hub credentials not cleared after revocation: %s', message(error)))
+    })
+    hub.start()
+  }
+
+  private async clearMordeHubAuthorization(hub: HubClient): Promise<void> {
+    if (this.mordeHub !== hub) return
+    hub.stop('authorization revoked')
+    this.mordeHub = undefined
+    await this.ctx.credentials.unset(credentialRef(MORDE_CLIENT_CREDENTIAL))
+    this.mordeHubHasCredential = false
+    this.mordeHubCapabilities = { screenshot: false, files: false, command: false }
+    this.mordeHubDevices = []
+    this.mordeHubDeviceError = 'The Morde Hub authorization was revoked. Sign in again to reconnect.'
+    const { mordeHub: _mordeHub, ...state } = this.state
+    this.state = state
+    await this.writeState()
+    this.broadcast()
+  }
+
+  private async mordeHubTaskGrant(action: 'screenshot' | 'files' | 'file.get' | 'command', caller: Caller): Promise<{ state: MordeHubState; targetGrantVersion: number }> {
+    const state = this.state.mordeHub
+    if (!state?.installationID || !(await this.credential(MORDE_CLIENT_CREDENTIAL))) {
+      throw new HubError('not_allowed', 'Morde Hub is signed out on this computer')
+    }
+    if (action === 'command' && !this.mordeHubCapabilities.command) {
+      throw new HubError('unsupported', 'Command isolation is unavailable on this computer')
+    }
+    const targetGrantVersion = requireMordeHubTaskGrant(action, caller, state)
+    return { state, targetGrantVersion }
+  }
+
+  private async recheckMordeHubTaskGrant(action: 'screenshot' | 'files' | 'file.get' | 'command', caller: Caller): Promise<void> {
+    const state = this.state.mordeHub
+    if (!state?.installationID || !(await this.credential(MORDE_CLIENT_CREDENTIAL))) {
+      throw new HubError('not_allowed', 'Morde Hub is signed out on this computer')
+    }
+    requireMordeHubTaskGrant(action, caller, state)
+  }
+
+  private async openMordeHub(args: Record<string, unknown>, from: Caller, signal?: AbortSignal): Promise<Record<string, unknown>> {
+    const raw = typeof args.url === 'string' ? args.url : ''
+    let url: URL
+    try {
+      url = new URL(raw)
+    } catch {
+      throw new HubError('not_allowed', 'Only HTTP(S) URLs can be opened')
+    }
+    if ((url.protocol !== 'http:' && url.protocol !== 'https:') || !url.hostname || url.username || url.password || Buffer.byteLength(raw) > 2048) {
+      throw new HubError('not_allowed', 'Only HTTP(S) URLs can be opened')
+    }
+    const answer = await this.asks.ask(from, 'open', raw, ASK_TIMEOUT_MS, true, signal)
+    if (answer === 'cancelled') throw signal?.reason instanceof Error ? signal.reason : new HubError('cancelled', 'The Hub action was cancelled')
+    if (answer !== 'once') {
+      throw new HubError('not_allowed', answer === 'timeout' ? `nobody at ${this.deviceName()} answered in time` : `the person at ${this.deviceName()} did not allow it`)
+    }
+    const result = await runAction('open', { url: raw })
+    if (result.ok !== true) throw new HubError('failed', 'The URL could not be opened')
+    return { opened: true }
   }
 
   private defaultModelService(): { currentSelection(): { provider: string; model: string }; saveSelection(next: { provider: string; model: string }): Promise<void> } | undefined {
@@ -2397,6 +3556,7 @@ export default class NanomuseCloud extends Service {
       cloud: { signedIn: this.signedInCache && Boolean(account), hint: account?.hint ?? '' },
       profile: this.profile.current(),
       hub: this.hubState(),
+      mordeHub: this.mordeHubView(),
       hands: { calls: [...this.calls.values()], steps: this.steps, run: this.screenRuns.current() },
       stage: this.stage,
       notices: this.notices,
@@ -3241,7 +4401,7 @@ export default class NanomuseCloud extends Service {
     // the sync state stays (C10): it remembers which account the mapped sessions belong to, so a
     // different account signing in next is known and the last account's chats are hidden, not pushed
     // the own keys and the ChatGPT sign-in are this computer's, not the account's (C11): they stay too
-    const { deviceId, deviceName, remoteControl, sync, providers, chatgpt, media, handsProvider, handsModel } = this.state
+    const { deviceId, deviceName, remoteControl, sync, providers, chatgpt, media, handsProvider, handsModel, mordeHub } = this.state
     this.state = {
       ...(deviceId ? { deviceId } : {}),
       ...(deviceName ? { deviceName } : {}),
@@ -3251,6 +4411,7 @@ export default class NanomuseCloud extends Service {
       ...(chatgpt ? { chatgpt } : {}),
       ...(media ? { media } : {}),
       ...(handsProvider && handsModel ? { handsProvider, handsModel } : {}),
+      ...(mordeHub ? { mordeHub } : {}),
     }
     this.sync?.stop()
     this.sync?.signedOut()
@@ -3523,6 +4684,7 @@ export default class NanomuseCloud extends Service {
   private async readState(): Promise<State> {
     try {
       const raw = JSON.parse(await readFile(this.statePath(), 'utf8')) as State
+      const mordeHub = mordeHubStateOf(raw.mordeHub)
       return {
         ...(raw.account ? { account: raw.account } : {}),
         ...(raw.models ? { models: raw.models } : {}),
@@ -3539,8 +4701,10 @@ export default class NanomuseCloud extends Service {
         ...(raw.media && typeof raw.media === 'object' ? { media: raw.media } : {}),
         ...(typeof raw.handsProvider === 'string' && raw.handsProvider ? { handsProvider: raw.handsProvider } : {}),
         ...(raw.providers && typeof raw.providers === 'object' ? { providers: ownProvidersOf(raw.providers) } : {}),
+        ...(raw.ownProviderKeyCleanup && typeof raw.ownProviderKeyCleanup === 'object' ? { ownProviderKeyCleanup: raw.ownProviderKeyCleanup } : {}),
         ...(raw.chatgpt && typeof raw.chatgpt === 'object' && typeof (raw.chatgpt as ChatGptState).label === 'string' ? { chatgpt: { label: (raw.chatgpt as ChatGptState).label, at: Number((raw.chatgpt as ChatGptState).at) || 0 } } : {}),
         ...(raw.cloudModelsOff === true ? { cloudModelsOff: true } : {}),
+        ...(mordeHub ? { mordeHub } : {}),
       }
     } catch {
       return {}
@@ -3738,6 +4902,17 @@ export default class NanomuseCloud extends Service {
     if (!sameOrigin(req)) return send(res, 403, { error: { code: 'forbidden', message: 'Same-origin requests only' } })
     try {
       if (req.method === 'GET' && route === '/status') return send(res, 200, await this.status())
+      if (req.method === 'GET' && route === '/morde-hub/status') return send(res, 200, await this.mordeHubStatus())
+      if (req.method === 'POST' && route === '/morde-hub/login') {
+        const body = await json(req)
+        return send(res, 200, await this.mordeHubLogin(String(body.base_url ?? ''), String(body.name ?? ''), String(body.password ?? '')))
+      }
+      if (req.method === 'POST' && route === '/morde-hub/grants') return send(res, 200, await this.mordeHubUpdateGrants(await json(req)))
+      if (req.method === 'POST' && route === '/morde-hub/revoke-device') {
+        const body = await json(req)
+        return send(res, 200, await this.mordeHubRevokeDevice(body.installation_id))
+      }
+      if (req.method === 'POST' && route === '/morde-hub/sign-out') return send(res, 200, await this.mordeHubSignOut())
       if (req.method === 'GET' && route === '/events') return this.stream(req, res)
       if (req.method === 'GET' && route === '/live') return send(res, 200, this.live())
       // the desktop shell's protected exit (src/work.ts): the aggregate a real quit would end,

@@ -975,7 +975,7 @@ enum ChatStoreSyncHydrators {
     // MARK: - Memory Global (GLOBAL.md singleton)
 
     private static func buildMemoryGlobal() async -> PortableRecord? {
-        let url = AIChatViewModel.minisMemoryPersistentDir
+        let url = MinisStoragePaths.minisMemoryPersistentDir
                     .appendingPathComponent("GLOBAL.md")
         let fm = FileManager.default
         guard fm.fileExists(atPath: url.path),
@@ -1001,7 +1001,7 @@ enum ChatStoreSyncHydrators {
         }
         let remoteUpdatedAt = dateField(record, "updatedAt") ?? record.updatedAt
 
-        let url = AIChatViewModel.minisMemoryPersistentDir
+        let url = MinisStoragePaths.minisMemoryPersistentDir
                     .appendingPathComponent("GLOBAL.md")
         let fm = FileManager.default
 
@@ -1101,7 +1101,7 @@ enum ChatStoreSyncHydrators {
             return nil  // Too old — skip
         }
 
-        let url = AIChatViewModel.minisMemoryPersistentDir
+        let url = MinisStoragePaths.minisMemoryPersistentDir
                     .appendingPathComponent("\(dateKey).md")
         guard let text = try? String(contentsOf: url, encoding: .utf8),
               !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -1133,7 +1133,7 @@ enum ChatStoreSyncHydrators {
             return
         }
 
-        let url = AIChatViewModel.minisMemoryPersistentDir
+        let url = MinisStoragePaths.minisMemoryPersistentDir
                     .appendingPathComponent("\(dateKey).md")
         let fm = FileManager.default
 

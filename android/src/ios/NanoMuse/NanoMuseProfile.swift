@@ -35,7 +35,7 @@ enum NanoMuseRelayMedia {
     @MainActor
     private static func authorized(_ method: String, _ path: String) throws -> URLRequest {
         guard let key = NanoMuseCloud.apiKey else {
-            throw NanoMuseCloudError(code: "signed_out", message: AppLocalized("Sign in to nanoMuse Cloud first."), status: 401)
+            throw NanoMuseCloudError(code: "signed_out", message: AppLocalized("Sign in to morde Cloud first."), status: 401)
         }
         guard let url = URL(string: NanoMuseCloud.baseURL + path) else {
             throw NanoMuseCloudError(code: "bad_base", message: "Bad relay address", status: 0)
@@ -45,11 +45,13 @@ enum NanoMuseRelayMedia {
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0"
-        request.setValue("nanoMuse-iOS/\(version)", forHTTPHeaderField: "User-Agent")
+        request.setValue("morde-iOS/\(version)", forHTTPHeaderField: "User-Agent")
         return request
     }
 
     private static func perform(_ request: URLRequest) async throws -> [String: Any] {
+        // nanoMuse: Keep legacy Relay media requests, including uploads, local-only in this app.
+        guard MordeLegacyServicePolicy.isEnabled else { throw MordeLegacyServiceDisabledError() }
         let result: (Data, URLResponse)
         do {
             result = try await session.data(for: request)
@@ -80,7 +82,7 @@ enum NanoMuseRelayMedia {
                 return id
             }
         }
-        throw NanoMuseCloudError(code: "model_not_offered", message: AppLocalized("nanoMuse Cloud offers no image model right now."), status: 404)
+        throw NanoMuseCloudError(code: "model_not_offered", message: AppLocalized("morde Cloud offers no image model right now."), status: 404)
     }
 
     @MainActor
@@ -106,6 +108,7 @@ enum NanoMuseRelayMedia {
     /// One picture from a prompt, as the decoded image.
     @MainActor
     static func generate(prompt: String, model: String, size: String = "1024*1024") async throws -> UIImage {
+        guard MordeLocalExecutionPolicy.isEnabled else { throw MordeLocalExecutionDisabledError() }
         var request = try authorized("POST", "/v1/images/generations")
         request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: [
@@ -117,6 +120,7 @@ enum NanoMuseRelayMedia {
     /// The picture posed again (a new mood of the same face).
     @MainActor
     static func edit(_ image: UIImage, prompt: String, model: String, size: String = "1024*1024") async throws -> UIImage {
+        guard MordeLocalExecutionPolicy.isEnabled else { throw MordeLocalExecutionDisabledError() }
         var request = try authorized("POST", "/v1/images/edits")
         let boundary = "nanomuse-" + UUID().uuidString
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
@@ -337,6 +341,8 @@ enum NanoMuseRelayMedia {
 
     /// A request whose answer is bytes, not JSON; statuses outside `accept` are relay errors.
     private static func raw(_ request: URLRequest, accept: Set<Int>) async throws -> (Data, HTTPURLResponse) {
+        // nanoMuse: Keep legacy Relay binary downloads fail-closed in the Morde app.
+        guard MordeLegacyServicePolicy.isEnabled else { throw MordeLegacyServiceDisabledError() }
         let result: (Data, URLResponse)
         do {
             result = try await session.data(for: request)
@@ -738,5 +744,234 @@ final class NanoMuseProfileSync: ObservableObject {
         UserDefaults.standard.removeObject(forKey: Keys.pushedConnectors)
         UserDefaults.standard.removeObject(forKey: Keys.pushedName)
         UserDefaults.standard.removeObject(forKey: Keys.clips)
+    }
+}
+
+@MainActor
+final class NanoMuseMordeProfileSync: ObservableObject {
+    static let shared = NanoMuseMordeProfileSync()
+
+    @Published private(set) var isFlushing = false
+    @Published private(set) var syncEnabled = true
+    @Published private(set) var pending: MordePersonalDataMutation?
+    @Published private(set) var legacyPending: NanoMuseMordeProfileMutation?
+    @Published private(set) var outboxError: String?
+    @Published private(set) var queueError: String?
+    @Published private(set) var lastError: String?
+
+    private var loadedScopeKey: String?
+
+    private init() {}
+
+    func refresh() {
+        let scope = MordeShellAuthorization.shared.personalDataScopeKey
+        if loadedScopeKey != scope {
+            loadedScopeKey = scope
+            lastError = nil
+            outboxError = nil
+            queueError = nil
+        }
+        guard let scope else {
+            syncEnabled = true
+            pending = nil
+            legacyPending = nil
+            outboxError = nil
+            return
+        }
+        syncEnabled = NanoMuseMordeProfileSyncPreference.isEnabled(scopeKey: scope)
+        do {
+            pending = try NanoMuseMordePersonalDataOutbox.load(scopeKey: scope, root: NanoMuseDirs.root)
+            legacyPending = pending == nil ? try NanoMuseMordeProfileOutbox.load(scopeKey: scope, root: NanoMuseDirs.root) : nil
+            outboxError = nil
+            if pending == nil && legacyPending == nil { lastError = nil }
+        } catch {
+            pending = nil
+            legacyPending = nil
+            outboxError = error.localizedDescription
+        }
+    }
+
+    func setSyncEnabled(_ enabled: Bool) {
+        guard let scope = MordeShellAuthorization.shared.personalDataScopeKey else {
+            refresh()
+            return
+        }
+        NanoMuseMordeProfileSyncPreference.setEnabled(enabled, scopeKey: scope)
+        syncEnabled = enabled
+        if enabled {
+            Task { await retry() }
+        }
+    }
+
+    func retry() async {
+        if NanoMuseMordePersonalConflictResolution.shared.hasConflict {
+            NanoMuseMordePersonalConflictResolution.shared.present()
+            return
+        }
+        refresh()
+        guard NanoMuseMordeProfileSyncPreference.canFlush(syncEnabled: syncEnabled,
+                                                            scopeKey: MordeShellAuthorization.shared.personalDataScopeKey) else { return }
+        do {
+            _ = try await flush()
+        } catch {
+            // `flush` keeps the outbox and exposes the failure for the settings page.
+        }
+    }
+
+    func prepareRevision(for file: NanoMuseSystemFile, text: String) async {
+        refresh()
+        guard let change = try? file.personalDataChange(for: text),
+              let scope = MordeShellAuthorization.shared.personalDataScopeKey,
+              NanoMuseMordeProfileSyncPreference.canFlush(syncEnabled: syncEnabled, scopeKey: scope),
+              revision(for: change, scope: scope) == nil else { return }
+        do {
+            let object = try await MordeShellAuthorization.shared.personalObject(
+                objectType: change.objectType, objectID: change.objectID)
+            guard MordeShellAuthorization.shared.personalDataScopeKey == scope else { return }
+            saveRevision(object?.revision ?? 0, for: change, scope: scope)
+        } catch {
+            // A local edit can still queue with revision zero when this read is offline.
+        }
+    }
+
+    @discardableResult
+    func enqueue(_ body: MordePersonalProfileBody, baseRevision: Int64) throws -> MordePersonalDataMutation {
+        guard let scope = MordeShellAuthorization.shared.personalDataScopeKey,
+              body.isValidForWrite, baseRevision >= 0,
+              let data = try? JSONEncoder().encode(body),
+              let value = try? JSONDecoder().decode(MordePersonalJSONValue.self, from: data),
+              case .object = value else {
+            throw NanoMuseMordePersonalDataOutboxError.invalidMutation
+        }
+        return try enqueue(
+            NanoMuseSystemFilePersonalDataChange(objectType: "profile", objectID: "default",
+                                                  body: value, isDelete: false),
+            baseRevision: baseRevision, scope: scope)
+    }
+
+    func enqueueSystemFile(_ file: NanoMuseSystemFile, text: String) throws {
+        refresh()
+        guard let scope = MordeShellAuthorization.shared.personalDataScopeKey,
+              let change = try file.personalDataChange(for: text) else { return }
+        _ = try enqueue(change, baseRevision: revision(for: change, scope: scope) ?? 0, scope: scope)
+    }
+
+    private func enqueue(_ change: NanoMuseSystemFilePersonalDataChange, baseRevision: Int64,
+                         scope: String) throws -> MordePersonalDataMutation {
+        let mutation = MordePersonalDataMutation(
+            scopeKey: scope, mutationID: UUID().uuidString.replacingOccurrences(of: "-", with: ""),
+            objectType: change.objectType, objectID: change.objectID, baseRevision: baseRevision,
+            body: change.body, isDelete: change.isDelete)
+        do {
+            try NanoMuseMordePersonalDataOutbox.enqueue(mutation, scopeKey: scope, root: NanoMuseDirs.root)
+        } catch {
+            pending = try? NanoMuseMordePersonalDataOutbox.load(scopeKey: scope, root: NanoMuseDirs.root)
+            queueError = error.localizedDescription
+            throw error
+        }
+        pending = mutation
+        legacyPending = nil
+        outboxError = nil
+        queueError = nil
+        lastError = nil
+        if syncEnabled { Task { await retry() } }
+        return mutation
+    }
+
+    @discardableResult
+    func flush() async throws -> MordePersonalMutationReceipt? {
+        refresh()
+        guard let scope = MordeShellAuthorization.shared.personalDataScopeKey else { return nil }
+        guard NanoMuseMordeProfileSyncPreference.canFlush(syncEnabled: syncEnabled, scopeKey: scope) else { return nil }
+        if let pending, NanoMuseMordePersonalConflictResolution.shared.isBlocked(pending.mutationID) {
+            NanoMuseMordePersonalConflictResolution.shared.present()
+            return nil
+        }
+        if let legacyPending, NanoMuseMordePersonalConflictResolution.shared.isBlocked(legacyPending.mutationID) {
+            NanoMuseMordePersonalConflictResolution.shared.present()
+            return nil
+        }
+        guard !isFlushing else { return nil }
+        guard pending != nil || legacyPending != nil else { return nil }
+        isFlushing = true
+        defer { isFlushing = false }
+        do {
+            let receipt: MordePersonalMutationReceipt
+            if let mutation = pending {
+                if mutation.isDelete {
+                    receipt = try await MordeShellAuthorization.shared.deletePersonalObject(
+                        objectType: mutation.objectType, objectID: mutation.objectID,
+                        baseRevision: mutation.baseRevision, idempotencyKey: mutation.mutationID)
+                } else if let body = mutation.body {
+                    receipt = try await MordeShellAuthorization.shared.replacePersonalObject(
+                        objectType: mutation.objectType, objectID: mutation.objectID,
+                        baseRevision: mutation.baseRevision, body: body, idempotencyKey: mutation.mutationID)
+                } else {
+                    throw NanoMuseMordePersonalDataOutboxError.invalidMutation
+                }
+                guard MordeShellAuthorization.shared.personalDataScopeKey == scope,
+                      receipt.object_type == mutation.objectType, receipt.object_id == mutation.objectID,
+                      receipt.result_revision > 0 else { return nil }
+                try NanoMuseMordePersonalDataOutbox.acknowledge(scopeKey: scope, mutationID: mutation.mutationID,
+                                                                root: NanoMuseDirs.root)
+                saveRevision(receipt.result_revision,
+                             for: NanoMuseSystemFilePersonalDataChange(objectType: mutation.objectType,
+                                objectID: mutation.objectID, body: mutation.body, isDelete: mutation.isDelete), scope: scope)
+            } else if let legacy = legacyPending {
+                receipt = try await MordeShellAuthorization.shared.replacePersonalProfile(
+                    baseRevision: legacy.baseRevision, body: legacy.body, idempotencyKey: legacy.mutationID)
+                guard MordeShellAuthorization.shared.personalDataScopeKey == scope,
+                      receipt.object_type == "profile", receipt.object_id == "default",
+                      receipt.result_revision > 0 else { return nil }
+                try NanoMuseMordeProfileOutbox.clear(scopeKey: scope, mutationID: legacy.mutationID,
+                                                      root: NanoMuseDirs.root)
+                saveRevision(receipt.result_revision,
+                             for: NanoMuseSystemFilePersonalDataChange(objectType: "profile", objectID: "default",
+                                body: nil, isDelete: false), scope: scope)
+            } else {
+                return nil
+            }
+            refresh()
+            outboxError = nil
+            lastError = nil
+            return receipt
+        } catch let conflict as MordePersonalRevisionConflict {
+            if let pending {
+                NanoMuseMordePersonalConflictResolution.shared.record(pending, conflict: conflict, root: NanoMuseDirs.root)
+            } else if let legacyPending,
+                      let data = try? JSONEncoder().encode(legacyPending.body),
+                      let body = try? JSONDecoder().decode(MordePersonalJSONValue.self, from: data),
+                      case .object = body {
+                NanoMuseMordePersonalConflictResolution.shared.record(
+                    MordePersonalDataMutation(scopeKey: legacyPending.scopeKey, mutationID: legacyPending.mutationID,
+                        objectType: "profile", objectID: "default", baseRevision: legacyPending.baseRevision,
+                        body: body, isDelete: false), conflict: conflict, source: .legacyProfile,
+                    root: NanoMuseDirs.root)
+            }
+            if MordeShellAuthorization.shared.personalDataScopeKey == scope {
+                lastError = conflict.localizedDescription
+                refresh()
+            }
+            throw conflict
+        } catch {
+            if MordeShellAuthorization.shared.personalDataScopeKey == scope {
+                lastError = error.localizedDescription
+                refresh()
+            }
+            throw error
+        }
+    }
+
+    private func revision(for change: NanoMuseSystemFilePersonalDataChange, scope: String) -> Int64? {
+        UserDefaults.standard.object(forKey: revisionKey(change, scope: scope)) as? Int64
+    }
+
+    private func saveRevision(_ revision: Int64, for change: NanoMuseSystemFilePersonalDataChange, scope: String) {
+        guard revision >= 0 else { return }
+        UserDefaults.standard.set(revision, forKey: revisionKey(change, scope: scope))
+    }
+
+    private func revisionKey(_ change: NanoMuseSystemFilePersonalDataChange, scope: String) -> String {
+        "nanomuse.morde.personal_revision.\(scope).\(change.objectType).\(change.objectID)"
     }
 }

@@ -3,7 +3,7 @@
 //  MinisApp
 //
 //  Manages user-picked external folders (e.g. Obsidian vaults in iCloud Drive)
-//  mounted into /var/minis/mounts/<name> via security-scoped bookmarks.
+//  through security-scoped bookmarks and FileBrowserView symlinks.
 //
 //  Lifecycle:
 //  - User picks a folder via UIDocumentPickerViewController(forOpeningContentTypes: [.folder])
@@ -42,8 +42,8 @@ struct MountedFolderEntry: Codable, Identifiable, Equatable {
     /// decoding defaults to `true` so existing entries keep working.
     var isWritable: Bool = true
 
-    /// User intent: does the user *want* Minis (shell + AI + Browse Files) to
-    /// be allowed to modify this folder? This is a soft lock layered on top
+    /// User intent: does the user *want* Minis file tools and Browse Files to
+    /// modify this folder? This is a soft lock layered on top
     /// of `isWritable` — it lets users mount a writable folder and still keep
     /// AI from deleting or editing its contents.
     /// Defaults to `true` for backward compatibility with mounts saved before
@@ -163,13 +163,13 @@ final class MountedFoldersManager {
     /// Historically stored in `minisAppGroupRoot/mounted-folders.json`, but
     /// that path sits inside the FileProvider's exposed root.
     private static var storeURL: URL {
-        return AIChatViewModel.minisConfigRoot.appendingPathComponent("mounted-folders.json")
+        return MinisStoragePaths.minisConfigRoot.appendingPathComponent("mounted-folders.json")
     }
 
     /// Old pre-migration path — kept as a fallback source so existing mounts
     /// aren't lost after upgrading.
     private static var legacyStoreURL: URL {
-        AIChatViewModel.minisAppGroupRoot.appendingPathComponent("mounted-folders.json")
+        MinisStoragePaths.minisAppGroupRoot.appendingPathComponent("mounted-folders.json")
     }
 
     /// Move `mounted-folders.json` out of providerRoot into MinisConfig the
@@ -218,24 +218,13 @@ final class MountedFoldersManager {
         } catch {
             mountLog.error("save failed: \(error.localizedDescription)")
         }
-        // [T-ios-mention-index-stale-mounts] The mount set is one of the @-mention
-        // index's scan roots, and that index caches for 10 minutes keyed on
-        // sessionId. Without this, a folder mounted while an existing chat is open
-        // stays invisible to `@` in that chat until the TTL lapses, even though a
-        // newly-created chat finds it instantly.
-        //
-        // Hooked on `save()` because it is the single choke point both `add` and
-        // `remove(id:)` already funnel through — a future mutation path gets the
-        // invalidation for free instead of having to remember it.
-        FileMentionIndex.shared.invalidateCache(reason: "mounted folders changed")
+        // nanoMuse: Minis no longer builds the chat-only @-mention index.
     }
 
     // MARK: - CRUD
 
-    /// Hard cap on the number of concurrent external mounts. The iSH bind-mount
-    /// table has a compile-time slot limit (currently 32, shared with 7
-    /// built-in session mounts), but we cap well below that to keep directory
-    /// enumeration and mount reconciliation fast, and to keep the UI sensible.
+    /// Hard cap on the number of concurrent external folders to keep directory
+    /// enumeration and the settings UI manageable.
     static let maxMountCount = 10
 
     /// Returns true if `name` is unique among current entries (excluding `excludingId`).
@@ -269,9 +258,9 @@ final class MountedFoldersManager {
     /// The caller is responsible for presenting the picker; this takes the result URL.
     /// The URL must currently have an active security scope (as it does right after picker callback).
     ///
-    /// `userAllowWrite` is the user's intent: pass `true` to allow AI and shell
-    /// to modify the folder, or `false` to mount it as an internally-locked
-    /// read-only folder (even if the source itself is writable).
+    /// `userAllowWrite` is the user's intent: pass `true` to allow app file
+    /// tools to modify the folder, or `false` to keep it read-only in-app
+    /// (even if the source itself is writable).
     @discardableResult
     func add(pickedURL: URL, customName: String, userAllowWrite: Bool) throws -> MountedFolderEntry {
         let name = customName.trimmingCharacters(in: .whitespaces)
@@ -316,11 +305,7 @@ final class MountedFoldersManager {
 
         // Activate immediately so it's usable without restart.
         activate(entry: entry)
-        // Create/refresh the fakefs symlink so FileBrowserView sees it.
-        AIChatViewModel.refreshMountedFolderSymlinks()
-        // Register the new mount with the iSH kernel bind-mount table so the
-        // shell can read/write it directly (no-op if kernel not booted).
-        pushExternalMountSnapshot()
+        // nanoMuse: FileProvider URLs remain app-scoped; there is no iSH symlink sync.
         mountLog.info("added mount '\(entry.name)' -> \(pickedURL.lastPathComponent)")
         return entry
     }
@@ -333,13 +318,12 @@ final class MountedFoldersManager {
         guard entries[idx].userAllowWrite != allow else { return }
         entries[idx].userAllowWrite = allow
         save()
-        pushExternalMountSnapshot()
         mountLog.info("user allow-write for '\(entries[idx].name)' -> \(allow)")
     }
 
     /// Re-probe the writability of a mount (useful if the user changed
     /// permissions on the source folder in another app). Updates `isWritable`
-    /// and re-pushes the snapshot so iSH rebinds with the new mode.
+    /// for the app's mounted-folder UI and access checks.
     func refreshWritability(id: UUID) {
         guard let idx = entries.firstIndex(where: { $0.id == id }),
               let url = activeURLs[id] else { return }
@@ -347,7 +331,6 @@ final class MountedFoldersManager {
         if entries[idx].isWritable != writable {
             entries[idx].isWritable = writable
             save()
-            pushExternalMountSnapshot()
             mountLog.info("refreshed writability for '\(entries[idx].name)' -> \(writable ? "R/W" : "read-only")")
         }
     }
@@ -371,8 +354,6 @@ final class MountedFoldersManager {
         save()
         // Remove old symlink; recreate all.
         removeMountSymlink(name: oldName)
-        AIChatViewModel.refreshMountedFolderSymlinks()
-        pushExternalMountSnapshot()
     }
 
     /// Remove a mount. Releases its scope and removes the symlink.
@@ -391,8 +372,6 @@ final class MountedFoldersManager {
 
         entries.remove(at: idx)
         save()
-        // Reconcile iSH bind-mount table so the removed entry is unbound.
-        pushExternalMountSnapshot()
         mountLog.info("removed mount '\(entry.name)'")
     }
 
@@ -413,16 +392,10 @@ final class MountedFoldersManager {
     func activateAll() {
         let snapshot = entries
         mountLog.info("activateAll: \(snapshot.count) entries to resolve")
-        guard !snapshot.isEmpty else {
-            pushExternalMountSnapshot()
-            return
-        }
+        guard !snapshot.isEmpty else { return }
         Task.detached(priority: .userInitiated) {
             for entry in snapshot {
                 await Self.resolveAndCommit(entry: entry)
-            }
-            await MainActor.run {
-                MountedFoldersManager.shared.pushExternalMountSnapshot()
             }
         }
     }
@@ -442,10 +415,10 @@ final class MountedFoldersManager {
     /// timeout queue could observe `nil` even after the producer queue had
     /// finished — so mounts would be silently marked `.failed` on cold launch
     /// even when the bookmark resolved instantly. v1.8 shipped that bug; the
-    /// user-visible symptom was a mounted folder appearing in `ls` but
-    /// `cd` returning ENOENT because the host scope was never acquired and
-    /// `pushExternalMountSnapshot` dropped it via `compactMap`. The fix below
-    /// uses a single `Task` for the resolve and races it against
+    /// user-visible symptom was a folder appearing in FileBrowser while
+    /// opening it failed because the host scope was never acquired and
+    /// activation recorded it as unavailable. The fix below uses a single
+    /// `Task` for the resolve and races it against
     /// `Task.sleep` — the `Result` lives entirely inside one task, so there
     /// is no cross-thread shared mutable state.
     private static func resolveAndCommit(entry: MountedFolderEntry) async {
@@ -559,22 +532,20 @@ final class MountedFoldersManager {
         cacheCanonicalPath(for: entry.id, url: url)
         mountLog.info("activated '\(entry.name)' [\(idPrefix)] -> \(url.path) (stale=\(stale))")
 
+        // nanoMuse: Keep FileProvider URLs app-scoped; never pass them to the iSH kernel.
         // Eagerly check whether the host path's contents are actually
         // materialized. Third-party FileProvider extensions (NutStore,
         // Aliyun Drive, etc.) evict placeholders while the app is backgrounded,
         // so resolve+scope-acquire can both succeed while stat() returns
-        // ENOENT — leaving us with a "valid" URL pointing at nothing. If
-        // we push that to the iSH coordinator the bind mount succeeds at
-        // the API level but shell reads come back empty.
+        // ENOENT — leaving FileBrowserView with a valid-looking URL whose
+        // content is still an evicted FileProvider placeholder.
         ensureContentsMaterialized(entry: entry, url: url, idPrefix: idPrefix)
     }
 
     /// Probe the resolved URL with stat(); if ENOENT, attempt to materialize
     /// the evicted FileProvider placeholder (see `materialize`). On completion
-    /// either (a) keep .active and let the next pushExternalMountSnapshot
-    /// include this mount, or (b) downgrade to .contentsUnavailable + drop
-    /// from activeURLs so the iSH coordinator doesn't try to bind an empty
-    /// path.
+    /// either (a) keep .active so FileBrowserView can use this mount, or (b)
+    /// downgrade to .contentsUnavailable and release its security scope.
     ///
     /// The initial stat() is done INSIDE the detached task, not on the main
     /// actor. stat() on an evicted FileProvider path can, for some provider
@@ -600,20 +571,15 @@ final class MountedFoldersManager {
                 let manager = MountedFoldersManager.shared
                 guard manager.entries.contains(where: { $0.id == id }) else { return }
                 if materialized {
-                    mountLog.info("activate '\(name)' [\(idPrefix)] materialization OK — content now reachable, pushing snapshot")
-                    // Re-push so the coordinator now sees a working host path.
-                    manager.pushExternalMountSnapshot()
+                    mountLog.info("activate '\(name)' [\(idPrefix)] materialization OK — content now reachable")
                 } else {
                     mountLog.warning("activate '\(name)' [\(idPrefix)] materialization timed out — marking contentsUnavailable. User needs to open Files.app to wake the provider.")
                     manager.activationStates[id] = .contentsUnavailable
-                    // Drop from activeURLs so the next push excludes this
-                    // entry — better to surface "unavailable" than to bind
-                    // an empty path and let the shell return nothing.
+                    // Drop the unavailable URL so file browsing fails closed.
                     if let dropped = manager.activeURLs.removeValue(forKey: id) {
                         dropped.stopAccessingSecurityScopedResource()
                     }
                     manager.canonicalMountPaths.removeValue(forKey: id)
-                    manager.pushExternalMountSnapshot()
                 }
             }
         }
@@ -721,69 +687,6 @@ final class MountedFoldersManager {
         return nil
     }
 
-    /// Build the current external-mount snapshot, write it to the shared
-    /// storage read by the iSH execution coordinator, and ask the coordinator
-    /// to apply it immediately (no-op if the kernel isn't booted yet —
-    /// performMount will pick up the snapshot on the next session mount).
-    func pushExternalMountSnapshot() {
-        var droppedNames: [String] = []
-        let snapshot: [ISHExecutionCoordinator.ExternalMountSpec] = entries.compactMap { entry in
-            guard let url = activeURLs[entry.id] else {
-                let state = activationStates[entry.id].map { "\($0)" } ?? "nil"
-                droppedNames.append("\(entry.name)[\(String(entry.id.uuidString.prefix(8)))]:state=\(state)")
-                return nil
-            }
-            let linuxDir = "\(AIChatViewModel.minisMountsLinuxDir)/\(entry.name)"
-            // Effective writable = source is actually writable AND user allows it.
-            return ISHExecutionCoordinator.ExternalMountSpec(
-                linuxDir: linuxDir,
-                hostPath: url.path,
-                readOnly: !entry.effectiveWritable
-            )
-        }
-        if droppedNames.isEmpty {
-            mountLog.info("pushExternalMountSnapshot: \(snapshot.count) active / \(entries.count) total")
-        } else {
-            mountLog.warning("pushExternalMountSnapshot: \(snapshot.count) active / \(entries.count) total — dropped (no activeURL): \(droppedNames.joined(separator: ", "))")
-        }
-        // [MOUNT-DIAG] Snapshot contents at push time, so we can correlate
-        // with the coordinator-side apply log. Each line includes whether the
-        // host path is currently reachable from this process — distinguishes
-        // "scope held + readable" from "scope held but XPC unresponsive" from
-        // "scope dropped".
-        //
-        // **Runs off the main thread.** This whole loop exists only to emit a
-        // log line, but `stat()` on a mount backed by a network share or
-        // another app's FileProvider is a synchronous XPC round-trip to the
-        // owning provider — on a slow or unreachable volume it parks the
-        // calling thread. This type is `@MainActor`, and several callers reach
-        // here from a detached task's `MainActor.run` tail (activateAll's
-        // completion, ensureContentsMaterialized), so the block landed on the
-        // main thread and tripped the 10s scene-update watchdog → SIGKILL
-        // (0x8BADF00D). Nothing below depends on these values, so deferring
-        // them is free.
-        let diagSnapshot = snapshot
-        Task.detached(priority: .utility) {
-            for (i, s) in diagSnapshot.enumerated() {
-                var st = stat()
-                let rc = stat(s.hostPath, &st)
-                // Capture errno immediately — any intervening call can clobber it.
-                let err = errno
-                if rc == 0 {
-                    mountLog.info("MOUNT-DIAG push [\(i)] \(s.linuxDir) -> \(s.hostPath) ro=\(s.readOnly) hostStat=OK mode=0o\(String(st.st_mode & 0o777, radix: 8))")
-                } else {
-                    let errStr = String(cString: strerror(err))
-                    mountLog.warning("MOUNT-DIAG push [\(i)] \(s.linuxDir) -> \(s.hostPath) ro=\(s.readOnly) hostStat=FAILED errno=\(err) (\(errStr))")
-                }
-            }
-        }
-        // Synchronous write to the thread-safe shared storage — visible to
-        // performMount immediately, no actor hop required.
-        ISHExecutionCoordinator.setExternalMountSnapshot(snapshot)
-        // Also ask the coordinator to reconcile now (async, no-op if not booted).
-        Task { await ISHExecutionCoordinator.shared.applyExternalMountSnapshot() }
-    }
-
     /// Re-activate a single entry (used on add and manual reauth).
     @discardableResult
     func activate(entry: MountedFolderEntry) -> MountActivationState {
@@ -881,7 +784,7 @@ final class MountedFoldersManager {
     /// Returns the entry matching a fakefs symlink path (`/var/minis/mounts/<name>/...`).
     /// Useful for FileBrowserView to decide whether to use NSFileCoordinator.
     func entryForLinuxPath(_ linuxPath: String) -> MountedFolderEntry? {
-        let prefix = AIChatViewModel.minisMountsLinuxDir + "/"
+        let prefix = MinisStoragePaths.minisMountsLinuxDir + "/"
         guard linuxPath.hasPrefix(prefix) else { return nil }
         let rest = String(linuxPath.dropFirst(prefix.count))
         let name = rest.split(separator: "/", maxSplits: 1).first.map(String.init) ?? rest

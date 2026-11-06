@@ -52,7 +52,7 @@ enum QuickTask: String, AppEnum {
 /// Runs a predefined quick task — enables single-utterance Siri invocation.
 struct QuickTaskIntent: AppIntent {
     static var title: LocalizedStringResource = "Quick Task"
-    static var description = IntentDescription("Runs a predefined nanoMuse task like sleep analysis, weather check, or morning briefing.")
+    static var description = IntentDescription("Runs a predefined morde task like sleep analysis, weather check, or morning briefing.")
     static var openAppWhenRun = false
 
     @Parameter(title: "Task")
@@ -74,6 +74,9 @@ struct QuickTaskIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<SendPromptResult> & ProvidesDialog {
+        // nanoMuse: Reject local execution before intent side effects.
+        try MordeLocalExecutionPolicy.requireEnabled()
+
         BackgroundKeepAliveManager.shared.setup()
 
         // [T-shortcuts-eager-keepalive] Arm keep-alive BEFORE the ensureSession
@@ -181,7 +184,7 @@ struct QuickTaskIntent: AppIntent {
         if sendCompletionNotification {
             ShortcutNotification.post(
                 id: "shortcut-start-\(sid)",
-                title: AppLocalized("nanoMuse: \(taskName)"),
+                title: AppLocalized("morde: \(taskName)"),
                 body: AppLocalized("\(modelName) is working on it…"),
                 sessionId: sid
             )
@@ -203,7 +206,7 @@ struct QuickTaskIntent: AppIntent {
             if sendCompletionNotification {
                 ShortcutNotification.post(
                     id: "shortcut-done-\(sid)",
-                    title: AppLocalized("nanoMuse: \(taskName) Done"),
+                    title: AppLocalized("morde: \(taskName) Done"),
                     body: "\(modelName): \(String(responseText.prefix(200)))",
                     sessionId: sid
                 )
@@ -239,7 +242,7 @@ struct QuickTaskIntent: AppIntent {
             if capturedSendCompletionNotification {
                 ShortcutNotification.post(
                     id: "shortcut-done-\(capturedSid)",
-                    title: AppLocalized("nanoMuse: \(capturedTaskName) Done"),
+                    title: AppLocalized("morde: \(capturedTaskName) Done"),
                     body: "\(capturedModelName): \(summary)",
                     sessionId: capturedSid
                 )
@@ -264,7 +267,7 @@ struct QuickTaskIntent: AppIntent {
     // `task` goes on the Summary line since it is the one required choice; the
     // rest are optional refinements under "Show More".
     static var parameterSummary: some ParameterSummary {
-        Summary("Run \(\.$task) in nanoMuse") {
+        Summary("Run \(\.$task) in morde") {
             \.$files
             \.$model
             \.$waitForResult

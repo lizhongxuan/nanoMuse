@@ -39,7 +39,7 @@ extension ConfigRegistry {
     // When off, new sessions skip auto-injection of GLOBAL.md + recent
     // daily logs into the system prompt AND drop the memory_get /
     // memory_write tools from the registered tool list
-    // (see AIChatViewModel.makeAgentTools). So this one bool gates both
+    // (see the local Agent tool registry). So this one bool gates both
     // injection and tool access for sessions that inherit the default.
 
     @MainActor
@@ -56,7 +56,7 @@ extension ConfigRegistry {
     // MARK: Soul — SOUL.md (persistent personality / identity file)
     //
     // Each field reads/writes one piece of SOUL.md (path:
-    // <minisMemoryPersistentDir>/SOUL.md). The four fields below mirror
+    // <MinisStoragePaths.minisMemoryPersistentDir>/SOUL.md). The four fields below mirror
     // the SOUL Settings UI exactly; everything goes through SoulStore so
     // the on-disk file, the cached metadata, the chat bubble header, the
     // sidebar title, and the system-prompt builder all observe the same
@@ -305,9 +305,8 @@ extension ConfigRegistry {
     // MARK: Session — current chat's per-session settings
     //
     // These fields target whichever session is active when the call
-    // arrives. Active session is read from `AIChatViewModel.activeSessionId`,
-    // which the chat view keeps in sync as the user switches sessions.
-    // Reads return null when no session is active; writes throw.
+    // arrives. These legacy agent fields have no active local VM in Morde:
+    // reads return null/empty and writes throw.
     //
     // The CLI's `--session <id>` flag is intentionally NOT used to
     // redirect target — it only labels the audit row. We don't want
@@ -322,7 +321,7 @@ extension ConfigRegistry {
             valueSchema: .stringEnum(["off", "low", "medium", "high", "xhigh", "max", "ultra"]),
             risk: .normal, revertable: true,
             reader: {
-                guard let sid = AIChatViewModel.activeSessionId else { return .null }
+                guard let sid = activeLocalAgentSessionID else { return .null }
                 let level = ProviderConfigStore.shared.inferenceConfig(for: sid)?.thinkingLevel ?? .off
                 return .string(level.rawValue)
             },
@@ -331,7 +330,7 @@ extension ConfigRegistry {
                       let level = ThinkingLevel(rawValue: s) else {
                     throw ConfigError.invalidValue("Unknown thinking level. Valid: \(ThinkingLevel.allCases.map(\.rawValue).joined(separator: ", "))")
                 }
-                guard let sid = AIChatViewModel.activeSessionId else {
+                guard let sid = activeLocalAgentSessionID else {
                     throw ConfigError.invalidValue("No active session — open a chat first")
                 }
                 var cfg = ProviderConfigStore.shared.inferenceConfig(for: sid) ?? SessionInferenceConfig()
@@ -351,7 +350,7 @@ extension ConfigRegistry {
             valueSchema: .string(maxLength: 200),
             risk: .sensitive, revertable: true,
             reader: {
-                guard let sid = AIChatViewModel.activeSessionId,
+                guard let sid = activeLocalAgentSessionID,
                       let binding = ProviderConfigStore.shared.binding(for: sid) else {
                     return .string("")
                 }
@@ -364,7 +363,7 @@ extension ConfigRegistry {
             },
             writer: { v in
                 guard case .string(let s) = v else { throw ConfigError.typeMismatch(expected: "string") }
-                guard let sid = AIChatViewModel.activeSessionId else {
+                guard let sid = activeLocalAgentSessionID else {
                     throw ConfigError.invalidValue("No active session — open a chat first")
                 }
                 let store = ProviderConfigStore.shared
@@ -390,7 +389,7 @@ extension ConfigRegistry {
             valueSchema: .string(maxLength: 200),
             risk: .sensitive, revertable: true,
             reader: {
-                guard let sid = AIChatViewModel.activeSessionId,
+                guard let sid = activeLocalAgentSessionID,
                       let binding = ProviderConfigStore.shared.binding(for: sid),
                       let sub = binding.subModelSource else {
                     return .string("")
@@ -404,7 +403,7 @@ extension ConfigRegistry {
             },
             writer: { v in
                 guard case .string(let s) = v else { throw ConfigError.typeMismatch(expected: "string") }
-                guard let sid = AIChatViewModel.activeSessionId else {
+                guard let sid = activeLocalAgentSessionID else {
                     throw ConfigError.invalidValue("No active session — open a chat first")
                 }
                 let store = ProviderConfigStore.shared
@@ -420,6 +419,9 @@ extension ConfigRegistry {
             }
         ))
     }
+
+    // nanoMuse: Morde session navigation is app-owned, with no local Agent VM session context.
+    private static var activeLocalAgentSessionID: String? { nil }
 
     /// Parse `entry:<uuid>` / `group:<id>` strings into a SessionModelSource.
     /// Verifies the referenced entry / group actually exists, since a
@@ -1031,11 +1033,11 @@ extension ConfigRegistry {
         ))
         r.register(ReadOnlyField(
             path: "system.mountedSession",
-            displayName: "Mounted session",
-            description: "Chat session whose storage /var/minis currently points at. Each session has its own attachments/offloads/workspace — files from other sessions are not visible here. Empty when no session is mounted. Read-only.",
+            displayName: "Active session",
+            description: "Active local Agent session. Empty in Morde. Read-only.",
             valueSchema: .string(maxLength: 64),
             reader: {
-                .string(ISHExecutionCoordinator.mountedSessionIdSnapshot ?? "")
+                .string(activeLocalAgentSessionID ?? "")
             }
         ))
 

@@ -87,7 +87,10 @@ final class SessionLockStore: ObservableObject {
             object: defaults,
             queue: .main
         ) { [weak self] _ in
-            self?.objectWillChange.send()
+            DispatchQueue.main.async { [weak self] in
+                // Let SwiftUI finish the current view transaction before notifying observers.
+                self?.objectWillChange.send()
+            }
         }
     }
 

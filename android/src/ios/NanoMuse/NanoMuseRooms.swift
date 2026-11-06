@@ -11,6 +11,8 @@
 
 import SwiftUI
 import QuickLook
+import CryptoKit
+import UniformTypeIdentifiers
 
 // MARK: - Shared bits
 
@@ -32,7 +34,7 @@ struct NanoMuseEmptyState: View {
                 .multilineTextAlignment(.center)
             Text(message)
                 .font(.body)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(NanoMuseTones.secondaryText)
                 .multilineTextAlignment(.center)
             if let hint {
                 VStack(alignment: .leading, spacing: 6) {
@@ -110,6 +112,8 @@ struct NanoMuseIdeasRoom: View {
 
     @State private var sections: [NanoMuseIdeaSection] = []
     @State private var selected: NanoMuseIdea?
+    @ObservedObject private var personal = NanoMuseMordePersonalContentStore.shared
+    @ObservedObject private var authorization = MordeShellAuthorization.shared
 
     var body: some View {
         VStack(spacing: 0) {
@@ -132,6 +136,12 @@ struct NanoMuseIdeasRoom: View {
                             ForEach(section.ideas) { idea in
                                 Button { selected = idea } label: { row(idea) }
                                     .buttonStyle(.plain)
+                                    .accessibilityIdentifier("morde.idea.row.\(idea.id)")
+                                    .contextMenu {
+                                        if authorization.signedIn {
+                                            ideaMarkActions(idea)
+                                        }
+                                    }
                                 // Android's IdeasTab: a hairline under each row, from the text's left edge.
                                 NanoMuseTones.hairline.frame(height: 1).padding(.leading, 76).padding(.trailing, 20)
                             }
@@ -140,10 +150,20 @@ struct NanoMuseIdeasRoom: View {
                     }
                 }
             }
+            if let pending = personal.pending, pending.objectType == "idea_mark" {
+                Label(AppLocalized(personal.syncEnabled ? "An idea mark is waiting to sync." : "Sync is paused; the idea mark stays on this iPhone."), systemImage: "clock")
+                    .font(.footnote).foregroundStyle(.secondary).padding(.horizontal, 16).padding(.vertical, 6)
+                Button(AppLocalized("Retry idea sync")) { Task { await personal.retry(root: NanoMuseDirs.root) } }
+                    .font(.footnote).disabled(!personal.syncEnabled || personal.isSaving)
+            }
         }
         // The chat's canvas, as Android's IdeasTab and docs/design.md; the grey page is the Feed's alone.
         .background(ChatColors.background.ignoresSafeArea())
-        .onAppear { if sections.isEmpty { sections = NanoMuseIdeas.load() } }
+        .onAppear {
+            if sections.isEmpty { sections = NanoMuseIdeas.load() }
+            Task { await personal.refresh(root: NanoMuseDirs.root) }
+        }
+        .nmOnChange(of: authorization.personalDataScopeKey) { _ in Task { await personal.refresh(root: NanoMuseDirs.root) } }
         .sheet(item: $selected) { idea in
             NanoMuseIdeaSheet(idea: idea) { action in
                 selected = nil
@@ -173,11 +193,45 @@ struct NanoMuseIdeasRoom: View {
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
             }
+            if let mark = ideaMark(idea.id) {
+                Image(systemName: mark.state == "saved" ? "bookmark.fill" : "eye.slash")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 14)
         .contentShape(Rectangle())
+    }
+
+    private func ideaMark(_ id: String) -> NanoMuseMordeIdeaMarkBody? {
+        guard let item = personal.object("idea_mark", id),
+              let body = try? item.decodeBody(NanoMuseMordeIdeaMarkBody.self), body.isValid else { return nil }
+        return body
+    }
+
+    @ViewBuilder
+    private func ideaMarkActions(_ idea: NanoMuseIdea) -> some View {
+        let mark = ideaMark(idea.id)
+        let isSaved = mark?.state == "saved"
+        let isDismissed = mark?.state == "dismissed"
+        Button(action: { Task { await setIdeaMark(idea.id, state: "saved", remove: isSaved) } }) {
+            Label(AppLocalized(isSaved ? "Remove saved mark" : "Save idea"), systemImage: "bookmark")
+        }
+        Button(action: { Task { await setIdeaMark(idea.id, state: "dismissed", remove: isDismissed) } }) {
+            Label(AppLocalized(isDismissed ? "Restore idea" : "Dismiss idea"), systemImage: "eye.slash")
+        }
+    }
+
+    private func setIdeaMark(_ id: String, state: String, remove: Bool) async {
+        guard let current = personal.object("idea_mark", id) else {
+            if !remove { try? await personal.replace("idea_mark", id: id, revision: 0,
+                                                       body: NanoMuseMordeIdeaMarkBody(state: state), root: NanoMuseDirs.root) }
+            return
+        }
+        if remove { try? await personal.delete("idea_mark", id: id, revision: current.revision, root: NanoMuseDirs.root) }
+        else { try? await personal.replace("idea_mark", id: id, revision: current.revision,
+                                            body: NanoMuseMordeIdeaMarkBody(state: state), root: NanoMuseDirs.root) }
     }
 }
 
@@ -301,7 +355,7 @@ enum NanoMuseLibraryIndex {
     static func scan(titles: [String: String]) -> [NanoMuseLibraryEntry] {
         var out: [NanoMuseLibraryEntry] = []
         let fm = FileManager.default
-        let base = AIChatViewModel.minisPersistentBase
+        let base = MinisStoragePaths.minisPersistentBase
         if let sessions = try? fm.contentsOfDirectory(at: base, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]) {
             for dir in sessions {
                 let sid = dir.lastPathComponent
@@ -313,7 +367,7 @@ enum NanoMuseLibraryIndex {
                 if out.count >= maxEntries { break }
             }
         }
-        let shared = AIChatViewModel.minisSharedPersistentDir
+        let shared = MinisStoragePaths.minisSharedPersistentDir
         if out.count < maxEntries, fm.fileExists(atPath: shared.path) {
             walk(shared, root: shared, depth: 0, sessionId: nil, title: nil, into: &out)
         }
@@ -349,7 +403,7 @@ enum NanoMuseLibraryIndex {
 }
 
 struct NanoMuseLibraryRoom: View {
-    var chrome: NanoMuseRoomChrome
+    var chrome: NanoMuseRoomChrome?
     var sessionId: String?
 
     @State private var entries: [NanoMuseLibraryEntry] = []
@@ -357,6 +411,10 @@ struct NanoMuseLibraryRoom: View {
     @State private var loading = false
     @State private var preview: NanoMuseLibraryEntry?
     @State private var shareItem: NanoMuseShareTarget?
+    @State private var remotePreview: NanoMuseShareTarget?
+    @State private var libraryError: String?
+    @ObservedObject private var personal = NanoMuseMordePersonalContentStore.shared
+    @ObservedObject private var authorization = MordeShellAuthorization.shared
 
     private var shown: [NanoMuseLibraryEntry] {
         entries.filter { segment == 0 ? $0.kind == .artifact : $0.kind == .media }
@@ -365,27 +423,44 @@ struct NanoMuseLibraryRoom: View {
     var body: some View {
         VStack(spacing: 0) {
             // Android: the Library's ••• menu — shared folders, the chat's files, then the shared rows.
-            NanoMuseRoomHeader(chrome: chrome) {
-                HStack(spacing: 8) {
-                    NanoMuseRoundButton(symbol: "arrow.clockwise", label: AppLocalized("Refresh")) { refresh() }
-                    NanoMuseRoomMenu(chrome: chrome) {
-                        Button { chrome.open("sharedFolders") } label: { Label(AppLocalized("Shared folders"), systemImage: "folder.badge.person.crop") }
-                        if chrome.hasMainSession {
-                            Button { chrome.open("chatFiles") } label: { Label(AppLocalized("Browse Chat Files"), systemImage: "folder") }
+            if let chrome {
+                NanoMuseRoomHeader(chrome: chrome) {
+                    HStack(spacing: 8) {
+                        NanoMuseRoundButton(symbol: "arrow.clockwise", label: AppLocalized("Refresh")) {
+                            refresh()
+                            Task { await personal.refresh(root: NanoMuseDirs.root) }
+                        }
+                        NanoMuseRoomMenu(chrome: chrome) {
+                            Button { chrome.open("sharedFolders") } label: { Label(AppLocalized("Shared folders"), systemImage: "folder.badge.person.crop") }
+                            if chrome.hasMainSession {
+                                Button { chrome.open("chatFiles") } label: { Label(AppLocalized("Browse Chat Files"), systemImage: "folder") }
+                            }
                         }
                     }
                 }
             }
+            if let libraryError {
+                Label(libraryError, systemImage: "exclamationmark.triangle")
+                    .font(.footnote).foregroundStyle(.red).padding(.horizontal, 16)
+            }
             Picker(AppLocalized("Library"), selection: $segment) {
                 Text(AppLocalized("Artifacts")).tag(0)
                 Text(AppLocalized("Media")).tag(1)
+                if authorization.signedIn { Text(AppLocalized("Cloud")).tag(2) }
             }
             .pickerStyle(.segmented)
             .labelsHidden()
             .padding(.horizontal, 16)
             .padding(.bottom, 8)
 
-            if shown.isEmpty {
+            if segment != 2, authorization.signedIn {
+                Text(AppLocalized("On this iPhone")).font(.caption).foregroundStyle(.secondary).padding(.horizontal, 16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            if segment == 2 {
+                cloudLibraryContent
+            } else if shown.isEmpty {
                 if loading {
                     ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if segment == 0 {
@@ -413,6 +488,11 @@ struct NanoMuseLibraryRoom: View {
                                         Label(AppLocalized("Open conversation"), systemImage: "bubble.left")
                                     }
                                 }
+                                if authorization.signedIn {
+                                    Button { upload(entry) } label: {
+                                        Label(AppLocalized("Save attachment to Morde"), systemImage: "icloud.and.arrow.up")
+                                    }
+                                }
                             }
                     }
                 }
@@ -423,12 +503,66 @@ struct NanoMuseLibraryRoom: View {
         // Plain rows on the chat's canvas, as Android's LibraryTab and docs/design.md.
         .background(ChatColors.background.ignoresSafeArea())
         .onAppear { if entries.isEmpty { refresh() } }
+        .task { await personal.refresh(root: NanoMuseDirs.root) }
+        .nmOnChange(of: authorization.personalDataScopeKey) { _ in
+            if !authorization.signedIn { segment = 0 }
+            Task { await personal.refresh(root: NanoMuseDirs.root) }
+        }
         .sheet(item: $preview) { entry in
             NanoMuseQuickLook(url: entry.url)
                 .ignoresSafeArea()
         }
         .sheet(item: $shareItem) { target in
             NanoMuseShareSheet(items: [target.url])
+        }
+        .sheet(item: $remotePreview) { target in
+            NanoMuseQuickLook(url: target.url).ignoresSafeArea()
+        }
+    }
+
+    @ViewBuilder
+    private var cloudLibraryContent: some View {
+        let items = personal.values("library_item").compactMap { item -> NanoMuseMordeLibraryRecord? in
+            guard let body = try? item.decodeBody(NanoMuseMordeLibraryItemBody.self), body.isValid else { return nil }
+            return NanoMuseMordeLibraryRecord(id: item.object_id, revision: item.revision, body: body)
+        }.sorted { $0.body.name.localizedCaseInsensitiveCompare($1.body.name) == .orderedAscending }
+        if libraryError != nil || personal.error != nil {
+            VStack {
+                NanoMuseEmptyState(symbol: "exclamationmark.triangle", title: AppLocalized("Cloud library unavailable"),
+                                   message: libraryError ?? personal.error ?? "")
+                Button(AppLocalized("Retry")) { Task { await personal.retry(root: NanoMuseDirs.root); libraryError = nil } }
+            }
+        } else if personal.isLoading && items.isEmpty {
+            ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if items.isEmpty {
+            NanoMuseEmptyState(symbol: "doc.text", title: AppLocalized("No cloud files yet"),
+                               message: AppLocalized("Files saved to your Morde account will appear here."))
+        } else {
+            List {
+                if let pending = personal.pending, pending.objectType == "library_item" {
+                    Text(AppLocalized(personal.syncEnabled ? "A library change is waiting to sync." : "Sync is paused; the change stays on this iPhone."))
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+                ForEach(items) { item in
+                    Button { Task { await download(item.body) } } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: item.body.kind == "media" ? "photo" : "doc.text")
+                                .font(.title3).foregroundStyle(.secondary).frame(width: 28)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(item.body.name).font(.body).foregroundStyle(.primary).lineLimit(1)
+                                Text(!item.body.hasAttachment ? AppLocalized("Metadata only") : ByteCountFormatter.string(fromByteCount: item.body.size_bytes ?? 0, countStyle: .file))
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            if item.body.hasAttachment { Image(systemName: "arrow.down.circle").foregroundStyle(.secondary) }
+                        }
+                    }
+                    .disabled(!item.body.hasAttachment)
+                    .accessibilityIdentifier("morde.library.cloud.item.\(item.id)")
+                    .listRowBackground(ChatColors.background)
+                }
+            }
+            .listStyle(.plain).scrollContentBackground(.hidden)
         }
     }
 
@@ -467,6 +601,78 @@ struct NanoMuseLibraryRoom: View {
                 loading = false
             }
         }
+    }
+
+    private func download(_ body: NanoMuseMordeLibraryItemBody) async {
+        guard let scope = authorization.personalDataScopeKey, let attachmentID = body.attachment_id else { return }
+        libraryError = nil
+        do {
+            let result = try await MordeShellAuthorization.shared.downloadPersonalAttachment(attachmentID: attachmentID)
+            guard authorization.personalDataScopeKey == scope else {
+                try? FileManager.default.removeItem(at: result.fileURL)
+                return
+            }
+            let directory = NanoMuseDirs.root.appendingPathComponent("morde-library-downloads", isDirectory: true)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let destination = directory.appendingPathComponent("\(UUID().uuidString.prefix(8))-\(body.name)")
+            try FileManager.default.moveItem(at: result.fileURL, to: destination)
+            remotePreview = NanoMuseShareTarget(url: destination)
+        } catch { libraryError = error.localizedDescription }
+    }
+
+    private func upload(_ entry: NanoMuseLibraryEntry) {
+        Task {
+            libraryError = nil
+            guard authorization.signedIn, personal.syncEnabled, let scope = authorization.personalDataScopeKey else {
+                libraryError = AppLocalized("Sign in and enable personal sync before uploading an attachment.")
+                return
+            }
+            do {
+                let sourceURL = entry.url
+                let digest = try await Task.detached(priority: .utility) {
+                    try MordePersonalAttachmentHash.measure(fileURL: sourceURL)
+                }.value
+                let rawID = SHA256.hash(data: Data((scope + "\u{0}" + entry.url.path).utf8)).map { String(format: "%02x", $0) }.joined()
+                let objectID = "li_" + String(rawID.prefix(40))
+                var baseRevision: Int64
+                let record = personal.object("library_item", objectID)
+                if let record {
+                    guard let body = try? record.decodeBody(NanoMuseMordeLibraryItemBody.self), body.isValid,
+                          !body.hasAttachment else { throw URLError(.cannotWriteToFile) }
+                    baseRevision = record.revision
+                } else {
+                    let kind = entry.kind == .media ? "media" : "artifact"
+                    let body = NanoMuseMordeLibraryItemBody(name: entry.name, kind: kind,
+                        mime: mimeType(entry), size_bytes: digest.sizeBytes, attachment_id: nil)
+                    guard let resultRevision = try await personal.replace("library_item", id: objectID, revision: 0,
+                        body: body, root: NanoMuseDirs.root) else {
+                        libraryError = AppLocalized("File details are queued on this iPhone. Retry the attachment upload after sync completes.")
+                        return
+                    }
+                    baseRevision = resultRevision
+                }
+                guard authorization.personalDataScopeKey == scope else { return }
+                let quota = try await MordeShellAuthorization.shared.personalDataQuota()
+                guard authorization.personalDataScopeKey == scope else { return }
+                let staged = try await Task.detached(priority: .utility) {
+                    try NanoMuseMordePersonalAttachmentStaging.stage(sourceURL: sourceURL,
+                        expectedSizeBytes: digest.sizeBytes, expectedSHA256: digest.sha256,
+                        maxBytes: quota.max_attachment_bytes, root: NanoMuseDirs.root)
+                }.value
+                defer { NanoMuseMordePersonalAttachmentStaging.discard(staged) }
+                guard authorization.personalDataScopeKey == scope else { return }
+                _ = try await MordeShellAuthorization.shared.uploadPersonalAttachment(objectID: objectID,
+                    baseRevision: baseRevision, fileURL: staged.fileURL, sizeBytes: staged.sizeBytes,
+                    sha256: staged.sha256, mediaType: mimeType(entry),
+                    idempotencyKey: "library-upload-\(objectID)")
+                guard authorization.personalDataScopeKey == scope else { return }
+                await personal.refresh(root: NanoMuseDirs.root)
+            } catch { libraryError = error.localizedDescription }
+        }
+    }
+
+    private func mimeType(_ entry: NanoMuseLibraryEntry) -> String {
+        UTType(filenameExtension: entry.url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
     }
 }
 

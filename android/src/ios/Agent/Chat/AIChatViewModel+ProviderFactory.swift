@@ -55,6 +55,8 @@ extension AIChatViewModel {
     /// Build an AnthropicAgentProvider for cache keep-alive warmup, reusing the
     /// same entry that was used in the last agent loop.
     func makeAnthropicProviderForWarmup() -> AnthropicAgentProvider? {
+        // nanoMuse: Do not construct a local provider for background warmup.
+        guard MordeLocalExecutionPolicy.isEnabled else { return nil }
         guard let entry = keepAliveEntry else { return nil }
         let store = ProviderConfigStore.shared
         guard let instance = store.instance(for: entry.providerInstanceId),
@@ -66,6 +68,8 @@ extension AIChatViewModel {
 
     /// Construct a lightweight LLMProvider from a ModelEntry (for sub-tasks like title generation).
     static func makeLLMProvider(for entry: ModelEntry) async throws -> any LLMProvider {
+        // nanoMuse: Block all local subtask model construction at the shared factory.
+        guard MordeLocalExecutionPolicy.isEnabled else { throw MordeLocalExecutionDisabledError() }
         let store = ProviderConfigStore.shared
         guard let instance = store.instance(for: entry.providerInstanceId) else {
             throw LLMProviderError.noCredentials
@@ -166,7 +170,7 @@ extension AIChatViewModel {
             let orProvider = OpenAIProvider(apiKey: key, model: entry.model, customBaseURL: customBase ?? "https://openrouter.ai/api", appendV1Suffix: customBase == nil)
             orProvider.extraHeaders = [
                 "HTTP-Referer": "https://github.com/OpenMinis/OpenMinis",
-                "X-Title": "nanoMuse App",
+                "X-Title": "morde",
             ]
             orProvider.useOpenRouterCompat = true
             return LLMProviderFactory.applyCustomUserAgent(orProvider, instance: instance)

@@ -51,19 +51,16 @@
 #import "NLPOffload.h"
 #import "AlarmOffload.h"
 #import "MediaOffload.h"
-#import "SpeakOffload.h"
+// nanoMuse: Morde voice output uses VoiceOutputPlayer, not the iSH shell command.
 #import "SpeechOffload.h"
 #import "DeviceOffload.h"
 #import "HomeKitOffload.h"
 #import "NotificationOffload.h"
-#import "PlayerOffload.h"
-#import "ModelUseOffload.h"
+// nanoMuse: Morde model turns use the Cloud relay, not a local iSH runner.
 #import "RemindersOffload.h"
 #import "BluetoothOffload.h"
 #import "NFCOffload.h"
-#import "SessionsOffload.h"
 #import "ConfigOffload.h"
-#import "BrowserUseOffload.h"
 #import "DebugOffload.h"
 
 NSNotificationName const ISHProcessExitedNotification = @"ISHProcessExited";
@@ -666,18 +663,16 @@ static void handle_process_exit(struct task *task, int code) {
     nlp_offload_register();
     alarm_offload_register();
     media_offload_register();
-    speak_offload_register();
+    // nanoMuse: Morde voice output uses VoiceOutputPlayer, not the iSH shell command.
     speech_offload_register();
     device_offload_register();
     homekit_offload_register();
     notification_offload_register();
-    player_offload_register();
-    model_use_offload_register();
+    // nanoMuse: model turns and browser control stay on app paths, not iSH commands.
     reminders_offload_register();
     bluetooth_offload_register();
     nfc_offload_register();
-    sessions_offload_register();
-    browser_use_offload_register();
+    // nanoMuse: Minis does not expose the legacy iSH session CLI.
     config_offload_register();
     // Registered in every build: the `minis-debug logs` subcommand reads the
     // app's own runtime log in-process (OSLogStore + LoggingManager) and must

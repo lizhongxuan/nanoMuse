@@ -1,8 +1,40 @@
 // The rooms' pure helpers: what the agent's final answer parses to, and the first
 // title a goal gets before the agent names it.
 import assert from 'node:assert/strict'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { test } from 'node:test'
+import NanomuseRooms from '../lib/rooms.js'
 import { goalTitle, parseArray } from '../lib/rooms.js'
+
+function roomsContext(nanomuseCloud) {
+  return {
+    reflect: { provide() {} },
+    logger: { info() {}, warn() {}, debug() {}, error() {} },
+    nanomuseCloud,
+    get() { return undefined },
+    effect() {},
+    on() { return () => undefined },
+    inject() {},
+  }
+}
+
+async function withRoomsHome(run) {
+  const home = await mkdtemp(join(tmpdir(), 'nm-rooms-morde-'))
+  const previous = process.env.DSH_HOME
+  process.env.DSH_HOME = home
+  try { await run(home) }
+  finally {
+    if (previous === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = previous
+    await rm(home, { recursive: true, force: true })
+  }
+}
+
+function mordeSnapshot(items = []) {
+  return { watermark: 1, items, next_cursor: null }
+}
 
 test('parseArray takes the last fenced json block', () => {
   const text = 'Here is a draft:\n```json\n[{"title": "draft"}]\n```\nFinal:\n```json\n[{"title": "a"}, {"title": "b"}]\n```\n'
@@ -23,6 +55,98 @@ test('goalTitle keeps the first clause', () => {
   assert.equal(goalTitle('Hi, call my parents every Sunday'), 'Hi, call my parents every Sunday'.slice(0, 40))
   assert.equal(goalTitle('x'.repeat(80)).length, 40)
 })
+
+test('rooms keep each Morde account in its own local file', async () => withRoomsHome(async () => {
+  const cloud = { mordePersonalScope: () => 'morde-account-a' }
+  const rooms = new NanomuseRooms(roomsContext(cloud))
+  rooms.mordeScope = 'morde-account-a'
+  rooms.store.memory = [{ id: 'mem-a', at: 1, text: 'Account A', source: 'person' }]
+  await rooms.save()
+  rooms.mordeScope = 'morde-account-b'
+  rooms.store = await rooms.read(rooms.pathForScope('morde-account-b'))
+  assert.deepEqual(rooms.store.memory, [])
+  rooms.store.memory = [{ id: 'mem-b', at: 2, text: 'Account B', source: 'person' }]
+  await rooms.save()
+  assert.match(await readFile(rooms.pathForScope('morde-account-a'), 'utf8'), /Account A/)
+  assert.doesNotMatch(await readFile(rooms.pathForScope('morde-account-a'), 'utf8'), /Account B/)
+  assert.match(await readFile(rooms.pathForScope('morde-account-b'), 'utf8'), /Account B/)
+}))
+
+test('first Morde sync preserves local-only history instead of importing it automatically', async () => withRoomsHome(async () => {
+  const writes = []
+  const cloud = {
+    mordePersonalScope: () => 'morde-account-a',
+    async mordePersonalSnapshot() { return mordeSnapshot() },
+    async mordeGoals() { return { items: [], next_cursor: null } },
+    async mordeReplacePersonalObject(...args) { writes.push(['memory', ...args]); return { result_revision: 1 } },
+    async mordeCreateGoal(...args) { writes.push(['goal', ...args]); return { result_revision: 1 } },
+  }
+  const rooms = new NanomuseRooms(roomsContext(cloud))
+  rooms.mordeScope = 'morde-account-a'
+  rooms.mordeGeneration = 1
+  rooms.store.memory = [{ id: 'mem-local', at: 1, text: 'Keep this local', source: 'import' }]
+  rooms.store.goals = [{ id: 'goal-local', title: 'Local draft', description: 'Keep local', category: 'other', status: 'tracking', sessionId: '', createdAt: 1, updatedAt: 1, summary: '', activity: [], steps: [], progress: -1, attention: false }]
+  await rooms.syncMordePersonalFor('morde-account-a', 1)
+  assert.deepEqual(writes, [])
+  assert.equal(rooms.store.memory[0].text, 'Keep this local')
+  assert.equal(rooms.store.goals[0].title, 'Local draft')
+}))
+
+test('explicitly changed Morde memory and goals sync with revisions', async () => withRoomsHome(async () => {
+  const writes = []
+  const cloud = {
+    mordePersonalScope: () => 'morde-account-a',
+    async mordePersonalSnapshot() { return mordeSnapshot() },
+    async mordeGoals() { return { items: [], next_cursor: null } },
+    async mordeReplacePersonalObject(...args) { writes.push(['memory', ...args]); return { result_revision: 2 } },
+    async mordeCreateGoal(...args) { writes.push(['goal', ...args]); return { result_revision: 3 } },
+  }
+  const rooms = new NanomuseRooms(roomsContext(cloud))
+  rooms.mordeScope = 'morde-account-a'
+  rooms.mordeGeneration = 1
+  rooms.store.memory = [{ id: 'mem-new', at: 1, text: 'Selected memory', source: 'person' }]
+  rooms.store.mordeSync.pendingMemory = true
+  rooms.store.goals = [{ id: 'goal-new', title: 'Selected goal', description: 'Create it', category: 'other', status: 'tracking', sessionId: '', createdAt: 1, updatedAt: 1, summary: '', activity: [], steps: [], progress: -1, attention: false }]
+  rooms.store.mordeSync.pendingGoals['goal-new'] = true
+  await rooms.syncMordePersonalFor('morde-account-a', 1)
+  assert.deepEqual(writes.map(([kind]) => kind).sort(), ['goal', 'memory'])
+  assert.equal(rooms.store.mordeSync.memoryRevisions.global, 2)
+  assert.equal(rooms.store.mordeSync.goalRevisions['goal-new'], 3)
+  assert.equal(rooms.store.mordeSync.pendingMemory, false)
+  assert.equal(rooms.store.mordeSync.pendingGoals['goal-new'], undefined)
+}))
+
+test('Morde revision conflicts keep both local drafts and the saved remote baseline', async () => withRoomsHome(async () => {
+  const writes = []
+  const baseline = { title: 'Base', description: 'Base', status: 'active', steps: [], related_material_ids: [] }
+  const remote = { ...baseline, title: 'Server edit' }
+  const cloud = {
+    mordePersonalScope: () => 'morde-account-a',
+    async mordePersonalSnapshot() { return mordeSnapshot([{ object_type: 'memory', object_id: 'global', revision: 2, body: { content: '- Server memory' } }]) },
+    async mordeGoals() { return { items: [{ object_type: 'goal', object_id: 'goal-shared', revision: 2, body: remote }], next_cursor: null } },
+    async mordeReplacePersonalObject(...args) { writes.push(['memory', ...args]); return { result_revision: 3 } },
+    async mordeUpdateGoal(...args) { writes.push(['goal', ...args]); return { result_revision: 3 } },
+  }
+  const rooms = new NanomuseRooms(roomsContext(cloud))
+  rooms.mordeScope = 'morde-account-a'
+  rooms.mordeGeneration = 1
+  rooms.store.memory = [{ id: 'mem-local', at: 1, text: 'Local memory', source: 'person' }]
+  rooms.store.mordeSync.memoryBodies.global = '- Base memory'
+  rooms.store.mordeSync.memoryRevisions.global = 1
+  rooms.store.mordeSync.pendingMemory = true
+  rooms.store.goals = [{ id: 'goal-shared', title: 'Local edit', description: 'Base', category: 'other', status: 'tracking', sessionId: '', createdAt: 1, updatedAt: 1, summary: '', activity: [], steps: [], progress: -1, attention: false }]
+  rooms.store.mordeSync.goalBodies['goal-shared'] = baseline
+  rooms.store.mordeSync.goalRevisions['goal-shared'] = 1
+  rooms.store.mordeSync.pendingGoals['goal-shared'] = true
+  await rooms.syncMordePersonalFor('morde-account-a', 1)
+  assert.deepEqual(writes, [])
+  assert.equal(rooms.store.memory[0].text, 'Local memory')
+  assert.equal(rooms.store.goals[0].title, 'Local edit')
+  assert.equal(rooms.store.mordeSync.memoryBodies.global, '- Base memory')
+  assert.equal(rooms.store.mordeSync.goalBodies['goal-shared'].title, 'Base')
+  assert.equal(rooms.store.mordeSync.pendingMemory, true)
+  assert.equal(rooms.store.mordeSync.pendingGoals['goal-shared'], true)
+}))
 
 test('zip writes an archive Python can read back', async () => {
   const { zip, crc32 } = await import('../lib/rooms.js')

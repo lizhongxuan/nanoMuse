@@ -38,7 +38,7 @@ struct NanoMuseModelsView: View {
             // automatic order; the sign-in stays. Not a delete: the Cloud instance is the account.
             if NanoMuseCloud.isSignedIn {
                 NanoMuseCard {
-                    NanoMuseToggleRow(title: AppLocalized("Use nanoMuse Cloud models"), isOn: Binding(
+                    NanoMuseToggleRow(title: AppLocalized("Use morde Cloud models"), isOn: Binding(
                         get: { cloudOn },
                         set: { on in
                             // Off is refused while the chat model is the account's and no model
@@ -51,7 +51,7 @@ struct NanoMuseModelsView: View {
                         }
                     ))
                     if cloudRefused {
-                        Text(AppLocalized("Add a provider of your own first; with nanoMuse Cloud off, nothing else could answer."))
+                        Text(AppLocalized("Add a provider of your own first; with morde Cloud off, nothing else could answer."))
                             .font(.footnote)
                             .foregroundStyle(.red)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -60,8 +60,8 @@ struct NanoMuseModelsView: View {
                     }
                 }
                 NanoMuseCaption(text: cloudOn
-                    ? "nanoMuse Cloud"
-                    : AppLocalized("Off: nothing runs on nanoMuse Cloud unless you choose it yourself. You stay signed in for sync and your devices."))
+                    ? "morde Cloud"
+                    : AppLocalized("Off: nothing runs on morde Cloud unless you choose it yourself. You stay signed in for sync and your devices."))
             }
             NanoMuseCard {
                 NanoMuseActionRow(title: AppLocalized("Add a provider"), titleColor: NanoMuseTones.action, chevron: false) { adding = true }
@@ -268,7 +268,7 @@ struct NanoMuseSlotPickerView: View {
 
     private var emptyLine: String {
         switch slot {
-        case .chat, .hands: return AppLocalized("Sign in to nanoMuse Cloud or add a provider")
+        case .chat, .hands: return AppLocalized("Sign in to morde Cloud or add a provider")
         case .image, .video: return AppLocalized("Add a provider")
         }
     }

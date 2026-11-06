@@ -33,9 +33,13 @@ test("the installer includes only the Morde desktop runtime", () => {
     "  - package.json",
   ]);
   const extra = block("extraResources").filter((line) => line.trim() && !line.trim().startsWith("#"));
-  assert.ok(extra.includes('    filter: ["morde-sync", "morde-sync.exe", "morde-sync.sha256"]'));
+  assert.ok(extra.includes('    filter: ["morde-sync", "morde-sync.exe", "morde-sync.sha256", "morde-syncthing", "morde-syncthing.exe", "morde-syncthing.sha256"]'));
   assert.ok(extra.includes("  - from: resources/THIRD_PARTY_NOTICES.morde-sync.md"));
   assert.ok(extra.includes("    to: legal/THIRD_PARTY_NOTICES.morde-sync.md"));
+  assert.ok(extra.includes("  - from: resources/LICENSE.syncthing.txt"));
+  assert.ok(extra.includes("    to: legal/LICENSE.syncthing.txt"));
+  assert.ok(extra.includes("  - from: resources/THIRD_PARTY_NOTICES.syncthing.md"));
+  assert.ok(extra.includes("    to: legal/THIRD_PARTY_NOTICES.syncthing.md"));
   assert.ok(!extra.some((line) => /dsh\/|runtime\/|nanomuse-desktop/.test(line)));
   const metadata = JSON.parse(readFileSync(new URL("package.json", here), "utf8"));
   assert.equal(metadata.description, "Morde desktop client");
@@ -54,11 +58,11 @@ test("the Linux x64 package uses the Portal download manifest name", () => {
 
 test("the whitelisted Morde resources exist in the source tree", () => {
   const resources = fileURLToPath(new URL("resources/", here));
-  for (const name of ["morde.html", "morde.css", "morde.js", "morde-icon.png", "MORDE_NOTICE.txt", "THIRD_PARTY_NOTICES.morde-sync.md"]) {
+  for (const name of ["morde.html", "morde.css", "morde.js", "morde-icon.png", "MORDE_NOTICE.txt", "THIRD_PARTY_NOTICES.morde-sync.md", "LICENSE.syncthing.txt", "THIRD_PARTY_NOTICES.syncthing.md"]) {
     assert.ok(existsSync(join(resources, name)), name);
   }
   const syncNotices = readFileSync(join(resources, "THIRD_PARTY_NOTICES.morde-sync.md"), "utf8");
   assert.match(syncNotices, /fsnotify v1\.9\.0/);
   assert.match(syncNotices, /golang\.org\/x\/sys/);
-  assert.match(syncNotices, /do not assign a license to the `morde-sync` source/);
+  assert.match(syncNotices, /source code is licensed under GNU GPL version 3 or later/);
 });

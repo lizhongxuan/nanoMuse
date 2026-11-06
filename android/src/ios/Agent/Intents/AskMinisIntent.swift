@@ -12,14 +12,14 @@ private let logger = AppLogger(category: "AskMinisIntent")
 /// existing `.openSessionFromIntent` navigation path — no separate agent logic.
 /// New session when `session` is nil; follow-up when a `SessionEntity` is given.
 struct AskMinisIntent: AppIntent {
-    static var title: LocalizedStringResource = "Ask nanoMuse"
-    static var description = IntentDescription("Opens nanoMuse, sends your prompt, and shows the conversation. Starts a new session, or continues an existing one when you pick a session.")
+    static var title: LocalizedStringResource = "Ask morde"
+    static var description = IntentDescription("Opens morde, sends your prompt, and shows the conversation. Starts a new session, or continues an existing one when you pick a session.")
 
     // Open the app and land in the conversation (the Siri experience). The send
     // itself still goes through the normal in-app pipeline.
     static var openAppWhenRun = true
 
-    @Parameter(title: "Prompt", requestValueDialog: "What would you like to ask nanoMuse?")
+    @Parameter(title: "Prompt", requestValueDialog: "What would you like to ask morde?")
     var prompt: String
 
     @Parameter(title: "Session", description: "Existing session to continue. Leave empty to start a new session.")
@@ -27,6 +27,9 @@ struct AskMinisIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
+        // nanoMuse: Reject local execution before intent side effects.
+        try MordeLocalExecutionPolicy.requireEnabled()
+
         // Same eager keep-alive discipline as SendPromptIntent: arm before any
         // await so an intent-woken process isn't suspended before the send path
         // flips isActive. No-op unless enhancedBackgroundEffective is on.
@@ -88,6 +91,6 @@ struct AskMinisIntent: AppIntent {
             )
         }
 
-        return .result(dialog: "On it — opening nanoMuse.")
+        return .result(dialog: "On it — opening morde.")
     }
 }

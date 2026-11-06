@@ -1,22 +1,20 @@
 // SessionFileChangeTracker.swift
 //
-// Receives file change events from the iSH fakefs bind-mount tracker
-// (`fakefs_record_change` in deps/ish/fs/fake.c) via ISHKernel, dedupes
-// them per (sessionId, relPath), and exposes drain APIs for SyncCore to
-// translate them into SessionFile dirty rows just before push.
+// Buffers file changes that already have an explicit session owner and
+// exposes drain APIs for SyncCore to translate into SessionFile dirty rows.
+// nanoMuse: Legacy iSH fakefs events are no longer installed or assigned an
+// owner from ambient mount state; only explicitly attributed batches qualify.
 //
 // Design:
-//   - Producer: ISHKernel handler queue → `recordBatch(_:)`.
+//   - Producer: an explicitly attributed caller → `recordBatch(_:)`.
 //   - Storage: in-memory dict, last-write-wins per relPath.
 //   - Consumer: SyncCore.sendNow() calls `drainAll()` before scanning
 //     sync_dirty_records, so any pending file changes turn into
 //     SessionFile dirty rows for this push cycle.
 //
-// Concurrency: actor isolates producer/consumer. Producers `await` to
-// record (cheap; producer lives on a serial queue and accepts arbitrary
-// latency since the C-side ring buffer absorbs bursts). The consumer
-// drains and clears atomically — events recorded between drain and
-// markDirty stay in the next snapshot, never lost.
+// Concurrency: actor isolates producer/consumer. The consumer drains and
+// clears atomically — events recorded between drain and markDirty stay in
+// the next snapshot, never lost.
 
 import Foundation
 import OSLog
@@ -41,20 +39,16 @@ actor SessionFileChangeTracker {
 
     /// Total events received (diagnostic).
     private(set) var totalRecorded: UInt64 = 0
-    /// Total events ignored (path didn't parse to sessionId+rel).
+    /// Total events ignored (missing owner sessionId or invalid relative path).
     private(set) var totalIgnored: UInt64 = 0
 
     private init() {}
 
     // MARK: - Producer
 
-    /// Called by the ISHKernel handler block on its serial queue. Each
-    /// event is a (sessionId, linuxPath, op, ts_ns) tuple — the sessionId
-    /// is captured *synchronously* on the producer side (the ISHKernel
-    /// handler block) at event-receive time, NOT here, because by the
-    /// time this actor method runs the user could have switched sessions
-    /// and the mount snapshot may have moved. See `installSessionFileChangeTracker`
-    /// for where the sid is captured.
+    /// Each event must carry its owner sessionId explicitly. This method
+    /// never consults mounted or active-session state, so an unowned legacy
+    /// iSH event must be discarded by its producer instead of guessed here.
     func recordBatch(
         _ events: [(sid: String, rawPath: String, op: Int, tsNs: Int64)],
         minisBaseURL: URL
@@ -65,6 +59,12 @@ actor SessionFileChangeTracker {
         var firstIgnoredPath: String? = nil
         for (sid, rawPath, opCode, _) in events {
             totalRecorded &+= 1
+            guard !sid.isEmpty else {
+                totalIgnored &+= 1
+                ignored += 1
+                if firstIgnoredPath == nil { firstIgnoredPath = rawPath }
+                continue
+            }
             guard let rel = Self.resolveSessionRelative(
                 rawPath: rawPath, sessionId: sid, minisBaseURL: minisBaseURL
             ) else {
@@ -87,9 +87,8 @@ actor SessionFileChangeTracker {
             let sample = "\(firstSid?.prefix(8) ?? "?"):\(firstRel ?? "?")"
             logger.info("[SessionFileTracker] batch recv: events=\(events.count) accepted=\(accepted) ignored=\(ignored) upsert=\(upserts) delete=\(deletes) sample=\(sample) pending_sessions=\(self.pending.count)")
         } else if ignored > 0 {
-            // Bumped to info + sample so we can diagnose why otherwise
-            // valid-looking shell writes never reach the SessionFile pipeline.
-            logger.info("[SessionFileTracker] batch recv: events=\(events.count) all ignored (paths outside session subdirs) sample=\(firstIgnoredPath ?? "?")")
+            // Bumped to info + sample so invalid attributed paths remain diagnosable.
+            logger.info("[SessionFileTracker] batch recv: events=\(events.count) all ignored (missing owner or path outside session subdirs) sample=\(firstIgnoredPath ?? "?")")
         }
     }
 
@@ -205,8 +204,8 @@ actor SessionFileChangeTracker {
 
     // MARK: - Path parsing
 
-    /// Resolve a path emitted by the iSH realfs hook into a SessionFile
-    /// relative path ("<subdir>/<rel>"), or return nil to ignore.
+    /// Resolve a path into a SessionFile relative path
+    /// ("<subdir>/<rel>"), or return nil to ignore.
     ///
     /// realfs may surface either of two path shapes for the same logical
     /// file:
@@ -217,10 +216,8 @@ actor SessionFileChangeTracker {
     ///     dereferenced the symlink — common for open() of a regular file
     ///     under a bind mount)
     ///
-    /// The mapping decision lives entirely on the Swift side so iSH
-    /// stays unaware of the "session" concept. The expected sessionId
-    /// is passed in from the producer (captured at event-receive time
-    /// from ISHExecutionCoordinator's mount snapshot).
+    /// The caller must provide the explicit owner sessionId. No active or
+    /// mounted session fallback is performed here.
     nonisolated static func resolveSessionRelative(
         rawPath: String, sessionId: String, minisBaseURL: URL
     ) -> String? {
@@ -268,155 +265,24 @@ actor SessionFileChangeTracker {
     }
 }
 
-// MARK: - ISHKernel installation
-
-/// Install the iSH fakefs change handler that pumps events into the
-/// tracker actor. Call once at app launch after ISHKernel has booted.
+/// Compatibility entry points for lifecycle callers. Skill changes are
+/// detected by SyncDirtyScanner, so the retired fakefs notifier has no
+/// pending work to drain.
 ///
-/// iSH stays agnostic about Minis sessions — this Swift bridge knows the
-/// per-session host directory layout (`<minisBaseURL>/<sid>/<subdir>/...`)
-/// and the bind-mount guest layout (`/var/minis/<subdir>/...`), and resolves
-/// either shape to a SessionFile recordId on the consumer (actor) side.
-func installSessionFileChangeTracker(kernel: ISHKernel) {
-    let installLogger = AppLogger(category: "SessionFileTracker")
-    installLogger.info("[SessionFileTracker] installing fakefs change handler — iSH realfs writes/unlinks/renames under /var/minis/{workspace,attachments,browser,offloads} (or the equivalent host APFS path) will be queued for iCloud SessionFile sync")
-    // Captured at install time; minisBaseURL doesn't change for the
-    // lifetime of the app process.
-    let minisBaseURL = ChatStore.shared.minisBaseURL
-    kernel.installFakefsChangeHandler { events in
-        // Block runs on ISHKernel's private serial queue. Each event carries
-        // the fs_context u64 that was stamped on the task group that issued
-        // the write/delete; MinisFsRouter maps that back to the sid that
-        // owns the per-session bucket. Events from skills/shared/memory
-        // (no per-session routing → fs_context = 0) fall back to the most
-        // recently active session — those buckets are global so the SessionFile
-        // ownership is approximate by design.
-        guard !events.isEmpty else { return }
-        let fallbackSid = ISHExecutionCoordinator.mountedSessionIdSnapshot
-        var tuples: [(sid: String, rawPath: String, op: Int, tsNs: Int64)] = []
-        tuples.reserveCapacity(events.count)
-        for event in events {
-            let resolvedSid: String?
-            if event.fsContext != 0 {
-                resolvedSid = MinisFsRouter.shared.sid(for: event.fsContext) ?? fallbackSid
-            } else {
-                resolvedSid = fallbackSid
-            }
-            guard let sid = resolvedSid else { continue }
-            tuples.append((sid, event.linuxPath, Int(event.op), event.timestampNs))
-        }
-        if !tuples.isEmpty {
-            Task.detached(priority: .utility) {
-                await SessionFileChangeTracker.shared.recordBatch(tuples, minisBaseURL: minisBaseURL)
-            }
-        }
-
-        // Skills side-channel: if any event in this batch touched a
-        // path under `/var/minis/skills/` (or the equivalent host APFS
-        // path), kick the debounced skill reload. SkillStore owns the
-        // truth — we just nudge it to re-scan disk + markDirty any
-        // newly-discovered / modified / deleted skills it spots.
-        // Done synchronously here (cheap path check) so we don't lose
-        // the signal if the consumer queue is backed up.
-        if FakefsSkillPathCheck.batchTouchesSkills(events: events, minisBaseURL: minisBaseURL) {
-            SkillFilesystemNotifier.shared.notifyChanged()
-        }
-    }
-}
-
-/// Helper sitting outside the actor so it can be called from the
-/// non-isolated installFakefsChangeHandler block.
-fileprivate enum FakefsSkillPathCheck {
-    static func batchTouchesSkills(events: [ISHFakefsChangeEvent], minisBaseURL: URL) -> Bool {
-        let guestPrefix = "/var/minis/skills"
-        // host APFS path looks like ".../MinisChat/minis/skills/..."
-        // — minisBaseURL = "<lib>/MinisChat/minis", so the host prefix
-        //   to check is "<minisBaseURL>/skills".
-        let hostPrefix = minisBaseURL.standardizedFileURL.path + "/skills"
-        for evt in events {
-            let p = evt.linuxPath
-            if p.hasPrefix(guestPrefix) { return true }
-            if p.hasPrefix(hostPrefix) { return true }
-            // /private prefix variant on iOS.
-            if hostPrefix.hasPrefix("/var/")
-                && p.hasPrefix("/private" + hostPrefix) { return true }
-        }
-        return false
-    }
-}
-
-/// Marks "skills directory changed; rescan owed" and drains the flag
-/// at known-idle moments instead of on a fixed debounce timer. Keeps
-/// the rescan + markDirty work off the critical path while an AI turn
-/// is processing, since that's when iSH bursts hit the hardest.
-///
-/// Drain triggers:
-///   • AI turn finishes (AIChatViewModel observes isProcessing
-///     transition and calls drainIfDirty)
-///   • App scene goes to background / inactive
-///   • Fallback debounce: 60s after the last notify, if no other drain
-///     trigger has fired (so a session that never finishes streaming
-///     still eventually rescans)
-///
-/// All public entry points are nonisolated thunks that hop onto
-/// MainActor before touching state.
+/// Its lifecycle entry points preserve MainActor-compatible call sites.
 @MainActor
 final class SkillFilesystemNotifier {
     static let shared = SkillFilesystemNotifier()
     private init() {}
 
-    /// True when at least one fakefs event touching /var/minis/skills/
-    /// has landed since the last successful drain. Caller-side drain
-    /// triggers check this; rescan only runs when this is true.
-    private var pendingRescan: Bool = false
-    /// Wall-clock time of the most recent notify, kept so logging can
-    /// report how long a rescan has been queued.
-    private var lastNotifyAt: Date?
-    /// Fallback timer Task — only used if neither AI-turn-end nor
-    /// scenePhase drains arrive within 60s.
-    private var fallbackTask: Task<Void, Never>?
-    private let fallbackInterval: TimeInterval = 60
-
-    /// Hook entry. Called from the fakefs handler block on any thread.
-    /// Sets the dirty flag and (re)arms the fallback timer; does NOT
-    /// run a rescan synchronously.
-    nonisolated func notifyChanged() {
-        Task { @MainActor in self.markDirty() }
-    }
-
-    private func markDirty() {
-        if !pendingRescan {
-            AppLogger(category: "SkillSync").info("[SkillSync] fakefs notifier → pendingRescan=true (waiting for idle drain)")
-        }
-        pendingRescan = true
-        lastNotifyAt = Date()
-        // Restart fallback timer so a quiet session still gets a
-        // rescan even if no other drain trigger fires.
-        fallbackTask?.cancel()
-        fallbackTask = Task { @MainActor [weak self] in
-            let nanos = UInt64((self?.fallbackInterval ?? 60) * 1_000_000_000)
-            try? await Task.sleep(nanoseconds: nanos)
-            if Task.isCancelled { return }
-            self?.drainIfDirty(reason: "fallback timer")
-        }
-    }
-
-    /// Called from idle moments — AI turn done, scenePhase change,
-    /// foreground reload, etc. Cheap no-op when `pendingRescan` is
-    /// false. Safe to call as often as you want; the rescan body
-    /// itself only runs once per dirty cycle.
+    /// Retained for lifecycle call sites while the fakefs event source is
+    /// retired. Skill file changes are found by SyncDirtyScanner.
     func drainIfDirty(reason: String) {
-        guard pendingRescan else { return }
-        pendingRescan = false
-        fallbackTask?.cancel()
-        let queuedFor = lastNotifyAt.map { Int(Date().timeIntervalSince($0)) } ?? -1
-        AppLogger(category: "SkillSync").info("[SkillSync] drain triggered (reason=\(reason), queued for \(queuedFor)s)")
-        SkillStore.shared.rescanAndMarkChangedSkillsDirty()
+        _ = reason
     }
 
-    /// Same as drainIfDirty but exposed as a nonisolated thunk for
-    /// callers that can't await MainActor inline. Asynchronous; OK to
-    /// fire-and-forget.
+    /// Same no-op lifecycle compatibility entry point for callers that
+    /// cannot await MainActor inline.
     nonisolated func drainIfDirtyAsync(reason: String) {
         Task { @MainActor in self.drainIfDirty(reason: reason) }
     }

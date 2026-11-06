@@ -27,12 +27,15 @@ set -e
 # ============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-FFMPEG_DIR="$SCRIPT_DIR/ffmpeg-6.1.2"
-BUILD_DIR="$FFMPEG_DIR/build-ios"
-FRAMEWORK_DIR="$SCRIPT_DIR/frameworks/FFmpeg.framework"
-FRAMEWORKS_BASE="$SCRIPT_DIR/frameworks"
+FFMPEG_DIR="${FFMPEG_SOURCE_DIR:-$SCRIPT_DIR/ffmpeg-6.1.2}"
+BUILD_DIR="${FFMPEG_BUILD_DIR:-$FFMPEG_DIR/build-ios}"
+FRAMEWORKS_BASE="${FFMPEG_FRAMEWORK_OUTPUT_DIR:-$SCRIPT_DIR/frameworks}"
+FRAMEWORK_DIR="$FRAMEWORKS_BASE/FFmpeg.framework"
 
-IOS_DEPLOYMENT_TARGET="14.0"
+IOS_DEPLOYMENT_TARGET="${IOS_DEPLOYMENT_TARGET:-14.0}"
+IOS_SDK_NAME="${IOS_SDK_NAME:-iphoneos}"
+IOS_MIN_FLAG="${IOS_MIN_FLAG:--miphoneos-version-min=$IOS_DEPLOYMENT_TARGET}"
+IOS_SUPPORTED_PLATFORM="${IOS_SUPPORTED_PLATFORM:-iPhoneOS}"
 
 # Colors for output
 RED='\033[0;31m'
@@ -194,8 +197,8 @@ apply_source_patches() {
 configure_ffmpeg() {
     log_info "Configuring FFmpeg for iOS arm64..."
 
-    IOS_SDK=$(xcrun --sdk iphoneos --show-sdk-path)
-    CC="$(xcrun --sdk iphoneos -f clang)"
+    IOS_SDK=$(xcrun --sdk "$IOS_SDK_NAME" --show-sdk-path)
+    CC="$(xcrun --sdk "$IOS_SDK_NAME" -f clang)"
 
     mkdir -p "$BUILD_DIR"
 
@@ -222,8 +225,8 @@ configure_ffmpeg() {
         --target-os=darwin \
         --cc="$CC" \
         --sysroot="$IOS_SDK" \
-        --extra-cflags="-arch arm64 -miphoneos-version-min=$IOS_DEPLOYMENT_TARGET -fembed-bitcode -DCONFIG_FFMPEG_MAIN=1 $LAME_CFLAGS" \
-        --extra-ldflags="-arch arm64 -miphoneos-version-min=$IOS_DEPLOYMENT_TARGET -isysroot $IOS_SDK $LAME_LDFLAGS" \
+        --extra-cflags="-arch arm64 $IOS_MIN_FLAG -fembed-bitcode -DCONFIG_FFMPEG_MAIN=1 $LAME_CFLAGS" \
+        --extra-ldflags="-arch arm64 $IOS_MIN_FLAG -isysroot $IOS_SDK $LAME_LDFLAGS" \
         --enable-pic \
         --enable-videotoolbox \
         --enable-hwaccel=h264_videotoolbox \
@@ -277,8 +280,8 @@ build_ffmpeg() {
 build_fftools() {
     log_info "Building fftools (ffmpeg_main)..."
 
-    IOS_SDK=$(xcrun --sdk iphoneos --show-sdk-path)
-    CC="$(xcrun --sdk iphoneos -f clang)"
+    IOS_SDK=$(xcrun --sdk "$IOS_SDK_NAME" --show-sdk-path)
+    CC="$(xcrun --sdk "$IOS_SDK_NAME" -f clang)"
     INSTALL_DIR="$BUILD_DIR/install"
 
     FFTOOLS_OBJ_DIR="$BUILD_DIR/fftools-objs"
@@ -308,7 +311,7 @@ build_fftools() {
     )
 
     # Common CFLAGS: use the source tree for headers (has config.h, libav* headers, and libavdevice)
-    FFTOOLS_CFLAGS="-arch arm64 -miphoneos-version-min=$IOS_DEPLOYMENT_TARGET -isysroot $IOS_SDK"
+    FFTOOLS_CFLAGS="-arch arm64 $IOS_MIN_FLAG -isysroot $IOS_SDK"
     FFTOOLS_CFLAGS="$FFTOOLS_CFLAGS -I$FFMPEG_DIR -I$INSTALL_DIR/include"
     FFTOOLS_CFLAGS="$FFTOOLS_CFLAGS -DCONFIG_FFMPEG_MAIN=1 -Oz -fPIC"
     # Force-include the stdio redirect header so all fprintf/printf/fputs/vfprintf
@@ -328,7 +331,7 @@ build_fftools() {
     # Compile the stdio redirect implementation WITHOUT the -include flag
     # to avoid recursive macro expansion.
     log_info "  Compiling fftools/fftools_stdio_redirect.c..."
-    REDIRECT_CFLAGS="-arch arm64 -miphoneos-version-min=$IOS_DEPLOYMENT_TARGET -isysroot $IOS_SDK"
+    REDIRECT_CFLAGS="-arch arm64 $IOS_MIN_FLAG -isysroot $IOS_SDK"
     REDIRECT_CFLAGS="$REDIRECT_CFLAGS -I$FFMPEG_DIR -I$INSTALL_DIR/include -Oz -fPIC"
     $CC $REDIRECT_CFLAGS -c fftools/fftools_stdio_redirect.c -o "$FFTOOLS_OBJ_DIR/fftools_stdio_redirect.o"
     FFTOOLS_OBJS+=("$FFTOOLS_OBJ_DIR/fftools_stdio_redirect.o")
@@ -347,8 +350,8 @@ package_framework() {
     log_info "Packaging individual .framework bundles + FFmpeg.framework..."
 
     INSTALL_DIR="$BUILD_DIR/install"
-    IOS_SDK=$(xcrun --sdk iphoneos --show-sdk-path)
-    CC="$(xcrun --sdk iphoneos -f clang)"
+    IOS_SDK=$(xcrun --sdk "$IOS_SDK_NAME" --show-sdk-path)
+    CC="$(xcrun --sdk "$IOS_SDK_NAME" -f clang)"
 
     # Clean previous output
     rm -rf "$FRAMEWORK_DIR"
@@ -422,10 +425,10 @@ package_framework() {
     <key>CFBundleVersion</key>
     <string>6.1.2</string>
     <key>MinimumOSVersion</key>
-    <string>14.0</string>
+    <string>${IOS_DEPLOYMENT_TARGET}</string>
     <key>CFBundleSupportedPlatforms</key>
     <array>
-        <string>iPhoneOS</string>
+        <string>$IOS_SUPPORTED_PLATFORM</string>
     </array>
 </dict>
 </plist>
@@ -448,7 +451,7 @@ PLISTEOF
     # Link fftools static archive into the umbrella dylib
     # -force_load ensures all symbols (including ffmpeg_main) are included
     $CC -arch arm64 \
-        -miphoneos-version-min=$IOS_DEPLOYMENT_TARGET \
+        $IOS_MIN_FLAG \
         -isysroot "$IOS_SDK" \
         -dynamiclib \
         -install_name @rpath/FFmpeg.framework/FFmpeg \
@@ -521,7 +524,7 @@ void ffmpeg_reset_statics(void);
 EOF
 
     # Create Info.plist
-    cat > "$FRAMEWORK_DIR/Info.plist" << 'EOF'
+    cat > "$FRAMEWORK_DIR/Info.plist" << EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -543,10 +546,10 @@ EOF
     <key>CFBundleVersion</key>
     <string>6.1.2</string>
     <key>MinimumOSVersion</key>
-    <string>14.0</string>
+    <string>${IOS_DEPLOYMENT_TARGET}</string>
     <key>CFBundleSupportedPlatforms</key>
     <array>
-        <string>iPhoneOS</string>
+        <string>$IOS_SUPPORTED_PLATFORM</string>
     </array>
 </dict>
 </plist>
@@ -603,7 +606,7 @@ main() {
     echo ""
     echo "============================================================"
     echo "  FFmpeg 6.1.2 iOS Dynamic Framework Builder"
-    echo "  Target: arm64, iOS $IOS_DEPLOYMENT_TARGET+"
+    echo "  Target: arm64, iOS $IOS_DEPLOYMENT_TARGET+ ($IOS_SDK_NAME)"
     echo "  Features: VideoToolbox hardware encoding/decoding"
     echo "============================================================"
     echo ""

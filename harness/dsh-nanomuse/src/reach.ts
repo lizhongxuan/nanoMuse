@@ -6,8 +6,9 @@
  * `nanomuse/tools/devices.py` — `devices`, `device_screen`, `device_shell`,
  * `device_files`, `device_open`, `device_notify` and `delegate`, a whole job in
  * words for the other device's own Muse — speaking the frames in `docs/hub.md`
- * through `ctx.nanomuseCloud.hub`. Commands are judged where they are typed: a
- * `device_shell` or `device_open` asks the person here first through the
+ * through the signed-in relay. HTTP(S) `device_open` can also reach Morde Hub
+ * installations; the remaining legacy actions stay on nanoMuse Cloud.
+ * Commands are judged where they are typed: a `device_shell` or `device_open` asks the person here first through the
  * harness's own approval card, and when the remote Muse hits something that
  * needs approval while it works on a `delegate`, that question travels back as
  * an `approval` event and is answered here too, never by the other Muse.
@@ -28,7 +29,7 @@ import type {} from '@deepseek-ai/dsh-user-approval'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 import type {} from '@deepseek-ai/dsh-llm'
 import type {} from '@deepseek-ai/dsh-attachment'
-import type {} from './cloud.ts'
+import type { MordeHubDevice } from './cloud.ts'
 import { HubError, type HubDevice } from './hub.ts'
 
 export const name = 'nanomuse-reach'
@@ -37,17 +38,22 @@ export const inject = ['tools', 'nanomuseCloud']
 
 const DEVICE = {
   type: 'string',
-  description: 'Which device: its name as listed by `devices` (e.g. "Phone", "Xiaomi"), its id, or "phone" for the only phone. Empty picks the only other device.',
+  description: 'Which device: its name or id as listed by `devices`. Morde Hub installations require their exact id. Empty picks the only other nanoMuse Cloud device.',
 } as const
 
 const IMAGE_TYPES = new Set<string>(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
+const MORDE_INSTALLATION_ID = /^i[a-z0-9]{7}$/
+
+type ReachDevice = (HubDevice & { source: 'nanoMuse Cloud' }) |
+  (MordeHubDevice & { source: 'Morde Hub'; callerConnected: boolean })
 
 export function apply(ctx: Context): void {
   const cloud = ctx.nanomuseCloud
   const hub = cloud.hub
 
-  const describe = (d: HubDevice) =>
-    `${d.name} (${d.kind}${d.os ? `, ${d.os}` : ''}; id ${d.id}; ${d.online ? 'online' : 'offline'}${d.controllable ? '' : '; cannot be asked to do things'})`
+  const describe = (d: ReachDevice) => d.source === 'Morde Hub'
+    ? `${d.name} (${d.platform}; Morde Hub; id ${d.id}; ${d.online ? 'online' : 'offline'}${d.callerConnected ? '' : '; this computer is disconnected'})`
+    : `${d.name} (${d.kind}${d.os ? `, ${d.os}` : ''}; nanoMuse Cloud; id ${d.id}; ${d.online ? 'online' : 'offline'}${d.controllable ? '' : '; cannot be asked to do things'})`
 
   const offline = () => new Error(cloud.signedIn ? 'This computer is not connected to the hub right now; try again in a moment.' : 'Not signed in to nanoMuse Cloud: Settings → nanoMuse Cloud.')
 
@@ -60,6 +66,29 @@ export function apply(ctx: Context): void {
     }
     if (!d.online) throw new Error(`${d.name} is offline.`)
     return d
+  }
+
+  const mordeTarget = (ref: string | undefined): MordeHubDevice | undefined => {
+    const wanted = ref ?? ''
+    if (!wanted) return undefined
+    const status = cloud.mordeHubView()
+    const active = (device: MordeHubDevice) => !device.revoked && Number.isFinite(Date.parse(device.expiresAt)) && Date.parse(device.expiresAt) > Date.now()
+    const normalized = wanted.trim().toLowerCase()
+    if (!MORDE_INSTALLATION_ID.test(normalized)) {
+      if (status.devices.some((device) => device.id !== status.installationID && active(device) && device.name.toLowerCase() === wanted.trim().toLowerCase())) {
+        throw new Error('Use the exact Morde Hub installation id shown by `devices` to select this device.')
+      }
+      return undefined
+    }
+    if (wanted !== normalized) throw new Error('Use the exact Morde Hub installation id shown by `devices` in lowercase without extra spaces.')
+    if (!status.signedIn) throw new Error('Sign in to Morde Hub on this computer before calling another installation.')
+    const device = status.devices.find((candidate) => candidate.id === wanted)
+    if (!device || device.id === status.installationID || !active(device)) {
+      throw new Error('That Morde Hub installation is no longer active. Refresh the device list and try again.')
+    }
+    if (!status.connected) throw new Error('This computer is not connected to Morde Hub right now; try again in a moment.')
+    if (!device.online) throw new Error(`${device.name} is offline on Morde Hub.`)
+    return device
   }
 
   /** Ask the person here, through the harness's approval card; without the service, the policy is to refuse. */
@@ -82,7 +111,7 @@ export function apply(ctx: Context): void {
       ctx.tools.register(
         defineTool({
           name: 'devices',
-          description: "The person's other devices on nanoMuse Cloud (phone, other computers): names, kinds, online or not. Call before the device_* tools when unsure which device is which.",
+          description: "The person's other devices on nanoMuse Cloud and Morde Hub: source, name, id and online state. Morde Hub is a separate sign-in; use its exact installation id for device_open.",
           parameters: {},
           output: {
             schema: {
@@ -95,16 +124,27 @@ export function apply(ctx: Context): void {
               additionalProperties: false,
             },
             render: (_args, value) => {
-              const list = (value.devices ?? []) as unknown as HubDevice[]
-              if (!value.connected) return [{ type: 'text', text: cloud.signedIn ? 'Not connected to the hub right now.' : 'Not signed in to nanoMuse Cloud.' }]
-              if (list.length === 0) return [{ type: 'text', text: 'No other device is signed in to this account.' }]
+              const list = (value.devices ?? []) as unknown as ReachDevice[]
+              if (!value.connected && list.length === 0) return [{ type: 'text', text: 'Neither nanoMuse Cloud nor Morde Hub is connected on this computer.' }]
+              if (list.length === 0) return [{ type: 'text', text: 'No other device is signed in to nanoMuse Cloud or Morde Hub.' }]
               return [{ type: 'text', text: list.map((d) => `- ${describe(d)}`).join('\n') }]
             },
           },
           isConcurrencySafe: () => true,
           async execute() {
-            const list = hub.devices.filter((d) => d.id !== hub.deviceId && d.kind !== 'web')
-            return { connected: hub.connected, this: hub.deviceId ?? '', devices: list.map((d) => ({ ...d })) as unknown as JsonValue[] }
+            const morde = cloud.mordeHubView()
+            const cloudDevices = hub.devices
+              .filter((d) => d.id !== hub.deviceId && d.kind !== 'web')
+              .map((d) => ({ ...d, source: 'nanoMuse Cloud' as const }))
+            const mordeDevices = morde.devices
+              .filter((d) => morde.signedIn && d.id !== morde.installationID && !d.revoked && Number.isFinite(Date.parse(d.expiresAt)) && Date.parse(d.expiresAt) > Date.now())
+              .map((d) => ({ ...d, source: 'Morde Hub' as const, callerConnected: morde.connected }))
+            const list: ReachDevice[] = [...cloudDevices, ...mordeDevices]
+            return {
+              connected: hub.connected || morde.connected,
+              this: hub.deviceId || morde.installationID || '',
+              devices: list as unknown as JsonValue[],
+            }
           },
           presentCall: () => ({ card: 'generic', title: 'Devices on the account', kind: 'other', rawInput: {} }),
         }),
@@ -250,14 +290,26 @@ export function apply(ctx: Context): void {
       ctx.tools.register(
         defineTool({
           name: 'device_open',
-          description: 'Open a URL (or a file path on that device) on another device, in its default app or browser. The person approves it here first.',
-          parameters: { device: DEVICE, url: { type: 'string', required: true, description: 'https://…, or a path on that device.' } },
+          description: 'Open a URL (or a file path on a nanoMuse Cloud device) on another device. Morde Hub accepts HTTP(S) URLs only and requires its exact installation id. The person approves it here first.',
+          parameters: { device: DEVICE, url: { type: 'string', required: true, description: 'https://…, or a path on a nanoMuse Cloud device.' } },
           output: {
             schema: { type: 'object', properties: { device: { type: 'string' }, ok: { type: 'boolean' }, url: { type: 'string' } }, additionalProperties: false },
             render: (_args, value) => [{ type: 'text', text: value.ok ? `Opened on ${value.device}: ${value.url}` : `${value.device} could not open ${value.url}` }],
           },
           timeoutMs: 60_000,
           async execute(args, exec) {
+            const morde = mordeTarget(args.device)
+            if (morde) {
+              if (morde.platform !== 'desktop') throw new Error('This PC client currently supports Morde desktop actions only.')
+              let url: URL
+              try { url = new URL(args.url) } catch { throw new Error('Morde Hub can only open HTTP(S) URLs; local file paths stay on nanoMuse Cloud.') }
+              if ((url.protocol !== 'http:' && url.protocol !== 'https:') || !url.hostname || url.username || url.password || Buffer.byteLength(args.url) > 2048 || args.url !== args.url.trim()) {
+                throw new Error('Morde Hub can only open a valid HTTP(S) URL without embedded credentials.')
+              }
+              await approve(exec, 'device_open', `Open on ${morde.name}: ${args.url}`, `在 ${morde.name} 上打开：${args.url}`)
+              const body = await cloud.mordeHubCall(morde.id, 'open', { url: args.url }, { signal: exec.signal, timeoutMs: 30_000 }).catch(fail)
+              return { device: morde.name, ok: body.ok !== false, url: String(body.url ?? args.url) }
+            }
             const d = target(args.device)
             await approve(exec, 'device_open', `Open on ${d.name}: ${args.url}`, `在 ${d.name} 上打开：${args.url}`)
             const body = await hub.call(d.id, 'open', { url: args.url }, { signal: exec.signal, timeoutMs: 30_000 }).catch(fail)
@@ -276,7 +328,7 @@ export function apply(ctx: Context): void {
       ctx.tools.register(
         defineTool({
           name: 'device_notify',
-          description: 'Show a notification on another device (e.g. a reminder on the phone).',
+          description: 'Show a notification on another device (e.g. a reminder on the phone); Morde Hub notifications currently require a desktop installation.',
           parameters: { device: DEVICE, text: { type: 'string', required: true }, title: { type: 'string' } },
           output: {
             schema: { type: 'object', properties: { device: { type: 'string' }, shown: { type: 'boolean' } }, additionalProperties: false },
@@ -284,6 +336,17 @@ export function apply(ctx: Context): void {
           },
           timeoutMs: 60_000,
           async execute(args, exec) {
+            const morde = mordeTarget(args.device)
+            if (morde) {
+              if (morde.platform !== 'desktop') throw new Error('This PC client currently supports Morde desktop actions only.')
+              const body = await cloud.mordeHubCall(
+                morde.id,
+                'notify',
+                { text: args.text, ...(args.title ? { title: args.title } : {}) },
+                { signal: exec.signal, timeoutMs: 30_000 },
+              ).catch(fail)
+              return { device: morde.name, shown: body.notified === true }
+            }
             const d = target(args.device)
             const body = await hub.call(d.id, 'notify', { text: args.text, ...(args.title ? { title: args.title } : {}) }, { signal: exec.signal, timeoutMs: 30_000 }).catch(fail)
             return { device: d.name, shown: body.shown !== false }

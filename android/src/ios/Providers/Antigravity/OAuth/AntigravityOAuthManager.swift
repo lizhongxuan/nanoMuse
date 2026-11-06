@@ -213,6 +213,8 @@ final class AntigravityOAuthManager: NSObject, ObservableObject {
     }
 
     func discoverProjectIfNeeded(instanceId: String) async {
+        // nanoMuse: This background probe exists only for local provider execution.
+        guard MordeLocalExecutionPolicy.isEnabled else { return }
         guard projectID(instanceId: instanceId) == nil else { return }
         guard let storage = ProviderKeychainHelper.loadOAuthToken(instanceId: instanceId, as: AntigravityTokenStorage.self) else { return }
         logger.info("Auto-discovering project (instance: \(instanceId))...")

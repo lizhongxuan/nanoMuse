@@ -23,6 +23,9 @@ struct NanoMuseComposerPill<Field: View>: View {
     var isProcessing: Bool
     var canSend: Bool
     var canEnqueue: Bool
+    var showsAttachments = true
+    var showsMicrophone = true
+    var sendAccessibilityIdentifier = "nanoMuse.composer.send"
     var onCamera: () -> Void
     var onPhotos: () -> Void
     var onFile: () -> Void
@@ -47,11 +50,12 @@ struct NanoMuseComposerPill<Field: View>: View {
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 2) {
-            plusButton
+            if showsAttachments { plusButton }
             // One line as tall as a glyph, so its text sits on the plus and the mic's centre line;
             // the row stays bottom-aligned, so a longer text keeps them level with its last line.
             field()
-                .padding(.vertical, max(4, (glyph - NanoMuseComposerWatch.fieldFloor) / 2))
+                .padding(.vertical, max(4, (glyph - UIFont.systemFont(
+                    ofSize: FontSettings.shared.scaledChatInput(16.5)).lineHeight.rounded(.up)) / 2))
             trailingButton
         }
         .padding(.horizontal, 6)
@@ -129,12 +133,14 @@ struct NanoMuseComposerPill<Field: View>: View {
             .buttonStyle(.plain)
             .keyboardShortcut(.return, modifiers: .command)
             .accessibilityLabel(Text("Add to queue", comment: "VoiceOver label for the send button while a reply is generating"))
+            .accessibilityIdentifier("morde.chat.enqueueTask")
         } else if isProcessing {
             Button(action: onStop) {
                 inkDisc("stop.fill", enabled: true)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text("Stop generating", comment: "VoiceOver label for the stop button"))
+            .accessibilityIdentifier("morde.chat.stopTask")
         } else if hasContent {
             Button(action: onSend) {
                 inkDisc("arrow.up", enabled: canSend)
@@ -143,7 +149,8 @@ struct NanoMuseComposerPill<Field: View>: View {
             .disabled(!canSend)
             .keyboardShortcut(.return, modifiers: .command)
             .accessibilityLabel(Text("Send", comment: "VoiceOver label for the send button"))
-        } else {
+            .accessibilityIdentifier(sendAccessibilityIdentifier)
+        } else if showsMicrophone {
             Button(action: onMic) {
                 Image(systemName: "mic")
                     .font(.system(size: 20, weight: .regular))
@@ -153,6 +160,9 @@ struct NanoMuseComposerPill<Field: View>: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text("Voice input", comment: "Mic button opens voice panel"))
+        } else {
+            inkDisc("arrow.up", enabled: false)
+                .accessibilityHidden(true)
         }
     }
 }

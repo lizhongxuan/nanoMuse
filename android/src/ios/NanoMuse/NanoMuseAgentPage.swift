@@ -46,7 +46,7 @@ struct NanoMuseAgentPage: View {
 
     private var name: String {
         let n = soulName.trimmingCharacters(in: .whitespaces)
-        return n.isEmpty ? "nanoMuse" : n
+        return n.isEmpty ? "morde" : n
     }
 
     var body: some View {
@@ -61,7 +61,9 @@ struct NanoMuseAgentPage: View {
                         switch pane {
                         case 0: NanoMuseActivityPane(onOpenSession: { id in dismiss(); onOpenSession(id) })
                         case 1: NanoMuseApprovalsPane()
+#if !MINIS_CLOUD_ONLY
                         case 2: NanoMuseDailyPane(onOpenSession: { id in dismiss(); onOpenSession(id) }, onManage: { dismiss(); onOpenRoutines() })
+#endif
                         default: NanoMuseSoulPane(name: name, onEditName: { showEditName = true })
                         }
                     }
@@ -133,12 +135,14 @@ struct NanoMuseAgentPage: View {
     }
 
     private var paneSwitch: some View {
-        let items: [(String, String)] = [
+        var items: [(String, String)] = [
             ("list.bullet.rectangle", AppLocalized("Activity")),
             ("checkmark.shield", AppLocalized("Approvals")),
-            ("clock", AppLocalized("Daily")),
             ("doc.text", AppLocalized("Soul & memory")),
         ]
+#if !MINIS_CLOUD_ONLY
+        items.insert(("clock", AppLocalized("Daily")), at: 2)
+#endif
         return HStack(spacing: 6) {
             ForEach(Array(items.enumerated()), id: \.offset) { index, item in
                 Button {
@@ -372,17 +376,12 @@ struct NanoMuseActivityPane: View {
 // MARK: - Approvals
 
 struct NanoMuseApprovalsPane: View {
-    @ObservedObject private var manager = OffloadPermissionManager.shared
     /// The "always" answers given to other devices' tasks (NanoMuseRemoteApproval.swift).
     @ObservedObject private var remote = NanoMuseRemoteApprovals.shared
 
-    private var always: [OffloadCommandInfo] {
-        OffloadPermissionManager.allCommands.filter { $0.showInSettings && manager.permissionLevel(for: $0.name) == .bypass }
-    }
-
     var body: some View {
         VStack(spacing: 0) {
-            if always.isEmpty && remote.grants.isEmpty {
+            if remote.grants.isEmpty {
                 NanoMuseEmptyNote(text: AppLocalized("No standing approvals. When you answer \"always allow\" to a risky step, it is listed here and can be revoked."))
             }
             if !remote.grants.isEmpty {
@@ -407,41 +406,6 @@ struct NanoMuseApprovalsPane: View {
                     .padding(.vertical, 8)
                 }
             }
-            if !always.isEmpty {
-                NanoMuseSectionLabel(text: AppLocalized("Always allowed"))
-                ForEach(always, id: \.name) { cmd in
-                    HStack(spacing: 14) {
-                        Image(systemName: "checkmark.shield")
-                            .font(.system(size: 15))
-                            .foregroundStyle(NanoMuseTones.action)
-                            .frame(width: 36, height: 36)
-                            .background(NanoMuseTones.fill, in: Circle())
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(cmd.displayLabel).font(.body.weight(.medium))
-                            Text(String(format: AppLocalized("Always allowed · %@"), cmd.description)).font(.caption).foregroundStyle(.secondary).lineLimit(2)
-                        }
-                        Spacer()
-                        Button(AppLocalized("Revoke")) { manager.setPermissionLevel(.askOnce, for: cmd.name) }
-                            .font(.footnote.weight(.medium))
-                            .tint(NanoMuseTones.action)
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                }
-            }
-            NavigationLink { OffloadPermissionSettingsView() } label: {
-                HStack {
-                    Text(AppLocalized("Manage permissions")).font(.body.weight(.medium))
-                    Spacer()
-                    Image(systemName: "chevron.right").font(.footnote).foregroundStyle(.tertiary)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
-                .background(NanoMuseTones.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 16)
-            .padding(.top, 10)
         }
     }
 }
@@ -452,26 +416,15 @@ struct NanoMuseDailyPane: View {
     var onOpenSession: (String) -> Void
     var onManage: () -> Void
     @ObservedObject private var scheduler = NanoMuseScheduler.shared
-    @ObservedObject private var goals = NanoMuseGoalStore.shared
 
     var body: some View {
         let routines = scheduler.visible
-        let checks = scheduler.routines.filter { $0.hidden && $0.goalId != nil }
         VStack(spacing: 0) {
-            if routines.isEmpty && checks.isEmpty {
+            if routines.isEmpty {
                 NanoMuseEmptyNote(text: AppLocalized("No routines yet. Ask the agent for something \"every morning\" and it will appear here."))
             } else {
-                if !routines.isEmpty {
-                    NanoMuseSectionLabel(text: AppLocalized("Daily"))
-                    ForEach(routines) { r in row(symbol: "clock", title: r.label, detail: r.enabled ? r.cadence : AppLocalized("Off") + " · " + r.cadence, sessionId: r.sessionId) }
-                }
-                if !checks.isEmpty {
-                    NanoMuseSectionLabel(text: AppLocalized("Goal checks"))
-                    ForEach(checks) { r in
-                        let goal = goals.goal(id: r.goalId ?? "")
-                        row(symbol: "target", title: goal?.title ?? r.label, detail: r.enabled ? r.cadence : AppLocalized("Off") + " · " + r.cadence, sessionId: r.sessionId)
-                    }
-                }
+                NanoMuseSectionLabel(text: AppLocalized("Daily"))
+                ForEach(routines) { r in row(symbol: "clock", title: r.label, detail: r.enabled ? r.cadence : AppLocalized("Off") + " · " + r.cadence, sessionId: r.sessionId) }
             }
             Text(AppLocalized("Routines run while the app is open; at their time the phone reminds you to open it."))
                 .font(.caption).foregroundStyle(.secondary)
@@ -529,6 +482,7 @@ struct NanoMuseSoulPane: View {
             }
             .padding(.horizontal, 16)
             .padding(.top, 16)
+#if !MINIS_CLOUD_ONLY
             NavigationLink { NanoMuseSystemFilesView() } label: {
                 HStack {
                     Text(AppLocalized("System files")).font(.body.weight(.medium))
@@ -542,6 +496,7 @@ struct NanoMuseSoulPane: View {
             .buttonStyle(.plain)
             .padding(.horizontal, 16)
             .padding(.top, 12)
+#endif
         }
     }
 
@@ -593,7 +548,7 @@ struct NanoMuseShareCard: View {
         ZStack {
             palette.background
             VStack(spacing: 0) {
-                Text(String(format: AppLocalized("Hi, I'm %@, a personal AI agent. Meet nanoMuse: open source, runs on your phone."), agentName))
+                Text(String(format: AppLocalized("Hi, I'm %@, a personal AI agent. Meet morde: open source, runs on your phone."), agentName))
                     .font(.system(size: 42))
                     .foregroundStyle(Color(red: 0.106, green: 0.106, blue: 0.122))
                     .multilineTextAlignment(.center)
@@ -620,8 +575,8 @@ struct NanoMuseShareCard: View {
             }
             VStack(alignment: .leading, spacing: 8) {
                 Spacer()
-                Text("nanoMuse").font(.system(size: 40, weight: .bold)).foregroundStyle(palette.accent)
-                Text(AppLocalized("Your personal AI agent, open source · github.com/nano-muse/nanoMuse"))
+                Text("morde").font(.system(size: 40, weight: .bold)).foregroundStyle(palette.accent)
+                Text(AppLocalized("Your personal AI agent, open source · morde"))
                     .font(.system(size: 28)).foregroundStyle(.black.opacity(0.6))
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -736,7 +691,7 @@ struct NanoMuseAvatarDoneCard: View {
         .padding(12)
         .background(NanoMuseTones.surface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .sheet(isPresented: $share) {
-            NanoMuseAvatarShareSheet(agentName: SoulStore.cachedMetadata.name.isEmpty ? "nanoMuse" : SoulStore.cachedMetadata.name)
+            NanoMuseAvatarShareSheet(agentName: SoulStore.cachedMetadata.name.isEmpty ? "morde" : SoulStore.cachedMetadata.name)
         }
     }
 }

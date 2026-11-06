@@ -1,0 +1,911 @@
+import SwiftUI
+
+enum MIFWorkItemFilter: String, CaseIterable, Identifiable {
+    case all
+    case bug
+    case request
+    case unclaimed
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .all: return AppLocalized("All")
+        case .bug: return AppLocalized("Bug")
+        case .request: return AppLocalized("Request")
+        case .unclaimed: return AppLocalized("Unclaimed")
+        }
+    }
+}
+
+enum MIFWorkItemPresentation {
+    static func stateLabel(_ state: String) -> String {
+        switch state {
+        case "open": return AppLocalized("Open status")
+        case "blocked": return AppLocalized("Blocked")
+        case "delivered": return AppLocalized("Delivered")
+        default: return AppLocalized("Status unknown")
+        }
+    }
+
+    static func canManage(role: String?) -> Bool {
+        MordeProjectPolicy.canManageWorkItems(role: role)
+    }
+
+    static func categoryLabel(_ category: String?) -> String {
+        guard let category else { return AppLocalized("Unclassified") }
+        switch category {
+        case "bug": return AppLocalized("Bug")
+        case "request": return AppLocalized("Request")
+        case "unclassified": return AppLocalized("Unclassified")
+        default: return category
+        }
+    }
+
+    static func categoryMarkerLabel(_ category: String?) -> String? {
+        switch category {
+        case "bug": return "缺"
+        case "request": return "需"
+        default: return nil
+        }
+    }
+
+    static func assigneeLabel(_ assigneeID: String?) -> String {
+        guard let assigneeID, !assigneeID.isEmpty else { return AppLocalized("Unclaimed") }
+        return String(format: AppLocalized("Assigned to %@"), assigneeID)
+    }
+
+    static func matches(_ item: MordeProjectWorkItem, filter: MIFWorkItemFilter) -> Bool {
+        matches(filter: filter, category: item.category, assigneeID: item.assignee_id)
+    }
+
+    static func matches(filter: MIFWorkItemFilter, category: String?, assigneeID: String?) -> Bool {
+        switch filter {
+        case .all: return true
+        case .bug: return category == "bug"
+        case .request: return category == "request"
+        case .unclaimed: return assigneeID == nil
+        }
+    }
+
+    static func categoryForCreation(_ category: String, supportsV2: Bool) -> String? {
+        supportsV2 ? category : nil
+    }
+
+    static func createsUnassigned(supportsV2: Bool) -> Bool {
+        supportsV2
+    }
+
+    static func canClaim(item: MordeProjectWorkItem, supportsV2: Bool,
+                         canClaim: Bool, role: String?) -> Bool {
+        supportsV2 && canClaim && role != "viewer" && item.assignee_id == nil && item.state != "delivered"
+    }
+
+    static func canBlock(item: MordeProjectWorkItem, canManage: Bool) -> Bool {
+        canManage && item.state == "open"
+    }
+
+    static func canResume(item: MordeProjectWorkItem, canManage: Bool) -> Bool {
+        canManage && item.state == "blocked"
+    }
+
+    static func canLinkTask(item: MordeProjectWorkItem, taskID: String, role: String?) -> Bool {
+        MordeProjectPolicy.canLinkTask(role: role, state: item.state, taskID: taskID, taskIDs: item.task_ids)
+    }
+
+    static func canRecordDelivery(item: MordeProjectWorkItem, taskID: String,
+                                  target: MIFWorkItemDeliveryTarget, role: String?) -> Bool {
+        MordeProjectPolicy.canRecordDelivery(role: role, state: item.state, taskID: taskID,
+                                             taskIDs: item.task_ids, workspaceID: target.workspaceID,
+                                             revision: target.revision)
+    }
+}
+
+private struct MIFWorkItemDeliveryConfirmation: Identifiable {
+    let projectID: String
+    let item: MordeProjectWorkItem
+    let target: MIFWorkItemDeliveryTarget
+    let taskID: String
+
+    var id: String { "\(projectID):\(item.id):\(target.id):\(taskID)" }
+}
+
+@MainActor
+struct MIFWorkItemRoom: View {
+    var chrome: NanoMuseRoomChrome? = nil
+    var onMenu: (() -> Void)? = nil
+    var workItemSection: Binding<MIFTaskWorkItemSection>? = nil
+    @StateObject private var store = MIFWorkItemPageStore.shared
+    @Environment(\.dismiss) private var dismiss
+    @State private var title = ""
+    @State private var description = ""
+    @FocusState private var isWorkItemInputFocused: Bool
+    @State private var createCategory = "bug"
+    @State private var isCreatePresented = false
+    @State private var selectedFilter: MIFWorkItemFilter = .all
+    @State private var blockingItemID: String?
+    @State private var blockedReason = ""
+    @State private var deliveryConfirmation: MIFWorkItemDeliveryConfirmation?
+    @State private var requestGeneration = UUID()
+    @State private var loadedScopeKey: String?
+    @State private var localFailure: String?
+    @State private var createFailure: String?
+
+    private var selectedProject: MordeProject? {
+        store.projects.first { $0.id == store.selectedProjectID }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if let onMenu {
+                MordeDesignPageHeader(title: AppLocalized("Work items"), onMenu: onMenu) {
+                    newWorkItemButton
+                }
+            } else if let chrome {
+                NanoMuseRoomHeader(chrome: chrome) { newWorkItemButton }
+            } else {
+                header
+            }
+            if let workItemSection {
+                MIFTaskWorkItemSectionPicker(selection: workItemSection)
+            }
+            ScrollView {
+                VStack(spacing: 14) {
+                    content
+                }
+                .padding(.vertical, 14)
+                .padding(.bottom, onMenu == nil && chrome != nil ? NanoMuseBottomBar.height : 0)
+                .frame(maxWidth: 680)
+                .frame(maxWidth: .infinity)
+            }
+            .background(NanoMuseTones.canvas)
+            .refreshable { await loadScope(store.scopeKey) }
+            .accessibilityIdentifier("morde.workItems.scroll")
+        }
+        .background(NanoMuseTones.canvas.ignoresSafeArea())
+        .toolbar(.hidden, for: .navigationBar)
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button(AppLocalized("Done")) { isWorkItemInputFocused = false }
+                    .accessibilityIdentifier("morde.workItems.keyboardDone")
+            }
+        }
+        .tint(NanoMuseTones.action)
+        .sheet(isPresented: $isCreatePresented) {
+            if let project = selectedProject {
+                ScrollView {
+                    createForm(projectID: project.id)
+                }
+                .background(NanoMuseTones.canvas.ignoresSafeArea())
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+            }
+        }
+        .task(id: store.scopeKey) { await loadScope(store.scopeKey) }
+        .onChange(of: store.selectedProjectID) { _ in
+            title = ""
+            description = ""
+            selectedFilter = .all
+            createCategory = "bug"
+            blockingItemID = nil
+            blockedReason = ""
+            deliveryConfirmation = nil
+            localFailure = nil
+            createFailure = nil
+            isCreatePresented = false
+        }
+        .onChange(of: store.selectedConversationID) { _ in deliveryConfirmation = nil }
+        .confirmationDialog(AppLocalized("Record work item delivery?"), isPresented: deliveryConfirmationIsPresented,
+                            titleVisibility: .visible) {
+            if let request = deliveryConfirmation,
+               store.selectedProjectID == request.projectID,
+               store.currentTask?.id == request.taskID {
+                Button(String(format: AppLocalized("Record saved version v%lld"), request.target.revision)) {
+                    recordDelivery(request)
+                }
+                    .accessibilityIdentifier("morde.workItems.delivery.confirm")
+            }
+            Button(AppLocalized("Cancel"), role: .cancel) { deliveryConfirmation = nil }
+                .accessibilityIdentifier("morde.workItems.delivery.cancel")
+        } message: {
+            if let request = deliveryConfirmation {
+                Text(String(format: AppLocalized("%1$@ · Task %2$@ · %3$@ v%4$lld. Only version metadata will be recorded; no files will be sent."),
+                            request.item.title, request.taskID, request.target.workspaceName, request.target.revision))
+            }
+        }
+    }
+
+    private var header: some View {
+        ZStack {
+            Text(AppLocalized("Work items"))
+                .font(.headline.weight(.semibold))
+                .lineLimit(nil)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 60)
+            HStack {
+                Button { dismiss() } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 15, weight: .semibold))
+                        .frame(width: 40, height: 40)
+                        .background(NanoMuseTones.surface, in: Circle())
+                }
+                .accessibilityLabel(AppLocalized("Back"))
+                .accessibilityIdentifier("morde.workItems.back")
+                Spacer()
+                Button { presentCreateForm() } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 16, weight: .medium))
+                        .frame(width: 40, height: 40)
+                        .background(NanoMuseTones.surface, in: Circle())
+                }
+                .disabled(!canCreateWorkItem)
+                .accessibilityLabel(AppLocalized("New work item"))
+                .accessibilityIdentifier("morde.workItems.create.open")
+            }
+            .padding(.horizontal, 12)
+        }
+        .frame(minHeight: 52)
+        .background(NanoMuseTones.canvas)
+    }
+
+    private var canCreateWorkItem: Bool {
+        guard store.isSignedIn, let scopeKey = store.scopeKey, loadedScopeKey == scopeKey,
+              store.projectsState.isLoaded, store.projectsState.failureMessage == nil,
+              let project = selectedProject else { return false }
+        return store.canManage(in: project.id)
+    }
+
+    private var newWorkItemButton: some View {
+        Button { presentCreateForm() } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(Color.primary)
+                .frame(width: 38, height: 38)
+                .background(NanoMuseTones.surface, in: Circle())
+                .overlay(Circle().strokeBorder(NanoMuseTones.hairline))
+                .contentShape(Circle())
+        }
+        .disabled(!canCreateWorkItem)
+        .accessibilityLabel(AppLocalized("New work item"))
+        .accessibilityIdentifier("morde.workItems.create.open")
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if !store.isSignedIn {
+            notice(AppLocalized("Sign in to view project work items"), symbol: "person.crop.circle")
+        } else if store.scopeKey == nil || loadedScopeKey != store.scopeKey {
+            ProgressView(AppLocalized("Confirming account and projects…"))
+                .frame(maxWidth: .infinity, minHeight: 150)
+        } else if let failure = store.projectsState.failureMessage {
+            errorCard(failure)
+        } else if !store.projectsState.isLoaded {
+            ProgressView(AppLocalized("Loading projects…"))
+                .frame(maxWidth: .infinity, minHeight: 150)
+        } else if store.projects.isEmpty {
+            notice(AppLocalized("This account has not joined any projects."), symbol: "folder")
+        } else {
+            projectPicker
+            if let project = selectedProject {
+                if let message = store.actionError ?? localFailure {
+                    inlineMessage(message, isError: true)
+                        .accessibilityIdentifier("morde.workItems.error")
+                } else if let message = store.notice {
+                    inlineMessage(message, isError: false)
+                        .accessibilityIdentifier("morde.workItems.notice")
+                }
+                conversationPicker()
+                workItemList(project: project)
+            } else {
+                notice(AppLocalized("Choose a project to view its work items."), symbol: "folder")
+            }
+        }
+    }
+
+    private var projectPicker: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(AppLocalized("Project"))
+                .font(.caption.weight(.medium))
+                .foregroundStyle(NanoMuseTones.secondaryText)
+            Menu {
+                ForEach(store.projects) { project in
+                    Button {
+                        Task { await store.selectProject(project.id) }
+                    } label: {
+                        if project.id == store.selectedProjectID {
+                            Label(project.name, systemImage: "checkmark")
+                        } else {
+                            Text(project.name)
+                        }
+                    }
+                    .accessibilityIdentifier("morde.workItems.project.\(project.id)")
+                }
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "folder")
+                        .foregroundStyle(NanoMuseTones.action)
+                    Text(selectedProject?.name ?? AppLocalized("Choose project"))
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(Color.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Image(systemName: "chevron.down")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(NanoMuseTones.secondaryText)
+                }
+                .contentShape(Rectangle())
+                .padding(14)
+                .background(NanoMuseTones.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(NanoMuseTones.hairline))
+            }
+            .accessibilityLabel(selectedProject?.name ?? AppLocalized("Choose project"))
+            .accessibilityIdentifier("morde.workItems.projectPicker")
+        }
+        .padding(.horizontal, 16)
+    }
+
+    @ViewBuilder
+    private func conversationPicker() -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "checklist")
+                    .foregroundStyle(NanoMuseTones.action)
+                Text(AppLocalized("Task in this project"))
+                    .font(.headline)
+            }
+
+            if let failure = store.conversationsState.failureMessage {
+                Text(String(format: AppLocalized("Could not load project conversations: %@"), failure))
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if !store.conversationsState.isLoaded {
+                ProgressView(AppLocalized("Loading project conversations…"))
+            } else if store.conversations.isEmpty {
+                Text(AppLocalized("This project has no shared conversations to choose from."))
+                    .font(.footnote)
+                    .foregroundStyle(NanoMuseTones.secondaryText)
+            } else {
+                Menu {
+                    ForEach(store.conversations) { conversation in
+                        Button {
+                            Task { await store.selectConversation(conversation.id) }
+                        } label: {
+                            let label = conversation.title.isEmpty
+                                ? AppLocalized("New shared conversation") : conversation.title
+                            if conversation.id == store.selectedConversationID {
+                                Label(label, systemImage: "checkmark")
+                            } else {
+                                Text(label)
+                            }
+                        }
+                        .accessibilityIdentifier("morde.workItems.conversation.\(conversation.id)")
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        Text(selectedConversationTitle)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Image(systemName: "chevron.down")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(NanoMuseTones.secondaryText)
+                    }
+                    .padding(12)
+                    .background(NanoMuseTones.fill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .accessibilityIdentifier("morde.workItems.conversationPicker")
+
+                if let failure = store.conversationError {
+                    Text(failure)
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("morde.workItems.conversation.error")
+                } else if let task = store.currentTask {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(task.objective.isEmpty ? AppLocalized("Task in current conversation") : task.objective)
+                            .font(.subheadline.weight(.medium))
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text(String(format: AppLocalized("Task %1$@ · %2$@"), task.id, task.statusLabel))
+                            .font(.caption)
+                            .foregroundStyle(NanoMuseTones.secondaryText)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("morde.workItems.currentTask")
+                } else {
+                    Text(AppLocalized("This conversation has no Task to link, or its Task is still loading."))
+                        .font(.footnote)
+                        .foregroundStyle(NanoMuseTones.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(NanoMuseTones.surface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(NanoMuseTones.hairline))
+        .padding(.horizontal, 16)
+    }
+
+    @ViewBuilder
+    private func createForm(projectID: String) -> some View {
+        if store.canManage(in: projectID) {
+            VStack(alignment: .leading, spacing: 14) {
+                Text(AppLocalized("New work item"))
+                    .font(.system(size: 19, weight: .bold))
+                    .accessibilityIdentifier("morde.workItems.create.heading")
+                if store.supportsWorkItemsV2 {
+                    HStack(spacing: 8) {
+                        createCategoryButton("bug", title: AppLocalized("Bug"))
+                        createCategoryButton("request", title: AppLocalized("Request"))
+                    }
+                }
+                TextField(AppLocalized("Describe the issue or request in one sentence"), text: $title)
+                    .textFieldStyle(.plain)
+                    .focused($isWorkItemInputFocused)
+                    .disabled(store.actionInFlight)
+                    .padding(.horizontal, 15)
+                    .frame(minHeight: 46)
+                    .background(NanoMuseTones.surface, in: Capsule())
+                    .overlay(Capsule().strokeBorder(NanoMuseTones.hairline))
+                    .accessibilityIdentifier("morde.workItems.create.title")
+                TextField(AppLocalized("Description (optional)"), text: $description, axis: .vertical)
+                    .lineLimit(3...6)
+                    .textFieldStyle(.plain)
+                    .focused($isWorkItemInputFocused)
+                    .disabled(store.actionInFlight)
+                    .padding(14)
+                    .frame(maxWidth: .infinity, minHeight: 84, alignment: .topLeading)
+                    .background(NanoMuseTones.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(NanoMuseTones.hairline))
+                    .accessibilityIdentifier("morde.workItems.create.description")
+                if let error = createFailure {
+                    Text(error)
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("morde.workItems.create.error")
+                }
+                Button {
+                    create(projectID: projectID)
+                } label: {
+                    HStack {
+                        if store.actionInFlight { ProgressView().tint(NanoMuseTones.onInk) }
+                        Text(AppLocalized("Create work item"))
+                    }
+                    .font(.system(size: 15.5, weight: .semibold))
+                    .foregroundStyle(NanoMuseTones.onInk)
+                    .frame(maxWidth: .infinity, minHeight: 48)
+                    .background(Color.primary, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .disabled(store.actionInFlight || title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .opacity(store.actionInFlight || title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.55 : 1)
+                .accessibilityIdentifier("morde.workItems.create.submit")
+            }
+            .padding(22)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(NanoMuseTones.canvas)
+        } else {
+            inlineMessage(AppLocalized("You can view work items. Only project owners and members can create or change them."),
+                          isError: false)
+                .accessibilityIdentifier("morde.workItems.readOnly")
+        }
+    }
+
+    @ViewBuilder
+    private func workItemList(project: MordeProject) -> some View {
+        VStack(spacing: 0) {
+            if store.supportsWorkItemsV2 {
+                filterPicker
+            }
+
+            if let failure = store.workItemsState.failureMessage {
+                errorCard(failure)
+            } else if !store.workItemsState.isLoaded {
+                ProgressView(AppLocalized("Loading work items…"))
+                    .frame(maxWidth: .infinity, minHeight: 120)
+            } else if store.workItems.isEmpty {
+                notice(AppLocalized("This project has no work items yet."), symbol: "checklist")
+            } else if visibleWorkItems.isEmpty {
+                notice(AppLocalized("No work items match this filter."), symbol: "line.3.horizontal.decrease.circle")
+            } else {
+                ForEach(Array(visibleWorkItems.indices), id: \.self) { index in
+                    workItemCard(visibleWorkItems[index], projectID: project.id)
+                }
+            }
+        }
+    }
+
+    private var visibleWorkItems: [MordeProjectWorkItem] {
+        guard store.supportsWorkItemsV2 else { return store.workItems }
+        return store.workItems.filter { MIFWorkItemPresentation.matches($0, filter: selectedFilter) }
+    }
+
+    private var filterPicker: some View {
+        HStack(spacing: 4) {
+            ForEach(MIFWorkItemFilter.allCases) { filter in
+                Button {
+                    selectedFilter = filter
+                } label: {
+                    Text(filter.label)
+                        .font(.system(size: 14.5, weight: .semibold))
+                        .foregroundStyle(selectedFilter == filter ? Color.primary : NanoMuseTones.secondaryText)
+                        .padding(.horizontal, 13)
+                        .padding(.vertical, 7)
+                        .background {
+                            if selectedFilter == filter {
+                                Capsule().fill(NanoMuseTones.fill)
+                            }
+                        }
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(selectedFilter == filter ? .isSelected : [])
+                .accessibilityIdentifier("morde.workItems.filter.\(filter.rawValue)")
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 22)
+        .padding(.vertical, 8)
+    }
+
+    private func workItemCard(_ item: MordeProjectWorkItem, projectID: String) -> some View {
+        let role = store.role(in: projectID)
+        let canManage = store.canManage(in: projectID)
+        let task = store.currentTask
+
+        return VStack(alignment: .leading, spacing: 11) {
+            HStack(alignment: .top, spacing: 13) {
+                workItemIcon(item)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.title)
+                        .font(.system(size: 16, weight: .semibold))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("morde.workItems.row.title.\(item.id)")
+                    Text("\(MIFWorkItemPresentation.categoryLabel(item.category)) · \(MIFWorkItemPresentation.assigneeLabel(item.assignee_id))")
+                        .font(.system(size: 14))
+                        .foregroundStyle(NanoMuseTones.secondaryText)
+                        .accessibilityIdentifier("morde.workItems.row.metadata.\(item.id)")
+                    Text(MIFWorkItemPresentation.stateLabel(item.state))
+                        .font(.system(size: 13))
+                        .foregroundStyle(.tertiary)
+                        .accessibilityIdentifier("morde.workItems.row.state.\(item.id)")
+                }
+                Spacer(minLength: 0)
+                if MIFWorkItemPresentation.canClaim(item: item, supportsV2: store.supportsWorkItemsV2,
+                                                    canClaim: store.canClaim(in: projectID), role: role) {
+                    Button {
+                        Task { await claim(projectID: projectID, item: item) }
+                    } label: {
+                        Text(AppLocalized("Claim work item"))
+                            .font(.system(size: 13.5, weight: .semibold))
+                            .foregroundStyle(NanoMuseTones.onInk)
+                            .padding(.horizontal, 15)
+                            .padding(.vertical, 8)
+                            .background(Color.primary, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(store.actionInFlight)
+                    .accessibilityIdentifier("morde.workItems.claim.\(item.id)")
+                }
+            }
+
+            if !item.description.isEmpty {
+                Text(item.description)
+                    .font(.subheadline)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if !item.acceptance_criteria.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(AppLocalized("Acceptance criteria"))
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(NanoMuseTones.secondaryText)
+                    ForEach(Array(item.acceptance_criteria.enumerated()), id: \.offset) { _, criterion in
+                        Text("• \(criterion)")
+                            .font(.footnote)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+            if !item.blocked_reason.isEmpty {
+                Text(String(format: AppLocalized("Blocked reason: %@"), item.blocked_reason))
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if !item.task_ids.isEmpty {
+                Text(String(format: AppLocalized("Linked Tasks: %@"), item.task_ids.joined(separator: ", ")))
+                    .font(.caption)
+                    .foregroundStyle(NanoMuseTones.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let delivery = item.delivery {
+                Text(String(format: AppLocalized("Recorded delivery: Task %1$@ · Workspace %2$@ v%3$lld"),
+                            delivery.task_id, delivery.workspace_id, delivery.revision))
+                    .font(.caption)
+                    .foregroundStyle(NanoMuseTones.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if canManage, let task,
+               MIFWorkItemPresentation.canLinkTask(item: item, taskID: task.id, role: role) {
+                Button {
+                    Task { await linkTask(projectID: projectID, item: item, taskID: task.id) }
+                } label: {
+                    Label(AppLocalized("Link current Task"), systemImage: "link")
+                        .frame(maxWidth: .infinity, minHeight: 42)
+                }
+                .buttonStyle(.bordered)
+                .disabled(store.actionInFlight)
+                .accessibilityIdentifier("morde.workItems.linkTask.\(item.id)")
+            } else if let task, item.task_ids.contains(task.id) {
+                Text(AppLocalized("Current Task is already linked"))
+                    .font(.caption)
+                    .foregroundStyle(NanoMuseTones.secondaryText)
+                    .accessibilityIdentifier("morde.workItems.linkTask.done.\(item.id)")
+            }
+
+            if canManage && item.state == "open", let task,
+               store.deliveryTargets.contains(where: {
+                   MIFWorkItemPresentation.canRecordDelivery(item: item, taskID: task.id,
+                                                            target: $0, role: role)
+               }) {
+                Menu {
+                    ForEach(store.deliveryTargets.filter {
+                        MIFWorkItemPresentation.canRecordDelivery(item: item, taskID: task.id,
+                                                                  target: $0, role: role)
+                    }) { target in
+                        Button(String(format: AppLocalized("%1$@ · %2$@ v%3$lld"),
+                                      target.hostName, target.workspaceName, target.revision)) {
+                            deliveryConfirmation = MIFWorkItemDeliveryConfirmation(
+                                projectID: projectID, item: item, target: target, taskID: task.id)
+                        }
+                        .accessibilityIdentifier("morde.workItems.delivery.target.\(target.id)")
+                    }
+                } label: {
+                    Label(AppLocalized("Record Workspace version"), systemImage: "checkmark.seal")
+                        .frame(maxWidth: .infinity, minHeight: 42)
+                }
+                .buttonStyle(.bordered)
+                .disabled(store.actionInFlight)
+                .accessibilityIdentifier("morde.workItems.delivery.picker.\(item.id)")
+            }
+
+            if MIFWorkItemPresentation.canBlock(item: item, canManage: canManage) {
+                if blockingItemID == item.id {
+                    TextField(AppLocalized("Reason for blocking"), text: $blockedReason, axis: .vertical)
+                        .lineLimit(2...5)
+                        .textFieldStyle(.roundedBorder)
+                        .focused($isWorkItemInputFocused)
+                        .disabled(store.actionInFlight)
+                        .accessibilityIdentifier("morde.workItems.blockReason.\(item.id)")
+                    Button(AppLocalized("Confirm block")) { block(projectID: projectID, item: item) }
+                        .buttonStyle(.bordered)
+                        .disabled(store.actionInFlight || blockedReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .accessibilityIdentifier("morde.workItems.block.confirm.\(item.id)")
+                } else {
+                    Button(AppLocalized("Mark blocked")) { blockingItemID = item.id }
+                        .buttonStyle(.bordered)
+                        .disabled(store.actionInFlight)
+                        .accessibilityIdentifier("morde.workItems.block.\(item.id)")
+                }
+            } else if MIFWorkItemPresentation.canResume(item: item, canManage: canManage) {
+                Button(AppLocalized("Unblock")) { resume(projectID: projectID, item: item) }
+                    .buttonStyle(.bordered)
+                    .disabled(store.actionInFlight)
+                    .accessibilityIdentifier("morde.workItems.resume.\(item.id)")
+            }
+        }
+        .padding(.horizontal, 22)
+        .padding(.vertical, 13)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("morde.workItems.row.\(item.id)")
+    }
+
+    private func workItemIcon(_ item: MordeProjectWorkItem) -> some View {
+        let isBug = item.category == "bug"
+        let foreground = isBug ? Color.red : Color.primary
+        let background = isBug ? Color.red.opacity(0.1) : NanoMuseTones.fill
+        return Group {
+            if let marker = MIFWorkItemPresentation.categoryMarkerLabel(item.category) {
+                Text(marker).font(.system(size: 15, weight: .bold))
+            } else {
+                Image(systemName: "checklist").font(.system(size: 17, weight: .semibold))
+            }
+        }
+            .foregroundStyle(foreground)
+            .frame(width: 44, height: 44)
+            .background(background, in: Circle())
+            .accessibilityHidden(true)
+    }
+
+    private func createCategoryButton(_ category: String, title: String) -> some View {
+        Button {
+            createCategory = category
+        } label: {
+            Text(title)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(createCategory == category ? NanoMuseTones.onInk : NanoMuseTones.secondaryText)
+                .frame(maxWidth: .infinity, minHeight: 40)
+                .background(createCategory == category ? Color.primary : NanoMuseTones.fill, in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(store.actionInFlight)
+        .accessibilityAddTraits(createCategory == category ? .isSelected : [])
+        .accessibilityIdentifier("morde.workItems.create.category.\(category)")
+    }
+
+    private var selectedConversationTitle: String {
+        guard let selectedID = store.selectedConversationID,
+              let conversation = store.conversations.first(where: { $0.id == selectedID }) else {
+            return AppLocalized("Choose project conversation")
+        }
+        return conversation.title.isEmpty ? AppLocalized("New shared conversation") : conversation.title
+    }
+
+    private var deliveryConfirmationIsPresented: Binding<Bool> {
+        Binding(
+            get: { deliveryConfirmation != nil },
+            set: { if !$0 { deliveryConfirmation = nil } }
+        )
+    }
+
+    private func loadScope(_ scope: String?) async {
+        let generation = UUID()
+        requestGeneration = generation
+        loadedScopeKey = nil
+        localFailure = nil
+        guard store.isSignedIn, let scope else { return }
+        await store.load()
+        guard !Task.isCancelled, requestGeneration == generation, scope == store.scopeKey else { return }
+        loadedScopeKey = scope
+    }
+
+    private func create(projectID: String) {
+        let submittedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let submittedDescription = description
+        let submittedCategory = MIFWorkItemPresentation.categoryForCreation(
+            createCategory, supportsV2: store.supportsWorkItemsV2)
+        let submittedUnassigned = MIFWorkItemPresentation.createsUnassigned(
+            supportsV2: store.supportsWorkItemsV2)
+        guard !submittedTitle.isEmpty else { return }
+        Task {
+            localFailure = nil
+            createFailure = nil
+            guard await store.create(projectID: projectID, title: submittedTitle,
+                                     description: submittedDescription,
+                                     category: submittedCategory,
+                                     unassigned: submittedUnassigned) else {
+                createFailure = store.actionError
+                    ?? AppLocalized("The action did not complete. Check the current state and try again.")
+                return
+            }
+            self.title = ""
+            if description == submittedDescription { description = "" }
+            createFailure = nil
+            isCreatePresented = false
+        }
+    }
+
+    private func presentCreateForm() {
+        createFailure = nil
+        isCreatePresented = true
+    }
+
+    private func block(projectID: String, item: MordeProjectWorkItem) {
+        Task {
+            localFailure = nil
+            guard await store.block(projectID: projectID, item: item, reason: blockedReason) else {
+                showFallbackFailure()
+                return
+            }
+            blockedReason = ""
+            blockingItemID = nil
+        }
+    }
+
+    private func resume(projectID: String, item: MordeProjectWorkItem) {
+        Task {
+            localFailure = nil
+            if !(await store.resume(projectID: projectID, item: item)) { showFallbackFailure() }
+        }
+    }
+
+    private func linkTask(projectID: String, item: MordeProjectWorkItem, taskID: String) async {
+        localFailure = nil
+        if !(await store.linkTask(projectID: projectID, item: item, taskID: taskID)) { showFallbackFailure() }
+    }
+
+    private func claim(projectID: String, item: MordeProjectWorkItem) async {
+        localFailure = nil
+        if !(await store.claim(projectID: projectID, item: item)) { showFallbackFailure() }
+    }
+
+    private func recordDelivery(_ request: MIFWorkItemDeliveryConfirmation) {
+        Task {
+            localFailure = nil
+            guard store.selectedProjectID == request.projectID, store.currentTask?.id == request.taskID else {
+                localFailure = AppLocalized("The project or current Task changed; delivery was not recorded.")
+                deliveryConfirmation = nil
+                return
+            }
+            guard store.deliveryTargets.contains(where: {
+                $0.id == request.target.id && $0.revision == request.target.revision
+            }) else {
+                localFailure = AppLocalized("The Workspace version changed. Select and confirm the current version again.")
+                deliveryConfirmation = nil
+                return
+            }
+            let success = await store.recordDelivery(projectID: request.projectID, item: request.item,
+                                                     target: request.target, taskID: request.taskID)
+            deliveryConfirmation = nil
+            if !success { showFallbackFailure() }
+        }
+    }
+
+    private func showFallbackFailure() {
+        if store.actionError == nil {
+            localFailure = AppLocalized("The action did not complete. Check the current state and try again.")
+        }
+    }
+
+    private func errorCard(_ message: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(AppLocalized("Could not load"), systemImage: "exclamationmark.triangle")
+                .font(.headline)
+                .foregroundStyle(.orange)
+            Text(message)
+                .font(.footnote)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("morde.workItems.loadError.message")
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(NanoMuseTones.surface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(NanoMuseTones.hairline))
+        .padding(.horizontal, 16)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("morde.workItems.loadError")
+    }
+
+    private func inlineMessage(_ message: String, isError: Bool) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: isError ? "exclamationmark.circle" : "checkmark.circle")
+                .foregroundStyle(isError ? Color.orange : NanoMuseTones.action)
+                .accessibilityHidden(true)
+            Text(message)
+                .font(.footnote)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(12)
+        .background(NanoMuseTones.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .padding(.horizontal, 16)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func notice(_ message: String, symbol: String) -> some View {
+        VStack(spacing: 9) {
+            Image(systemName: symbol)
+                .font(.system(size: 29))
+                .foregroundStyle(NanoMuseTones.action)
+                .accessibilityHidden(true)
+            Text(message)
+                .font(.subheadline)
+                .foregroundStyle(NanoMuseTones.secondaryText)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, minHeight: 150)
+        .padding(20)
+        .background(NanoMuseTones.surface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .padding(.horizontal, 16)
+        .accessibilityElement(children: .combine)
+    }
+}

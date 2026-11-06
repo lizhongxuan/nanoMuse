@@ -30,6 +30,10 @@ Python runtime and the web app in an Electron shell of their own (`desktop/app`)
 harness build shipped beside them as *nanoMuse Harness*; from 0.1.30 there is the one
 desktop, and it installs over the old one (same application id).
 
+The separate Morde-only desktop entry uses the same Electron package but loads the Morde
+Portal Assistant and account settings without starting the nanoMuse DSH Host or local Agent;
+see [Morde Desktop](../harness/desktop/MORDE.md) for its login, account and Workspace sync flow.
+
 ## Updating on Windows
 
 The Windows x64 app checks for a newer stable release after starting and every six

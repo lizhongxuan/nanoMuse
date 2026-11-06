@@ -377,7 +377,7 @@ final class NanoMuseFaceStore: ObservableObject {
 /// Otherwise the still, with the small life the Android header gives it: a
 /// slow breath when idle, a quicker bob while working, a tilt while
 /// waiting, a pop when happy and a shake on error. Android: AgentAvatar.kt.
-/// A clip of the person's own (NanoMuseOwnClip, #324) plays instead for every mood.
+/// Reduce Motion uses the still for every face, including the person's own clip.
 struct NanoMuseFaceView: View {
     var mood: NanoMuseMood
     var size: CGFloat
@@ -387,8 +387,7 @@ struct NanoMuseFaceView: View {
     @ObservedObject private var motion = NanoMuseAvatarMotion.shared
     @ObservedObject private var own = NanoMuseOwnClip.shared
     @Environment(\.scenePhase) private var scenePhase
-    /// Reduce Motion on: the still keeps still (no breath, bob, tilt, pop or shake); the mood
-    /// still changes with its crossfade, and a clip the person chose still plays.
+    /// Reduce Motion on: use a still and suppress decorative movement and clip playback.
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var breath = false
     @State private var popped = false
@@ -431,7 +430,7 @@ struct NanoMuseFaceView: View {
             if showsRing {
                 Circle().fill(NanoMuseTones.disc)
             }
-            if let clip {
+            if let clip, !reduceMotion {
                 ZStack {
                     // The still underneath covers the first frames while the player warms up.
                     if let img = still {
@@ -629,6 +628,8 @@ enum NanoMuseTones {
     static let hairline = Color(uiColor: UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.227, green: 0.227, blue: 0.235, alpha: 1) : UIColor(red: 0.898, green: 0.898, blue: 0.918, alpha: 1) })
     static let canvas = Color(uiColor: UIColor { $0.userInterfaceStyle == .dark ? .black : UIColor(red: 0.953, green: 0.953, blue: 0.961, alpha: 1) })
     static let action = Color(red: 0.039, green: 0.4, blue: 0.894)
+    static let actionText = Color(uiColor: UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.49, green: 0.68, blue: 1, alpha: 1) : UIColor(red: 0.039, green: 0.4, blue: 0.894, alpha: 1) })
+    static let secondaryText = Color(uiColor: UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.73, green: 0.73, blue: 0.77, alpha: 1) : UIColor(red: 0.37, green: 0.37, blue: 0.4, alpha: 1) })
     /// The chat's ink (Android's `ChatColors.userBubble` and `sendButton` since #331): your
     /// message pill, the send disc and the scroll-to-latest disc. Black on the white canvas in
     /// light, white on the black canvas in dark; `onInk` is what sits on it, the canvas colour.

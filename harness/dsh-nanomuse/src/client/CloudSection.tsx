@@ -11,6 +11,7 @@ import { AccountPage } from './AccountPage.tsx'
 import { Avatar } from './Avatar.tsx'
 import { settingsBus } from './bus.ts'
 import { useLive, type LiveHub } from './live.ts'
+import { MordeHubCard } from './MordeHubCard.tsx'
 import { DATA_SECTION, DEVICES_PANEL } from './panels.ts'
 import { DataRows } from './Memory.tsx'
 import { NetworkRows } from './Network.tsx'
@@ -201,6 +202,7 @@ export function makeCloudSection(t: Translate, part: 'account' | 'data' = 'accou
       return h('section', { style: { ...column, maxWidth: 560 } },
         header,
         h('div', null, t('signedInAs', { hint: a.hint, channel: t(a.channel === 'phone' ? 'phone' : 'email') }), a.member ? ` · ${t('member')}` : ''),
+        h(MordeHubCard, { t }),
         // The pickers and the "ways on" (C11): the account's models and each own row's in one
         // chooser, the account's row first, then the catalogue grouped for the region.
         h(OwnKeyPanel, { t, onChanged: refreshStatus }),
@@ -230,6 +232,7 @@ export function makeCloudSection(t: Translate, part: 'account' | 'data' = 'accou
     return h('section', { style: { ...column, maxWidth: 560 } },
       header,
       error ? h('div', { style: errorStyle }, error) : null,
+      h(MordeHubCard, { t }),
       h(SignIn, { t, onSignedIn: apply, footer: status ? h('div', { style: muted }, t('relay', { baseURL: status.baseURL })) : null }),
       // Signed out, the own keys are still the person's (C11): the same pickers and rows, so a key
       // can be changed or the ChatGPT sign-in redone without an account.

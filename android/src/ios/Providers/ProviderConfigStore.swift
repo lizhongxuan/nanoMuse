@@ -154,6 +154,12 @@ final class ProviderConfigStore: ObservableObject {
     /// invalidates cached resolveCurrentEntry results.
     @Published var authRevision: UInt = 0
 
+    /// One-time explanation for the legacy provider-key migration. The migration can delete
+    /// synchronizable Keychain items, which may propagate to the person's other Apple devices.
+    @Published private(set) var ownProviderAPIKeyCleanupNoticePending = UserDefaults.standard.bool(
+        forKey: MordeProviderKeyCleanupPlan.noticePendingDefaultsKey
+    )
+
     /// Bumped in `save()` — i.e. on ANY provider/group/member add/update/remove.
     /// An L1 cache key component: any config mutation invalidates cached
     /// resolveCurrentEntry results. [T-new-session-hang-credential-cache]
@@ -197,6 +203,15 @@ final class ProviderConfigStore: ObservableObject {
     /// config is swapped in atomically when it flips back to false. Prevents a
     /// half-migrated state from being read or pushed.
     private(set) var compositeKeyMigrationInFlight = false
+
+    /// Provider config is seeded from JSON before the V3 DB opens. Key cleanup
+    /// waits for the first safe adoption so providers restored from the DB are
+    /// included, while the request also captures legacy migration rows that
+    /// may be added just before an asynchronous DB adoption completes.
+    private var initialAdoptionFinished = false
+    private var initialAdoptionWaiters: [CheckedContinuation<Void, Never>] = []
+    private var ownAPIKeyCleanupRequested = false
+    private var ownAPIKeyCleanupRunning = false
 
     init() {
         let libraryURL = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first!
@@ -249,6 +264,11 @@ final class ProviderConfigStore: ObservableObject {
     /// verbatim from init's completion closure so degraded-load recovery can
     /// re-run the same adoption after protected data becomes available.
     private func adoptDB(_ db: ProviderConfigDB?) async {
+                defer {
+                    if self.loadDegradation == .none {
+                        self.finishInitialAdoption()
+                    }
+                }
                 self.db = db
                 guard let db else { return }
                 // [T-thinking-rules-phase2] Prime the synchronous thinking-rule cache the
@@ -296,6 +316,9 @@ final class ProviderConfigStore: ObservableObject {
                 let (deduped, prunedAtLoad) = Self.dedupeEntriesByModel(fresh)
                 self.config = deduped
                 self.lastSavedSnapshot = deduped
+                // A non-empty V3 DB is a safe authoritative source even when
+                // the JSON mirror is still protected until first unlock.
+                self.finishInitialAdoption()
                 // [T-provider-entry-composite-key] Build the legacyUuid map from
                 // the local entries (each entry's random uuid → its composite
                 // key), then normalize any group/binding/agent-loop reference
@@ -374,6 +397,154 @@ final class ProviderConfigStore: ObservableObject {
     private var loadDegradation: ConfigLoadDegradation = .none
     private var degradedRecoveryObservers: [NSObjectProtocol] = []
 
+    private func finishInitialAdoption() {
+        guard !initialAdoptionFinished else { return }
+        initialAdoptionFinished = true
+        let waiters = initialAdoptionWaiters
+        initialAdoptionWaiters.removeAll()
+        for waiter in waiters { waiter.resume() }
+    }
+
+    private func waitForInitialAdoption() async {
+        guard !initialAdoptionFinished else { return }
+        await withCheckedContinuation { continuation in
+            if initialAdoptionFinished {
+                continuation.resume()
+            } else {
+                initialAdoptionWaiters.append(continuation)
+            }
+        }
+    }
+
+    /// Queue the one-time, provider-owned API-key purge after legacy provider
+    /// migration has finished and the authoritative local provider config is
+    /// available. The ledger stores IDs and fixed service names only.
+    func cleanupOwnProviderAPIKeysAfterMigration() {
+        guard !ownAPIKeyCleanupRequested else { return }
+        ownAPIKeyCleanupRequested = true
+        let migratedDescriptors = cleanupDescriptors(config.instances)
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.waitForInitialAdoption()
+            self.performOwnProviderAPIKeyCleanup(seedDescriptors: migratedDescriptors)
+        }
+    }
+
+    func acknowledgeOwnProviderAPIKeyCleanupNotice() {
+        UserDefaults.standard.set(false, forKey: MordeProviderKeyCleanupPlan.noticePendingDefaultsKey)
+        ownProviderAPIKeyCleanupNoticePending = false
+    }
+
+    private func performOwnProviderAPIKeyCleanup(seedDescriptors: [MordeProviderKeyCleanupDescriptor]) {
+        guard !ownAPIKeyCleanupRunning else { return }
+        ownAPIKeyCleanupRunning = true
+        defer { ownAPIKeyCleanupRunning = false }
+
+        let defaults = UserDefaults.standard
+        let previous: MordeProviderKeyCleanupLedger?
+        if let data = defaults.data(forKey: MordeProviderKeyCleanupPlan.defaultsKey) {
+            guard let decoded = try? JSONDecoder().decode(MordeProviderKeyCleanupLedger.self, from: data),
+                  decoded.version == MordeProviderKeyCleanupPlan.version else {
+                logger.error("[ProviderKeyCleanup] existing cleanup ledger is unreadable or has an unsupported version; leaving credentials untouched")
+                return
+            }
+            previous = decoded
+            if decoded.status == .complete {
+                // Older builds may already have completed this migration without showing its
+                // sync impact, so surface the notice once when upgrading to this build.
+                let noticeValue = defaults.object(forKey: MordeProviderKeyCleanupPlan.noticePendingDefaultsKey) as? Bool
+                if MordeProviderKeyCleanupPlan.shouldShowNotice(storedValue: noticeValue, cleanupComplete: true) {
+                    setOwnProviderAPIKeyCleanupNoticePending(defaults)
+                }
+                return
+            }
+        } else {
+            previous = nil
+        }
+
+        let descriptors = seedDescriptors + cleanupDescriptors(config.instances)
+        let candidateIDs = MordeProviderKeyCleanupPlan.candidateInstanceIDs(from: descriptors)
+        let reviewIDs = MordeProviderKeyCleanupPlan.reviewRequiredInstanceIDs(from: descriptors)
+        let pending = MordeProviderKeyCleanupPlan.begin(
+            previous: previous,
+            candidateInstanceIDs: candidateIDs,
+            reviewRequiredInstanceIDs: reviewIDs,
+            preservedInstanceIDs: nanoMuseCloudInstanceIDsForProviderKeyCleanup()
+        )
+        guard persistOwnAPIKeyCleanupLedger(pending) else { return }
+        setOwnProviderAPIKeyCleanupNoticePending(defaults)
+
+        var failedInstanceIDs: [String] = []
+        var failedLegacyServices: [String] = []
+        var failureStatuses: [Int32] = []
+        for instanceID in pending.pendingInstanceIDs {
+            let outcome = ProviderKeychainHelper.deleteAPIKey(instanceId: instanceID, caller: "morde-one-time-cleanup")
+            if !outcome.isComplete {
+                failedInstanceIDs.append(instanceID)
+                failureStatuses.append(contentsOf: outcome.failedStatuses)
+            }
+        }
+        for service in pending.pendingLegacyServices {
+            let outcome = ProviderKeychainHelper.deleteLegacyAPIKey(service: service, caller: "morde-one-time-cleanup")
+            if !outcome.isComplete {
+                failedLegacyServices.append(service)
+                failureStatuses.append(contentsOf: outcome.failedStatuses)
+            }
+        }
+
+        let result = MordeProviderKeyCleanupPlan.finish(
+            pending,
+            failedInstanceIDs: failedInstanceIDs,
+            failedLegacyServices: failedLegacyServices
+        )
+        guard persistOwnAPIKeyCleanupLedger(result) else { return }
+        if result.status == .complete {
+            if result.reviewRequiredInstanceIDs.isEmpty {
+                logger.info("[ProviderKeyCleanup] one-time cleanup completed (instances=\(candidateIDs.count), legacyServices=\(MordeProviderKeyCleanupPlan.legacyKeychainServices.count))")
+            } else {
+                logger.error("[ProviderKeyCleanup] cleanup completed for known providers; unsupported provider rows require review (count=\(result.reviewRequiredInstanceIDs.count))")
+            }
+        } else {
+            logger.error("[ProviderKeyCleanup] deletion remains retryable (failedTargets=\(failedInstanceIDs.count + failedLegacyServices.count), statuses=\(failureStatuses))")
+        }
+    }
+
+    private func cleanupDescriptors(_ instances: [ProviderInstance]) -> [MordeProviderKeyCleanupDescriptor] {
+        instances.map {
+            MordeProviderKeyCleanupDescriptor(
+                instanceID: $0.id,
+                providerType: $0.providerType.rawValue,
+                credentialType: $0.credentialType.rawValue
+            )
+        }
+    }
+
+    private func nanoMuseCloudInstanceIDsForProviderKeyCleanup() -> Set<String> {
+        // nanoMuse: Preserve the relay API key even when its instance has not been adopted into the config yet.
+        var ids = Set<String>()
+        if let persistedID = UserDefaults.standard.string(forKey: "nanomuse.cloud.instance_id"), !persistedID.isEmpty {
+            ids.insert(persistedID)
+        }
+        if let configuredID = NanoMuseCloud.instance?.id {
+            ids.insert(configuredID)
+        }
+        return ids
+    }
+
+    private func persistOwnAPIKeyCleanupLedger(_ ledger: MordeProviderKeyCleanupLedger) -> Bool {
+        guard let data = try? JSONEncoder().encode(ledger) else {
+            logger.error("[ProviderKeyCleanup] could not encode cleanup ledger; leaving credentials untouched")
+            return false
+        }
+        UserDefaults.standard.set(data, forKey: MordeProviderKeyCleanupPlan.defaultsKey)
+        return true
+    }
+
+    private func setOwnProviderAPIKeyCleanupNoticePending(_ defaults: UserDefaults) {
+        defaults.set(true, forKey: MordeProviderKeyCleanupPlan.noticePendingDefaultsKey)
+        ownProviderAPIKeyCleanupNoticePending = true
+    }
+
     /// Load wrapper distinguishing "no file" (fresh install → empty is correct)
     /// from "file present but unreadable/undecodable" (must NOT clobber disk).
     private static func loadGuarded(from url: URL) -> (config: ProviderConfig, degradation: ConfigLoadDegradation) {
@@ -450,6 +621,7 @@ final class ProviderConfigStore: ObservableObject {
         self.fileURL = fileURL
         self.config = Self.load(from: fileURL)
         self.lastSavedSnapshot = self.config
+        self.initialAdoptionFinished = true
         // Tests don't open the DB by default.
     }
 
@@ -2621,6 +2793,10 @@ final class ProviderConfigStore: ObservableObject {
 
     /// Fetch the model list from a provider's API for the given instance.
     static func fetchModelsForInstance(_ instance: ProviderInstance, forceRefresh: Bool = false) async throws -> [LLMModel] {
+        // nanoMuse: Morde model discovery uses the service API, not a legacy provider request.
+        guard MordeLocalExecutionPolicy.isEnabled else {
+            throw MordeLocalExecutionDisabledError()
+        }
         let customBase = instance.effectiveCustomBaseURL
         let appendV1 = instance.appendV1Suffix
         // Custom UA only for custom-base OpenAI/Anthropic-compat instances (proxy/relay);
@@ -3100,22 +3276,47 @@ enum ProviderKeychainHelper {
         return s
     }
 
-    static func deleteAPIKey(instanceId: String, caller: String = #function) {
+    @discardableResult
+    static func deleteAPIKey(instanceId: String, caller: String = #function) -> MordeAPIKeyDeletionOutcome {
         let service = "io.github.nanomuse.app.provider.\(instanceId)"
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
         ]
-        let s1 = SecItemDelete(query as CFDictionary)
-        var syncQuery = query
-        syncQuery[kSecAttrSynchronizable as String] = true
-        let s2 = SecItemDelete(syncQuery as CFDictionary)
-        // Clear the LWW stamp so any subsequent import (e.g. rebinding from another
-        // device) isn't blocked by a stale "local is newer" comparison.
-        UserDefaults.standard.removeObject(forKey: apiKeySavedAtUDKey(instanceId: instanceId))
-        AppLogger(category: "Keychain").info("delete apiKey instanceId=\(instanceId.prefix(8)) legacyStatus=\(s1) syncStatus=\(s2) caller=\(caller)")
+        let outcome = MordeProviderKeyCleanupPlan.deleteVariants(
+            baseQuery: query,
+            synchronizableAttribute: kSecAttrSynchronizable as String
+        ) { SecItemDelete($0 as CFDictionary) }
+        if outcome.isComplete {
+            // Clear the LWW stamp only after both variants are confirmed absent. A partial
+            // failure must remain visible and retryable instead of looking like a completed purge.
+            UserDefaults.standard.removeObject(forKey: apiKeySavedAtUDKey(instanceId: instanceId))
+        }
+        AppLogger(category: "Keychain").info("delete apiKey instanceId=\(instanceId.prefix(8)) legacyStatus=\(outcome.legacyStatus) syncStatus=\(outcome.synchronizableStatus) caller=\(caller)")
         notifyAuthChanged(instanceId: instanceId)
+        return outcome
+    }
+
+    /// Remove only the three fixed singleton API-key services used by the
+    /// original provider migration. Arbitrary legacy Keychain services are
+    /// never enumerated or accepted here.
+    @discardableResult
+    static func deleteLegacyAPIKey(service: String, caller: String = #function) -> MordeAPIKeyDeletionOutcome {
+        guard MordeProviderKeyCleanupPlan.legacyKeychainServices.contains(service) else {
+            return MordeAPIKeyDeletionOutcome(legacyStatus: Int32(errSecParam), synchronizableStatus: Int32(errSecParam))
+        }
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+        ]
+        let outcome = MordeProviderKeyCleanupPlan.deleteVariants(
+            baseQuery: query,
+            synchronizableAttribute: kSecAttrSynchronizable as String
+        ) { SecItemDelete($0 as CFDictionary) }
+        AppLogger(category: "Keychain").info("delete legacy provider apiKey legacyStatus=\(outcome.legacyStatus) syncStatus=\(outcome.synchronizableStatus) caller=\(caller)")
+        return outcome
     }
 
     // MARK: - OAuth Token (per-instance)
@@ -3174,10 +3375,11 @@ enum ProviderKeychainHelper {
         return result as? Data
     }
 
-    static func saveOAuthToken<T: Codable>(_ token: T, instanceId: String, caller: String = #function) {
+    @discardableResult
+    static func saveOAuthToken<T: Codable>(_ token: T, instanceId: String, caller: String = #function) -> Bool {
         guard let data = try? JSONEncoder().encode(token) else {
             AppLogger(category: "Keychain").warning("write oauthToken instanceId=\(instanceId.prefix(8)) ENCODE FAILED caller=\(caller)")
-            return
+            return false
         }
         let service = "io.github.nanomuse.app.provider.\(instanceId)"
         let acct = "oauth-token"
@@ -3197,6 +3399,7 @@ enum ProviderKeychainHelper {
         let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
         AppLogger(category: "Keychain").info("write oauthToken instanceId=\(instanceId.prefix(8)) blobLen=\(data.count) addStatus=\(addStatus) caller=\(caller)")
         notifyAuthChanged(instanceId: instanceId)
+        return addStatus == errSecSuccess
     }
 
     static func loadOAuthToken<T: Codable>(instanceId: String, as type: T.Type, caller: String = #function) -> T? {
@@ -3254,7 +3457,8 @@ enum ProviderKeychainHelper {
 
     // MARK: - OAuth Strings (per-instance, e.g. email, project ID)
 
-    static func saveOAuthString(_ value: String, instanceId: String, account: String, caller: String = #function) {
+    @discardableResult
+    static func saveOAuthString(_ value: String, instanceId: String, account: String, caller: String = #function) -> Bool {
         let service = "io.github.nanomuse.app.provider.\(instanceId)"
         let deleteQuery: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -3272,6 +3476,7 @@ enum ProviderKeychainHelper {
         let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
         AppLogger(category: "Keychain").info("write oauthString instanceId=\(instanceId.prefix(8)) acct=\(account) valLen=\(value.count) addStatus=\(addStatus) caller=\(caller)")
         notifyAuthChanged(instanceId: instanceId)
+        return addStatus == errSecSuccess
     }
 
     static func loadOAuthString(instanceId: String, account: String, caller: String = #function) -> String? {

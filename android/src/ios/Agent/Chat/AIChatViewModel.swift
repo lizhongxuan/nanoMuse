@@ -14,6 +14,12 @@ private let logger = AppLogger(category: "AIChatVM")
 @MainActor
 final class AIChatViewModel: ObservableObject, SpeechControlling {
 
+    /// Generic tool outcome shared by memory tools after local file tools are removed.
+    struct FileToolResult {
+        let output: String
+        let success: Bool
+    }
+
     /// Maximum characters returned in a single tool result to the model
     static let kMaxToolResultChars = 15000
 
@@ -75,6 +81,10 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
     /// user turn. Beyond this the loop stops as exhausted rather than
     /// compacting endlessly (which would defeat the maxAgentTurns backstop).
     static let maxInLoopCompactions = 3
+
+    // nanoMuse: Memory files now live in the app-group store; this legacy hook only
+    // registered writes in the iSH fakefs database and intentionally does nothing.
+    func ensureFakefsMetadata(for linuxPath: String, isDirectory: Bool) {}
 
     /// [StreamDiag] (#181) Monotonic counter tagging each outbound streaming
     /// request so the stall watchdog's log line can be correlated with the
@@ -841,19 +851,6 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
     /// isNearBottom): once the user has walked all the way up, the up-button
     /// hides. Updated by CollectionViewMessageList on scroll/jump.
     @Published var isAtFirstTurn: Bool = false
-
-    /// [ScrollDiag] View-layer record of a scroll-jump button's actual SwiftUI
-    /// mount/unmount, so a ring dump (debug.scrollMetrics) can be diffed against
-    /// the VM-side buttonsVisible. `up` picks which button; `visible` is true on
-    /// appear, false on disappear. DEBUG-only; compiled out in Release.
-    func recordScrollButtonRender(up: Bool, visible: Bool) {
-        #if DEBUG
-        ScrollMetricsRecorder.shared.record(
-            kind: "btnRender",
-            a: visible ? 1 : 0,
-            pos: "\(up ? "up" : "down")-\(visible ? "appear" : "disappear") vmNearBottom=\(isNearBottom)")
-        #endif
-    }
 
     // Note: Stream throttle timestamps (lastTextDeltaFlush, lastFileWriteStreamUpdate,
     // lastToolInputStreamUpdate) are now local vars inside processStreamEvents().
@@ -1827,172 +1824,30 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
             + "You have \(ProviderConfigStore.shared.resolvedAgentLoopEntries.count) model(s) available. "
     }
 
+    // nanoMuse: Keep the local Agent prompt aligned with tools that remain registered.
     private var baseSystemPrompt: String {
-        // [T-soul-md] Layer 1 is rendered by SystemPromptBuilder, which
-        // owns the "You are <name>, a capable AI assistant running on an
-        // iOS device ..." identity sentence (parametric on SOUL.md's
-        // `name` field) and optionally appends a clearly-labeled
-        // Personality section from SOUL.md's body. The original wording
-        // is preserved inside SystemPromptBuilder.identityTemplate so we
-        // don't regress model behavior that depended on it.
         SystemPromptBuilder.identitySection()
-            + "You should proactively use shell commands to accomplish the user's tasks — installing packages (apk add), "
-            + "writing and running scripts, managing files, networking, and any other operations a Linux terminal can perform.\n\n"
             + "Available tools:\n"
-            + "- shell_execute: Run any shell command. Each invocation is an isolated process with stdout/stderr captured. "
-            + "Prefer this for most tasks — it is a real Linux environment with persistent filesystem. "
-            + "Common tools (python3, pip, curl, wget, git, ssh, etc.) can be installed via apk add; Python packages via pip install. "
-            + "Use `which <cmd>` to check if a tool is already installed before running apk add — many packages persist across sessions. "
-            + "When you need to wait before checking results (e.g. polling, waiting for a process), use the `delay` parameter instead of `sleep` in the command — "
-            + "delay blocks the agent flow without occupying the iSH shell, so other concurrent tasks can use it during the wait. This avoids resource contention. "
-            // [T-agent-prompt-no-phantom-checkins] Device log 2026-07-17: the agent
-            // promised "I'll check every 1-2 minutes" after dispatching a long task,
-            // then went silent — it assumed some scheduler would wake it. Recurred
-            // 2026-07-20 in a variant the old wording didn't name: one status check,
-            // then "let's keep waiting" and the turn ended. Rewritten borrowing
-            // Hermes Agent's execution-discipline phrasing (act immediately instead
-            // of describing intentions / keep working until complete / never end a
-            // turn with a promise of future action), plus an HONEST off-ramp —
-            // Minis has no in-app scheduler (see 'Scheduled tasks'), so the only
-            // truthful alternatives are poll-now or tell-the-user-nothing-runs.
-            + "Execution discipline for long-running or dispatched work: make tool calls immediately instead of describing intentions, and keep working until the task is complete. "
-            + "Without a scheduler or timed-callback tool, `delay` is your ONLY wait mechanism within a turn — to follow up on something still running, chain delay-then-check calls at a task-appropriate interval until you have the result or hit a sensible retry cap. "
-            + "NEVER end a turn with a promise of future action: 'I'll keep monitoring', 'will sync the result later', and ending right after a single still-running status check with 'let's keep waiting' are all the same violation — once your turn ends, NOTHING runs until the user's next message. "
-            + "If polling to completion is genuinely not worth blocking the turn, close honestly instead: state that the task keeps running in the background, that you will only learn its outcome when the user next messages (or they ask you to check), and — if it must fire on a schedule beyond this conversation — point them to an Apple Shortcuts automation per 'Scheduled tasks' later in this prompt.\n"
-            + "- file_read: Read file contents (faster than cat).\n"
-            + "- file_write: Create new files or overwrite existing files (faster than echo/tee).\n"
-            + "- file_edit: Edit existing files with exact string replacement (old_string → new_string). Preferred over file_write for modifications — always file_read first.\n"
-            + "- browser_use: Web browsing (navigate, screenshot, click, type, get_text, scroll, scroll_and_collect, get_readable, get_backbone, fetch, etc.). "
-            + "Starts with a desktop Safari user agent. Use screenshot to see the page.\n"
-            + "- memory_write: Save a memory entry to today's daily log (YYYY-MM-DD.md). Use proactively to note user preferences, project patterns, and important context.\n"
-            + "- memory_get: Recall memories with keyword search. Check memory at the start of new topics to leverage past knowledge.\n\n"
-            + "Shared directory /var/minis/ (bidirectional read/write between shell and app):\n"
-            + "  /var/minis/attachments/ — Media files (images, audio, video). Display inline with ![desc](minis://attachments/filename).\n"
-            + "  /var/minis/workspace/   — Working files (scripts, data, configs). Link with [name](minis://workspace/filename).\n"
-            + "  /var/minis/offloads/    — Auto-saved large outputs. Read with file_read.\n"
-            + "  /var/minis/browser/     — Browser screenshots and extracts.\n"
-            + "  /var/minis/shared/      — Cross-session shared storage for artifacts and documents. Organize by project or topic (e.g. shared/myproject/, shared/datasets/). Do NOT store temporary files here.\n"
-            + "  /var/minis/memory/GLOBAL.md    — Persistent global memory (read-only, user-maintained via Settings).\n"
-            + "  /var/minis/memory/YYYY-MM-DD.md — Daily memory log.\n"
-            + "  /var/minis/mounts/<name>/ — User-mounted external folders from iOS Files (e.g. an Obsidian vault, Downloads, another app's iCloud container). Presence and names vary per user. Check this directory first when the task references external/user files. Some mounts may be read-only; write tools will reject writes with a clear error.\n\n"
-            + "The minis:// URL scheme:\n"
-            + "  minis://attachments/file.png  →  /var/minis/attachments/file.png\n"
-            + "  minis://workspace/data.csv    →  /var/minis/workspace/data.csv\n"
-            + "  minis://shared/project/f.txt  →  /var/minis/shared/project/f.txt\n\n"
-            + "IMPORTANT: minis:// URLs are app-internal — they are NOT web URLs. Do NOT pass minis:// action URLs (open_terminal, views, settings) to browser_use — those are app deep links, use Markdown links in chat instead. "
-            + "However, minis:// resource URLs CAN be opened in browser_use with navigate. All directories under /var/minis/ are accessible: workspace, attachments, offloads, shared, etc. "
-            + "The built-in browser fully supports minis:// — HTML pages and all sub-resources (JS, CSS, images, fonts, etc.) referenced via minis:// absolute URLs or relative paths resolve correctly within the current session. "
-            + "When building multi-file web projects, use file_write to create files in the same directory (e.g. /var/minis/workspace/myapp/), "
-            + "then reference sub-resources with relative paths in HTML (e.g. <link href=\"style.css\">, <script src=\"app.js\">, <img src=\"logo.png\">). "
-            + "The browser resolves relative paths against the minis:// base URL automatically. "
-            + "Cross-directory references also work with absolute minis:// URLs (e.g. <img src=\"minis://attachments/photo.png\"> from a workspace HTML page). "
-            + "Navigate to the entry HTML to preview, e.g. minis://workspace/myapp/index.html.\n"
-            + "To display a minis:// URL in chat, write it as a Markdown link or image (e.g. [name](minis://...)) — the app handles it when the user taps it.\n"
-            + "IMPORTANT: minis:// URLs MUST be percent-encoded. Non-ASCII characters (Chinese, emoji, spaces, etc.) in filenames will break Markdown rendering if not encoded. "
-            + "Use the minis_url from tool results directly — it is already encoded. "
-            + "If you construct a minis:// URL manually, percent-encode the filename (e.g. %E4%B8%AD%E6%96%87 for non-ASCII characters).\n"
-            + "When you write files to /var/minis/, the tool result includes a minis_url you can embed directly in Markdown.\n"
-            + "Supported inline types: images (.png/.jpg/.gif/.webp), audio (.mp3/.m4a/.wav), video (.mp4/.mov/.m4v).\n"
-            + "Audio auto-play: append ?auto_play=true to an audio minis:// URL to auto-play when rendered (e.g. ![audio](minis://attachments/song.mp3?auto_play=true)). Use sparingly — only when the user explicitly asks to hear audio immediately.\n"
-            + "For non-media files, use Markdown links: [filename](minis://workspace/filename).\n"
-            + "Tappable link previews: text/code (.py/.json/.md/etc), images, audio, video, HTML, and PDF files open native previews when the user taps a [name](minis://...) link.\n"
-            + "Use Markdown links for all minis:// files — the user can tap to preview them directly in chat.\n\n"
-            + "File creation guidelines:\n"
-            + "- Use file_write to CREATE new files. Use file_edit to MODIFY existing files. "
-            + "For writing file CONTENTS, prefer file_write over echo/printf or heredocs — it is atomic and avoids all shell-quoting pitfalls. "
-            + "Heredocs (cat << EOF, python3 << 'EOF') work reliably, including when the command ends right at the terminator. "
-            + "When you hit escaping or parsing errors with long inline content, write the content to a file first (file_write), then pass or execute the file (e.g. `python3 /tmp/script.py`).\n"
-            + "- file_write and file_edit are atomic, preserve formatting, and make it easy to fix errors or update content later.\n"
-            + "- shell_execute is for RUNNING commands, not for writing files.\n"
-            + "- shell_execute supports multi-line commands directly — quoting and special characters are handled automatically. "
-            + "However, commands MUST NOT exceed 1000 characters. If longer, write a script file with file_write first, then run it.\n"
-            + "- The default shell is BusyBox ash. `**` recursive glob (globstar) is not supported — use `find <dir> -name '*.ext'` for recursive search, piped to `xargs` for tools like `wc`. "
-            + "You do NOT need to hand-rewrite bash-specific syntax to POSIX: when a command uses bashisms (arrays arr=(...)/${arr[@]}, [[ ]], (( )), brace ranges {1..9}, process substitution, etc.), nanoMuse automatically installs and runs it under bash. Write the script naturally in whichever shell dialect is clearest; only globstar has no automatic fallback.\n"
-            + "- Python packages: many PyPI packages (numpy, pandas, scipy, pillow, etc.) lack musllinux_aarch64 wheels and will fail to build from source. "
-            + "Use Alpine's native packages instead: `apk search py3-<name>` then `apk add py3-numpy py3-pandas py3-matplotlib py3-pillow py3-scipy py3-requests`. "
-            + "Only fall back to `pip install` for pure-Python packages not available via apk. "
-            + "For matplotlib, always set `matplotlib.use('Agg')` before importing pyplot — there is no display server in iSH.\n"
-            + "- Background services: each shell_execute runs in an isolated process. "
-            + "When starting a background server (e.g. `python3 -m http.server &`), you MUST redirect stdout/stderr to avoid SIGPIPE when the shell exits: "
-            + "`python3 -m http.server 8765 > /dev/null 2>&1 &`. "
-            + "Without redirection the server dies silently after the command finishes.\n"
-            + "- File search: when looking for user files, do NOT scan the whole filesystem. Search under /var/minis/ first (workspace/attachments/shared for the current session, mounts/* for user-provided external folders). Only widen the scope if the file is clearly not under /var/minis/.\n\n"
+            + "- browser_use: Browse web pages and supported minis:// resource URLs. Use screenshot to inspect the current page and Markdown resource links when the user should open a file preview.\n"
+            + "- memory_write: Save concise, reusable notes to today's daily log when useful.\n"
+            + "- memory_get: Search prior notes when they may help with the current task.\n"
+            + "- read_image may appear when image analysis is available; use it to inspect an image by path.\n\n"
+            + "Minis resource links:\n"
+            + "- Resource URLs such as minis://attachments/photo.png and minis://workspace/report.html can be opened by browser_use and previewed in chat.\n"
+            + "- The built-in browser resolves relative HTML resources within a minis:// page. Use Markdown links or images when the user should open a resource.\n"
+            + "- minis:// action URLs (for example settings or views) are app links, not browser pages; present them as Markdown links so the app can handle them.\n"
+            + "- Percent-encode non-ASCII characters and spaces in manually constructed minis:// resource URLs. Prefer a URL already returned by a tool when available.\n\n"
             + "Tool call style:\n"
-            + "- Default: do not narrate routine, low-risk tool calls — just call the tool directly.\n"
-            + "- Narrate only when it helps: multi-step work, complex problems, sensitive actions, or when the user explicitly asks.\n"
-            + "- Keep narration brief and value-dense; avoid repeating obvious steps.\n"
-            + "- When a tool exists for an action, use it directly instead of explaining what you plan to do or asking the user to confirm.\n"
-            + "- Use reasonable defaults and contextual inference to fill in missing details (e.g. 'tonight' means today, 'remind me' implies creating a reminder immediately). Only ask for clarification when genuinely ambiguous.\n\n"
+            + "- Do not narrate routine, low-risk tool calls. Narrate briefly for multi-step work, complex problems, sensitive actions, or when asked.\n"
+            + "- Use available tools directly when they support the requested action. Ask only when a material detail is genuinely ambiguous.\n\n"
             + "Tone and style:\n"
-            + "- Reply in the language that best matches the user's input. Only switch languages when the user explicitly asks.\n"
-            + "- Be concise. Prefer action over explanation — when the user asks for something that can be done via shell, do it directly.\n\n"
-            + "Native Apple framework tools:\n"
-            + "CLI tools at /usr/local/bin with the apple- prefix give you access to iOS frameworks (alarm, bluetooth, calendar, clipboard, device, healthkit, homekit, location, maps, media, nfc, nlp, notification, open, photos, player, reminders, speak, speech, vision, weather). "
-            + "All output JSON (--compact to minify, -q for data-only). Run any tool with --help for full usage. "
-            + "apple-maps supports search (find nearby POIs), route (directions), and eta (travel time). "
-            + "apple-open <url> opens a URL via the system handler. Use shell_execute to run `apple-open <url>` when you want to open something immediately. To offer a tappable link instead, write a standard Markdown link with the URL directly (e.g. [Open in Maps](maps://?daddr=lat,lon)) — the app handles system URL schemes like maps://, tel:, https:// natively. "
-            + "apple-player play <file> opens a native audio/video player and returns a session_id; use pause/resume/seek/status/stop to control playback. "
-            + "apple-healthkit covers the full HealthKit catalog — 100+ quantity types (body, vitals, cardio fitness, mobility, sleep, audio exposure, nutrition, ...), 60+ category types (symptoms, reproductive, sleep, cardio events), characteristics (sex, DOB, blood type), and special samples (workouts, ECG, audiogram, vision-rx, GAD-7/PHQ-9, state-of-mind). Run `apple-healthkit types` to discover every supported metric with one-line descriptions, then use `apple-healthkit batch --types t1,t2,... --days N` to fetch MULTIPLE metrics in a single call (one authorization prompt, one envelope). Prefer batch over multiple per-metric calls. Use `log --type ... --value ...` to write samples.\n"
-            + "apple-homekit controls HomeKit smart home devices. Use progressive disclosure: list (compact overview) → search --query/--type/--room (filter) → get --name (full detail with characteristics). set --name --characteristic --value to control devices. scenes lists scenes, trigger --name executes one.\n"
-            + "apple-alarm sets alarms and timers via AlarmKit (iOS 26+). Alarms can only be viewed in the nanoMuse home screen (alarm icon in the top-right toolbar) or by opening minis://views/alarm. "
-            + "After setting an alarm, tell the user it is visible on the nanoMuse home screen and they can tap the alarm icon or open minis://views/alarm to manage it.\n"
-            + "apple-vision provides image analysis via the Vision framework. Subcommands: ocr (text recognition, --lang, --level fast/accurate), barcode (QR/barcode detection), classify (image classification), detect (rectangle detection), faces (face detection), analyze (combined ocr+classify+barcode+faces), "
-            + "similarity <img1> <img2> [img3...] (feature-print based image similarity comparison with --threshold 0.0-1.0, returns pairwise distance/similarity scores and duplicate groups), "
-            + "overlap <img1> <img2> [img3...] (detect vertical overlapping regions between consecutive image pairs — uses anchor row scan + multi-row verification to find exact stitch points; returns overlap_px, confidence, and region coordinates). Both similarity and overlap accept --threshold 0.0-1.0 (default 0.9). overlap also accepts --skip-top <px> and --skip-bottom <px> to exclude fixed UI (status bar, tab bar) that would cause false matches.\n"
-            + "minis-open <url-or-path>: Opens a resource inside nanoMuse without leaving the chat. Accepts http/https URLs (→ built-in WebKit preview) and chat-resource file paths under /var/minis/** (→ built-in file preview, routed by extension: images to the image viewer, .md to markdown preview, .html to HTML preview, .pdf/office docs to QuickLook, audio/video to the media player, else share sheet). Examples: `minis-open https://example.com`, `minis-open /var/minis/workspace/report.md`, `minis-open /var/minis/attachments/chart.png`. Prefer this over `apple-open` for anything that can be previewed in-app so the user doesn't lose conversation context. Use `apple-open` for non-web schemes (tel:, mailto:, maps://, settings, etc.) or when the user explicitly wants the system handler.\n"
-            + "minis-sessions-cli: Manage chat sessions. `list` recent or by date range, `search --keywords` cross-session, `messages --id` to read, `send` to create/continue a session, `retry` to re-run, `status` to check, `open` to navigate the app UI. Run --help for full options.\n"
-            + "minis-model-use: Invoke other LLM models pre-configured by the user. "
-            + "Use `minis-model-use list` to see them (includes each model's modality capabilities like image_output, audio_output, etc.), "
-            + "`search <query>` to filter by name/provider. "
-            + "`run --model <id_or_name>` sends an OpenAI Chat Completions request; pass input via --input <json_file> or stdin, "
-            + "output goes to stdout or --output <path>. "
-            // [T-agent-prompt-consistency-pass] Synced with the passthrough-era CLI
-            // (T-model-use-passthrough-mode): the old unconditional "Never hand-write
-            // provider-native bodies" predated extra_body/--endpoint/passthrough and
-            // blocked the model from ever discovering them via --help.
-            + "The input JSON is OpenAI Chat Completions shape — a `messages` array — as the PRIMARY input for every model and modality; standard params are auto-converted to the underlying provider, so do not hand-write provider-native bodies as the primary input. "
-            + "For provider-specific extras the standard schema doesn't model (web-search plugins, image-to-image fields, TTS/video or other custom endpoints), escape hatches exist for OpenAI-compatible providers (they error or are ignored on Anthropic/Gemini models): `extra_body` (object merged verbatim into the request body), `--endpoint <kind|/custom/path>`, and a top-level `passthrough` envelope for fully verbatim requests with RAW (unparsed) responses. "
-            + "Results may carry `warnings` (fields that were ignored/downgraded and why) and `applied_extras` (which extras actually took effect) — read them to self-correct. Run --help for the full contract before using these. "
-            + "Models may support multimodal output (image generation, TTS/audio, video) — check the modalities field in list output. "
-            + "For image_output models, put the prompt in the user message and image params under `generation_config`: OpenAI image models use `generation_config.{n,size,quality}`, Gemini image models use `generation_config.{aspect_ratio,image_size,number_of_images,person_generation}`. "
-            + "Example: {\"messages\":[{\"role\":\"user\",\"content\":\"<prompt>\"}],\"generation_config\":{\"size\":\"1024x1024\",\"n\":1}}. "
-            + "IMPORTANT: image generation is SLOW (typically 1-5 min) — a single long blocking call with a large timeout (e.g. timeout: 600) is correct here (one render, one wait); use `delay` chains only when repeatedly CHECKING on something, not for one slow command. "
-            + "Run with --help for full usage.\n"
-            + "minis-browser-use: CLI wrapper around the in-app browser_use tool — accepts the exact same actions and parameters as the browser_use tool call, just exposed as `<action> --flag value` pairs (or `--json '<obj>'`). "
-            + "Run `minis-browser-use` with no arguments (or --help) for the full action list. "
-            + "Example: `minis-browser-use navigate --url https://example.com`. "
-            + "Prefer this over the browser_use tool call when you need multi-step or batch browser flows: write a bash script that chains multiple minis-browser-use invocations (scrape N pages in a loop, click-through forms, navigate→extract→navigate pipelines) and run it with shell_execute. "
-            + "Output is JSON, same shape as the tool call result.\n"
-            + "Interactive terminal: minis://open_terminal opens a terminal for tasks that require interactive stdin (passwords, ssh, TUI apps like htop/vi). "
-            + "Write it as a Markdown link in your response — the app opens it when tapped. "
-            + "The optional init_command parameter pre-fills (NOT executes) a command; it MUST be fully percent-encoded (spaces → %20, & → %26, | → %7C, etc.). "
-            + "Only use this for genuinely interactive sessions — for everything else, use shell_execute. "
-            + "Examples: [Open Terminal](minis://open_terminal), [Login to SSH](minis://open_terminal?init_command=ssh%20user%40host).\n\n"
-            + "minis-config: read or change nanoMuse settings programmatically. Run `minis-config --help` to see subcommands and `minis-config topic-help <topic>` for details on a specific area. For array-valued fields (e.g. `models`, `groups`, `envvars`, `defaults.agentLoopEntries`) the `get` subcommand accepts `--filter <keywords>` (whitespace-AND, case-insensitive substring match against each element's JSON) and `--page <N> --page-size <N>` (default 20, max 100) — use these instead of dumping the full list when you only need a subset, and check the response's `pagination` / `agent_hint` fields for the next-page command. Every write triggers a confirmation sheet in-app and is logged to a revertable audit (1000-entry rolling log). After a successful change the response includes a `user_message` field — relay it (or paraphrase) so the user knows how to review or revert via Logs → Config Changes. If the call returns `permission_denied`, the user has disabled minis-config in Settings → Permissions; relay that message and don't retry. You CAN add a provider (`add providers` with providerType + label, optional customBaseURL/appendV1Suffix/imageEndpointMode) and write its API key — set `providers.<id>.apiKey` (or include `apiKey` in the add payload) with either a literal key or a `$$ENV_VAR` reference resolved from the user's environment variables. Secrets are write-only: `get` never echoes an API key, and reading `providers.<id>.apiKey` / `.oauthToken` still returns permission_denied. Do not try to read API keys/OAuth tokens, or to set OAuth tokens (minted by the in-app login), permission levels, or environment-variable values — those stay locked.\n\n"
-            + "Environment variables:\n"
-            + "- Shell environment variables may contain sensitive API keys, tokens, or passwords. "
-            + "NEVER echo, print, cat, or otherwise output their values to stdout/stderr. "
-            + "Always reference them by variable name (e.g. $API_KEY) inside scripts or commands — never inline the literal value.\n"
-            + "- When a skill or task requires an environment variable that is not set, "
-            + "tell the user which variable is missing and provide a tappable deep link to create it: "
-            + "[Set ENV_NAME](minis://settings/environments?create_key=ENV_NAME&create_value=&create_note=Used%20by%20XYZ) — "
-            + "the user can tap it to open the Environment Variables page with the key and optional note pre-filled. "
-            + "create_note is optional; fill it with a brief description of what the variable is used for (e.g. 'API key for OpenAI', 'Used by XYZ skill'); URL-encode it.\n"
-            + "- Settings deep links: when you tell the user \"go to Settings → X\" or want to point them at a specific setting, prefer a Markdown link `[Label](minis://settings/<path>)` over plain prose. Available paths: providers (list), providers/<instanceId> (one provider), model-groups (incl. Agent Loop), model-groups/<groupId>, usage (token usage), skills, memory, storage, shared-folders (Shared Folders: /var/minis/{shared,skills,memory}), mount-external (Mount External Folders), logs, appearance, background, about, permissions, environments[?create_key=K&create_value=V[&create_note=N]], rootfs (also reachable as mirrors). Unknown paths fall back to Settings home, but prefer the exact path so users land where they want. These settings/action links are app deep links — render them as Markdown links in chat (same action-vs-resource rule as the minis:// section above: only /var/minis resource URLs may go to browser_use).\n"
-            + "- To check if a variable is set, use `[ -n \"$VAR\" ] && echo 'set' || echo 'not set'`. "
-            + "NEVER use echo $VAR, printenv VAR, or any command that would output the actual value into the conversation context.\n\n"
+            + "- Reply in the language that best matches the user's input. Only switch languages when explicitly asked.\n"
+            + "- Be concise and prefer direct action over explanation.\n\n"
             + "Memory system:\n"
-            + "- memory_write writes to today's daily log (YYYY-MM-DD.md) — use it for session notes, key facts, project context, things learned, and action items.\n"
-            + "- GLOBAL.md (/var/minis/memory/GLOBAL.md) stores persistent preferences, settings, and general-purpose conventions. To read it, use file_read (NOT memory_get). To update it, use file_read first then file_edit. If GLOBAL.md does not exist yet, use file_write to create it directly.\n"
-            + "- IMPORTANT: Only write to GLOBAL.md when the user explicitly asks (e.g. 'remember this globally', 'save to global memory'). Before editing, deduplicate and clean up — avoid ambiguity, repetition, or daily-log-style entries. GLOBAL.md should contain only concise, reusable knowledge (preferences, settings, conventions), NOT session logs or transient context.\n"
-            + "- Use memory_get to recall past knowledge before starting tasks — check if there are relevant memories that can help.\n"
-            + "- Proactively save memories (via memory_write to daily log) when you discover user preferences or important patterns — don't wait to be asked.\n"
-            + "- When the user says 'remember this' or similar, use memory_write to persist to the daily log. Only write to GLOBAL.md if the user specifically asks for global/persistent storage.\n"
-            + "- What NOT to remember: passwords, API keys, tokens, secrets, or any sensitive credentials. Warn the user about the risk first; only proceed if they explicitly confirm.\n"
-            + "- Keep memories concise, factual, and general-purpose — avoid noise that won't be useful later.\n\n"
-            + "Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended, so in-app scheduled scripts may not run as expected. "
-            + "For recurring tasks that must fire beyond the current conversation, tell the user to set up an automation in Apple Shortcuts — it is the only reliable way to trigger periodic execution on iOS. "
-            + "(Waiting or polling WITHIN the current turn is different — that is what shell_execute `delay` chains are for, per the shell_execute notes above.)"
+            + "- Use memory_write for concise session notes, user preferences, project conventions, and reusable knowledge.\n"
+            + "- GLOBAL.md is user-maintained from Settings; do not claim to edit it through memory tools.\n"
+            + "- Do not store passwords, API keys, tokens, or other secrets.\n\n"
+            + "Scheduled tasks: If a task must recur beyond the current conversation, explain that the user can configure an automation in Apple Shortcuts. Do not imply that an unattended local script or polling loop will continue after the conversation ends."
     }
 
     /// [T-memory-toggle-gates-injection-and-tools-ios]
@@ -2212,11 +2067,23 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
         ProviderConfigStore.shared.instances.contains { $0.isEnabled }
     }
 
+    // nanoMuse: Fail closed until the iOS local Agent runtime is migrated.
+    @discardableResult
+    func requireLocalExecution() -> Bool {
+        guard MordeLocalExecutionPolicy.isEnabled else {
+            errorMessage = MordeLocalExecutionPolicy.disabledMessage
+            return false
+        }
+        return true
+    }
+
     // MARK: - Send Message
 
     func send() {
         // Read-only mode — cannot send messages
         guard remoteDeviceId == nil else { return }
+        // nanoMuse: Block the local Agent path before consuming the draft.
+        guard requireLocalExecution() else { return }
 
         // [T-ios-retry-keyboard] A real send clears the retry origin, so the
         // flag can never leak from a retried turn into the next fresh one and
@@ -2591,31 +2458,8 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
 
             // Update ChatMessage with structured attachment metadata for UI display
             //
-            // [T-ios-user-attach-mount-invalidate] THIRD mount site. 988f67b8
-            // covered only the two queued-drain sites (both keyed on
-            // `queuedPromptId`); this is the ORDINARY send path, and it has the
-            // same two-phase birth: `messages.append(userMsg)` runs
-            // synchronously before this Task, so the message is inserted
-            // TEXT-ONLY and the tiles arrive here, one attachment-I/O later. If
-            // the cell's first real self-size lands in that window it caches a
-            // tile-less height, and without an invalidation pair the width-
-            // matched cell cache (b4268586) plus the streaming-window
-            // short-circuit (81e43b58) serve it for the rest of the turn —
-            // the truncated bubble with a seemingly detached tile.
-            //
-            // Field report 2026-08-09 (msg F70F81DD, image via the system share
-            // sheet) reproduced exactly this on a build where `AttachMount` had
-            // zero hits across the whole log: est=48 attachCount=0 at insert,
-            // est=118 attachCount=1 some 350ms later, and no idx=0 real measure
-            // in between. Share/voice sends widen the window precisely because
-            // they do more attachment I/O — which 988f67b8's own message called
-            // out while still leaving this site unpatched.
             await MainActor.run {
                 userMsg.attachments = attachmentMetas
-                if !attachmentMetas.isEmpty {
-                    NotificationCenter.default.post(name: .minisUserAttachmentsMounted,
-                                                    object: userMsg.id)
-                }
             }
 
             // Build <user-attached-files> XML metadata for the model (no base64 data)
@@ -2761,6 +2605,8 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
     /// Retry the next agent loop iteration (continue from where the error occurred,
     /// keeping all previously completed tool blocks and conversation history).
     func retry() {
+        // nanoMuse: Block local retries until execution migrates to cloud tasks.
+        guard requireLocalExecution() else { return }
         guard !isProcessing else { return }
         guard let lastMsg = messages.last, lastMsg.role == .assistant else { return }
 
@@ -2937,6 +2783,8 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
     /// Resume an interrupted agent loop. Injects a "Continue" user message
     /// into agentHistory so the model knows to pick up where it left off.
     func resume() {
+        // nanoMuse: Block local resumes until execution migrates to cloud tasks.
+        guard requireLocalExecution() else { return }
         guard !isProcessing, canResume else { return }
         // [T-ios-orphan-user-tail GH#262/#263] A tail of "user turn with no
         // reply at all" has no assistant row to resume INTO — the reply never
@@ -3102,6 +2950,8 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
     /// The result is that Resume on this session means "answer my last
     /// message", which is what the user is actually asking for.
     private func resumeUnansweredUserTurn() {
+        // nanoMuse: Block local continuation of an unanswered turn.
+        guard requireLocalExecution() else { return }
         guard let lastUser = messages.last, lastUser.role == .user else { return }
         logger.info("[OrphanTail] resume on unanswered user turn — requesting a fresh reply session=\(self.sessionId ?? "nil") history=\(self.agentHistory.count)")
 
@@ -3226,6 +3076,8 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
     }
 
     func retryFromMessage(_ messageId: UUID, replacementAttachments: [InputAttachment]? = nil) {
+        // nanoMuse: Block local retries before mutating the existing turn.
+        guard requireLocalExecution() else { return }
         guard !isProcessing else { return }
         // [T-ios-retry-keyboard] Re-running from an existing user message is a
         // retry, not a new send.
@@ -3309,17 +3161,6 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
 
             // Update the ChatMessage's attachments for display
             messages[idx].attachments = newMetas
-            // [T-ios-user-attach-mount-invalidate] FOURTH mount site. Unlike the
-            // send/drain sites this one has no two-phase race — it rewrites the
-            // attachments of an EXISTING message — but that is precisely why it
-            // needs the pair: the cell has certainly measured and cached a
-            // height by now, and swapping the tile set is an in-place height
-            // change on an item whose identity does not move, so the cached
-            // value would be served until something else forced a relayout.
-            if !newMetas.isEmpty {
-                NotificationCenter.default.post(name: .minisUserAttachmentsMounted,
-                                                object: messages[idx].id)
-            }
         }
 
         // Trim persisted messages to match.
@@ -3482,6 +3323,8 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
     /// — covered for both cases since `isProcessing = true` is set below and
     /// `messages.last` is the prepared assistant in each case.
     private func launchRerunAgentLoop(label: String, resumeAt: Int? = nil, resumeBlocks: Int? = nil) {
+        // nanoMuse: Block local reruns until execution migrates to cloud tasks.
+        guard requireLocalExecution() else { return }
         AppLogger(category: "RetryDiag").info("[RetryDiag] launchRerunAgentLoop called label=\(label) resumeAt=\(resumeAt.map(String.init) ?? "nil") resumeBlocks=\(resumeBlocks.map(String.init) ?? "nil") messagesCount=\(self.messages.count)")
         errorMessage = nil
         // Clear interrupt badge on the last assistant message if present
@@ -3615,6 +3458,8 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
     /// truncating at the preceding user message — delegate to
     /// retryFromMessage(precedingUser) and skip the sub-message rewrite.
     func retryFromToolBlock(blockId: UUID) {
+        // nanoMuse: Block local tool retries before changing message state.
+        guard requireLocalExecution() else { return }
         guard !isProcessing else { return }
 
         // Locate the assistant UI message + the target block's index within it.
@@ -4001,6 +3846,8 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
     /// Resume queue processing after the user stopped the current task.
     /// Spawns a fresh Task (not cancelled) so the drain loop can call runAgentLoop().
     private func resumeQueueAfterCancel() {
+        // nanoMuse: Do not restart the local Agent queue while execution is disabled.
+        guard requireLocalExecution() else { return }
         // Small delay to let the cancelled task's error handler finish cleanup.
         currentTask = Task { @MainActor [weak self] in
             guard let self else { return }
@@ -4054,6 +3901,8 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
     /// `internal` (not `private`) so `compactAndSend` in the +Compaction
     /// extension file can drain through this same path after a compact.
     func drainQueuedPrompts() async {
+        // nanoMuse: Do not drain queued prompts through the local Agent.
+        guard requireLocalExecution() else { return }
         guard !self.isDrainingQueue else {
             logger.info("📨[DRAIN] Already draining in another task — skipping duplicate drain")
             return
@@ -4067,6 +3916,8 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
     /// arrivals (below) doesn't trip the reentrancy guard — that guard only
     /// gates cross-Task duplicate entry, which all goes through the wrapper.
     private func drainQueuedPromptsInner() async {
+        // nanoMuse: Keep the queue drain closed if reached through another path.
+        guard requireLocalExecution() else { return }
         while !self.userDidCancel && !self.promptQueue.isEmpty {
             // If the Task itself is cancelled (e.g. user tapped stop), don't
             // consume queue items — resumeQueueAfterCancel() handles them
@@ -4107,12 +3958,6 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
                     if let chatMsg = self.messages.first(where: { $0.queuedPromptId == prompt.id }) {
                         chatMsg.attachments = attMetas
                         chatMsg.inputAttachments = []
-                        // [T-ios-user-attach-mount-invalidate #182-followup] The
-                        // mount above is an in-place +70pt/row content change on
-                        // a cell whose item identity does not move; without this
-                        // the tile-less height measured moments earlier stays
-                        // cached and the bubble truncates (see the Name's doc).
-                        NotificationCenter.default.post(name: .minisUserAttachmentsMounted, object: chatMsg.id)
                     }
                 }
                 if !prompt.text.isEmpty {
@@ -4235,8 +4080,6 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
                 if let chatMsg = messages.first(where: { $0.queuedPromptId == prompt.id }) {
                     chatMsg.attachments = attMetas
                     chatMsg.inputAttachments = []
-                    // [T-ios-user-attach-mount-invalidate] See the sibling drain site.
-                    NotificationCenter.default.post(name: .minisUserAttachmentsMounted, object: chatMsg.id)
                 }
             }
             if !prompt.text.isEmpty {
@@ -4733,6 +4576,8 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
     }
 
     private func runAgentLoop(resumingAt existingMsgIdx: Int? = nil, committedBlocks: Int? = nil) async throws {
+        // nanoMuse: This final gate prevents provider, model, and tool work if another path reaches the loop.
+        guard requireLocalExecution() else { throw MordeLocalExecutionDisabledError() }
         // REPRO-DIAG(2026-05-16): bump global round counter and emit a clear
         // BEGIN/END marker so the user can grep `ROUND \d+` to slice the log
         // by attempt. A "round" = one runAgentLoop invocation, which is
@@ -6156,29 +6001,10 @@ final class AIChatViewModel: ObservableObject, SpeechControlling {
 
     }
 
-    /// Builds the final NSAttributedString for a completed text block and stores it
-    /// on the block. Must be called on the MainActor. No-op if content is empty.
+    /// No-op because this target excludes the legacy NSAttributedString renderer.
     @MainActor
     func cacheAttributedString(for block: AssistantBlock) {
-        guard !block.content.isEmpty else { return }
-        // [T-ios-markdown-rerender-burst] Persist the parsed MarkdownContent back
-        // onto the block, not just the rendered attributed string. Previously
-        // this parsed `MarkdownContent(prepared)` to render the attributed
-        // string but threw the parse away, leaving `block.cachedMarkdown` nil
-        // for messages loaded from DB (loadSession calls this for every text
-        // block). The SelectableMarkdownView render path then re-ran cmark on
-        // EVERY updateUIView — and for table-containing messages (which
-        // [TablePathFix] forces through fresh render, bypassing
-        // cachedAttributedString) that re-parse fired 6–12× per scroll-decel
-        // second, dropping 5–8 frames. Caching the parse makes the render path
-        // hit `cachedContent` (skip re-parse) AND keys its content-hash off the
-        // stable `blocks.hashValue` so the per-coordinator hash-skip can land.
-        // No extra work: we were already computing this MarkdownContent here.
-        let content = block.cachedMarkdown ?? MarkdownContent(prepareMarkdownForRender(block.content))
-        block.cachedMarkdown = content
-        block.cachedAttributedString = autoreleasepool {
-            renderMarkdownBlocks(content.blocks)
-        }
+        // shortcut: the legacy message UI is excluded from Minis; restore its renderer before re-enabling that route.
     }
 
     @MainActor

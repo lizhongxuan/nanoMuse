@@ -210,11 +210,12 @@ enum NanoMuseVideoGen {
         request.httpMethod = method
         if let key { request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization") }
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0"
-        request.setValue("nanoMuse-iOS/\(version)", forHTTPHeaderField: "User-Agent")
+        request.setValue("morde-iOS/\(version)", forHTTPHeaderField: "User-Agent")
         return request
     }
 
     private static func send(_ request: URLRequest) async throws -> (Data, Int) {
+        guard MordeLocalExecutionPolicy.isEnabled else { throw MordeLocalExecutionDisabledError() }
         let (data, response) = try await session.data(for: request)
         return (data, (response as? HTTPURLResponse)?.statusCode ?? 0)
     }
@@ -223,6 +224,7 @@ enum NanoMuseVideoGen {
     /// Model Studio answers 404 "Model not exist" for an unknown name, or accepts the task (which
     /// then fails at once on the missing prompt — nothing is billed). Nil when the host could not be asked.
     static func probe(host: String, apiKey: String, model: String) async -> Bool? {
+        guard MordeLocalExecutionPolicy.isEnabled else { return nil }
         guard let url = URL(string: host + "/api/v1/services/aigc/video-generation/video-synthesis") else { return nil }
         var req = request("POST", url, key: apiKey)
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -250,6 +252,7 @@ enum NanoMuseVideoGen {
         seconds: Int = 4,
         onProgress: @escaping @Sendable (Progress) -> Void = { _ in }
     ) async throws -> Data {
+        guard MordeLocalExecutionPolicy.isEnabled else { throw MordeLocalExecutionDisabledError() }
         onProgress(.uploading)
         let model = Self.model(for: ep.model, fromImage: true)
         guard let png = fitFrame(image).pngData() else { throw Failure(message: AppLocalized("The picture could not be encoded.")) }
@@ -271,6 +274,7 @@ enum NanoMuseVideoGen {
         ratio: String = "1:1",
         onProgress: @escaping @Sendable (Progress) -> Void = { _ in }
     ) async throws -> Data {
+        guard MordeLocalExecutionPolicy.isEnabled else { throw MordeLocalExecutionDisabledError() }
         let model = Self.model(for: ep.model, fromImage: false)
         let task = try await createTask(ep, body: textToVideoBody(model: model, prompt: prompt, seconds: seconds, ratio: ratio), ossInput: false)
         onProgress(.submitted)

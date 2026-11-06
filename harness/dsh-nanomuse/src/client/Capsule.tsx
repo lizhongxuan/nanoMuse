@@ -133,9 +133,9 @@ function AskCard({ t, ask }: { t: Translate; ask: LiveAsk }): ReactNode {
     h('div', { className: 'nm-ask-text' }, t(askKey(ask.action), { from: ask.from, what: ask.text })),
     h('div', { className: 'nm-ask-actions' },
       h(Button, { variant: 'primary', size: 'sm', disabled: busy, onClick: () => answer('once') }, t('askAllowOnce')),
-      h(Button, { variant: 'outline', size: 'sm', disabled: busy, onClick: () => answer('always') }, t('askAlways', { from: ask.from })),
+      ask.onceOnly ? null : h(Button, { variant: 'outline', size: 'sm', disabled: busy, onClick: () => answer('always') }, t('askAlways', { from: ask.from })),
       h(Button, { variant: 'ghost', size: 'sm', disabled: busy, onClick: () => answer('deny') }, t('askDeny'))),
-    h('div', { className: 'nm-ask-sub' }, t('askHint')))
+    ask.onceOnly ? null : h('div', { className: 'nm-ask-sub' }, t('askHint')))
 }
 
 function Notices({ t, notices }: { t: Translate; notices: LiveNotice[] }): ReactNode {

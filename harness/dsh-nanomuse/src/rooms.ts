@@ -31,7 +31,7 @@ import { afterTurn, boundTo, currentSuggestions, dismissChooser, FIRST_RUN_EMPTY
 import { DEFAULT_NUDGES, dueAsk, LEDGER_EMPTY, NUDGES_EVERY_MS, NUDGES_ORIGIN, NUDGES_TIMEOUT_MS, readLedger, readNudges, recordAsk, recordDay, recordStarred, recordTask, type Ask, type Moment, type NudgeLedger, type NudgesPolicy, type NudgesView } from './nudges.ts'
 import { packageAssetsDir } from './profile.ts'
 import { describeCall, ownWords, parseArgs } from './steps.ts'
-import { randomBytes } from 'node:crypto'
+import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { createReadStream, readFileSync } from 'node:fs'
 import { lstat, mkdir, open as openFile, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { deflateRawSync } from 'node:zlib'
@@ -52,7 +52,7 @@ declare module '@deepseek-ai/dsh-llm' {
 import type {} from '@deepseek-ai/dsh-api-session-controller'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import { mountGuarded } from './admit.ts'
-import type {} from './cloud.ts'
+import type { MordeAvailableModel, MordePersonalObject, MordeScheduleCreateInput, MordeScheduleReceipt, MordeScheduleTiming } from './cloud.ts'
 import { dshHome, json, message, sameOrigin, send } from './cloud.ts'
 import { RelayError } from './relay.ts'
 import { textOf } from './task.ts'
@@ -314,10 +314,80 @@ interface Store {
   activity: ActivityRecord[]
   /** When the first-run introduction was posted, so it happens once. */
   introducedAt: number
+  /** Remote revisions are kept only in this Morde-account-scoped local cache. */
+  mordeSync: {
+    goalRevisions: Record<string, number>
+    goalBodies: Record<string, MordeGoalBody>
+    pendingGoals: Record<string, boolean>
+    deletedGoals: Record<string, number>
+    memoryRevisions: Record<string, number>
+    memoryBodies: Record<string, string>
+    pendingMemory: boolean
+    legacyImports: { memories: Record<string, boolean>; goals: Record<string, boolean>; schedules: Record<string, string> }
+    profile?: { revision: number; body: MordeProfileBody }
+  }
 }
 
+interface LegacyMordeMemory {
+  id: string
+  text: string
+  at: number
+  imported: boolean
+}
+
+interface LegacyMordeGoal {
+  id: string
+  at: number
+  title: string
+  description: string
+  status: GoalStatus
+  category: Category
+  steps: string[]
+  imported: boolean
+}
+
+interface LegacyMordeSchedule {
+  source_id: string
+  source_session_id: string
+  id: string
+  title: string
+  title_is_derived: boolean
+  objective: string
+  kind: string
+  source_scheduled_at: string
+  source_every_seconds?: number
+  timing: MordeScheduleTiming | null
+  time_zone: string
+  fingerprint: string
+  unsupported_fields: string[]
+  unavailable_reason?: string
+  imported_schedule_id?: string
+  imported: boolean
+}
+
+interface LegacyMordeScheduleExport extends LegacyMordeSchedule {
+  migration?: { request: MordeScheduleCreateInput; idempotency_key: string }
+}
+
+interface MordeGoalBody {
+  title: string
+  description: string
+  status: 'active' | 'paused' | 'done' | 'cancelled'
+  steps: { id: string; title: string; status: 'pending' | 'in_progress' | 'done' | 'blocked' | 'skipped'; note: string }[]
+  related_material_ids: string[]
+}
+
+type MordeProfileBody =
+  | { name: string; avatar: 'dragon'; description: string; style: string }
+  | { name: string; avatar: 'emoji'; emoji: string; color: string; description: string; style: string }
+type MordeProfilePatch = Partial<{ name: string; avatar: 'dragon' | 'emoji'; emoji: string; color: string; description: string; style: string }>
+
+const DEFAULT_MORDE_PROFILE: MordeProfileBody = { name: 'nanoMuse', avatar: 'dragon', description: '', style: '' }
+
 /** What the browser mirrors. */
-export interface RoomsView extends Omit<Store, 'activity'> {
+export interface RoomsView extends Omit<Store, 'activity' | 'mordeSync'> {
+  /** The signed-in Morde account's editable profile; it contains no legacy Cloud face assets. */
+  mordeProfile?: { revision: number; body: MordeProfileBody }
   busy: { feed: boolean; ideas: boolean }
   /** The chats of the batches running right now (the feed's): the chats column leaves them out. */
   batches: string[]
@@ -349,12 +419,20 @@ interface ScheduleLike {
 interface ScheduleRecordLike {
   id: string
   kind: string
-  title: string
+  title?: string
+  prompt?: string
   scheduledAt: string
   time?: string
+  timeZone?: string
+  time_zone?: string
   weekdays?: number[]
   expression?: string
   everySeconds?: number
+  afterSeconds?: number
+  [key: string]: unknown
+}
+interface SessionsListLike {
+  list(request: { cursor?: string }, signal: AbortSignal): Promise<{ items: { sessionId: SessionId }[] }>
 }
 interface RegistryLike {
   archiveSession(sessionId: SessionId, options?: { stopActivity?: boolean }): Promise<void>
@@ -378,6 +456,7 @@ const EMPTY: Store = {
   docs: { identity: '', soul: '', identityAt: 0, soulAt: 0 },
   activity: [],
   introducedAt: 0,
+  mordeSync: { goalRevisions: {}, goalBodies: {}, pendingGoals: {}, deletedGoals: {}, memoryRevisions: {}, memoryBodies: {}, pendingMemory: false, legacyImports: { memories: {}, goals: {}, schedules: {} } },
 }
 /** Activity records kept, steps per record, and how much of a step's text. */
 const ACTIVITY_RECORDS = 80
@@ -387,6 +466,211 @@ const DOC_MAX = 20_000
 const STUDIO_STYLES: Record<string, true> = { muse: true, flat: true, clay: true, watercolor: true, pixel: true, line: true, sticker: true }
 const MEMORY_MAX = 400
 const MEMORY_LINE = 400
+
+function integerMap(value: unknown): Record<string, number> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  return Object.fromEntries(Object.entries(value).filter((entry): entry is [string, number] =>
+    Number.isSafeInteger(entry[1]) && Number(entry[1]) >= 0))
+}
+
+function booleanMap(value: unknown): Record<string, boolean> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  return Object.fromEntries(Object.entries(value).filter((entry): entry is [string, true] => entry[1] === true))
+}
+
+function stringMap(value: unknown): Record<string, string> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  return Object.fromEntries(Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === 'string'))
+}
+
+function mordeGoalBodyMap(value: unknown): Record<string, MordeGoalBody> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  const result: Record<string, MordeGoalBody> = {}
+  for (const [id, candidate] of Object.entries(value)) {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) continue
+    const body = candidate as Partial<MordeGoalBody>
+    if (typeof body.title !== 'string' || typeof body.description !== 'string' ||
+      !['active', 'paused', 'done', 'cancelled'].includes(String(body.status)) || !Array.isArray(body.steps) ||
+      !Array.isArray(body.related_material_ids)) continue
+    const steps = body.steps.flatMap((step) => {
+      if (!step || typeof step !== 'object' || typeof step.id !== 'string' || typeof step.title !== 'string' ||
+        !['pending', 'in_progress', 'done', 'blocked', 'skipped'].includes(String(step.status)) || (step.note !== undefined && typeof step.note !== 'string')) return []
+      return [{ id: step.id, title: step.title, status: step.status, note: step.note ?? '' }]
+    })
+    result[id] = {
+      title: body.title,
+      description: body.description,
+      status: body.status as MordeGoalBody['status'],
+      steps,
+      related_material_ids: body.related_material_ids.filter((item): item is string => typeof item === 'string'),
+    }
+  }
+  return result
+}
+
+function mordeProfileBody(value: Record<string, unknown>): MordeProfileBody | undefined {
+  if (typeof value.name !== 'string' || !value.name.trim() || value.name.trim().length > 60 ||
+    (value.avatar !== 'dragon' && value.avatar !== 'emoji')) return undefined
+  const description = value.description === undefined ? '' : value.description
+  const style = value.style === undefined ? '' : value.style
+  if (typeof description !== 'string' || description.length > 200 || typeof style !== 'string' ||
+    (style !== '' && !Object.hasOwn(STUDIO_STYLES, style))) return undefined
+  const common = { name: value.name.trim(), description, style }
+  if (value.avatar === 'dragon') return { ...common, avatar: 'dragon' }
+  if (typeof value.emoji !== 'string' || value.emoji.length > 16 || typeof value.color !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(value.color)) return undefined
+  return { ...common, avatar: 'emoji', emoji: value.emoji, color: value.color }
+}
+
+function memoryLines(text: string): string[] {
+  const lines = text.replace(/\r\n/g, '\n').split('\n').flatMap((line) => {
+    const bullet = /^\s*(?:[-*•]|\d+[.)])\s+(.*)$/.exec(line)?.[1]
+    const content = (bullet ?? (line.trim() && !line.trim().startsWith('#') ? line : '')).trim()
+      .replace(/^\(?\d{4}-\d{2}-\d{2}\)?[:：]?\s*/, '').trim()
+    return content.length > 1 ? [content.slice(0, MEMORY_LINE)] : []
+  })
+  const seen = new Set<string>()
+  return lines.filter((line) => {
+    const key = line.normalize('NFKC').toLocaleLowerCase().replace(/\s+/g, ' ').trim()
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  }).slice(0, MEMORY_MAX)
+}
+
+function memoryBody(text: string): string {
+  return memoryLines(text).map((line) => `- ${line}`).join('\n')
+}
+
+function localMemoryBody(memory: readonly MemoryItem[]): string {
+  return memoryBody(memory.map((item) => item.text).join('\n'))
+}
+
+function sameMordeGoal(a: MordeGoalBody, b: MordeGoalBody): boolean {
+  return JSON.stringify(a) === JSON.stringify(b)
+}
+
+function mordeConflict(error: unknown): boolean {
+  if (error instanceof RelayError) return error.status === 409
+  if (!error || typeof error !== 'object') return false
+  const value = error as { status?: unknown; code?: unknown }
+  return value.status === 409 || value.code === 'revision_conflict' || value.code === 'conflict'
+}
+
+function legacyScheduleUnsupportedFields(record: ScheduleRecordLike): string[] {
+  const common = ['id', 'kind', 'title', 'prompt', 'scheduledAt', 'timeZone', 'time_zone']
+  const fields = record.kind === 'daily' ? [...common, 'time']
+    : record.kind === 'weekly' ? [...common, 'time', 'weekdays']
+      : record.kind === 'every' ? [...common, 'everySeconds'] : common
+  const unsupported = Object.keys(record).filter((key) => !fields.includes(key))
+  if (record.timeZone && record.time_zone && record.timeZone !== record.time_zone) unsupported.push('timeZone/time_zone')
+  return [...new Set(unsupported)].sort()
+}
+
+function legacyScheduleSourceID(sessionID: string, scheduleID: string): string {
+  return createHash('sha256').update(`${sessionID}\0${scheduleID}`).digest('hex')
+}
+
+function legacyScheduleFingerprint(record: ScheduleRecordLike): string {
+  return createHash('sha256').update(JSON.stringify(record)).digest('hex')
+}
+
+function legacyScheduleIdempotencyKey(scope: string, sourceID: string): string {
+  return `legacy-${createHash('sha256').update(`${scope}\0${sourceID}`).digest('hex')}`
+}
+
+const MAX_LEGACY_SCHEDULE_EXPORT_BYTES = 10 * 1024 * 1024
+const MAX_LEGACY_SCHEDULE_EXPORT_ITEMS = 2000
+const MAX_LEGACY_SCHEDULE_TEXT_BYTES = 32768
+
+function legacyScheduleExportText(value: string): string {
+  const bytes = Buffer.from(value, 'utf8')
+  if (bytes.length <= MAX_LEGACY_SCHEDULE_TEXT_BYTES) return value
+  let end = MAX_LEGACY_SCHEDULE_TEXT_BYTES
+  while (end > 0 && (bytes[end]! & 0b11000000) === 0b10000000) end -= 1
+  return bytes.subarray(0, end).toString('utf8')
+}
+
+function legacyScheduleBudget(value: unknown): MordeScheduleCreateInput['budget'] | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const budget = value as Record<string, unknown>
+  if (!Number.isSafeInteger(budget.active_seconds) || Number(budget.active_seconds) < 1 || Number(budget.active_seconds) > 1800 ||
+    !Number.isSafeInteger(budget.tool_calls) || Number(budget.tool_calls) < 1 || Number(budget.tool_calls) > 100 ||
+    !Number.isSafeInteger(budget.model_tokens) || Number(budget.model_tokens) < 1 || Number(budget.model_tokens) > 50000) return null
+  return { active_seconds: Number(budget.active_seconds), tool_calls: Number(budget.tool_calls), model_tokens: Number(budget.model_tokens) }
+}
+
+function zonedDate(timestamp: number, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date(timestamp))
+  const fields = Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value])) as Record<'year' | 'month' | 'day', string>
+  return `${fields.year}-${fields.month}-${fields.day}`
+}
+
+function legacyScheduleAnchor(value: string): string | null {
+  const match = /^(\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01]))T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,6})?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/.exec(value)
+  if (!match || !Number.isFinite(Date.parse(value))) return null
+  const day = new Date(`${match[1]}T00:00:00.000Z`)
+  return Number.isFinite(day.getTime()) && day.toISOString().slice(0, 10) === match[1] ? value : null
+}
+
+function legacyScheduleTiming(record: ScheduleRecordLike, fallbackTimeZone: string, now = Date.now()): { timing: MordeScheduleTiming | null; timeZone: string; reason?: string } {
+  const timeZone = record.timeZone ?? record.time_zone ?? fallbackTimeZone
+  try { new Intl.DateTimeFormat('en', { timeZone }).format() } catch { return { timing: null, timeZone, reason: 'The schedule has no valid IANA time zone.' } }
+  const scheduledAt = Date.parse(record.scheduledAt)
+  const date = (Number.isFinite(scheduledAt) ? scheduledAt : now) > now ? scheduledAt : now
+  const time = typeof record.time === 'string' ? /^([01]\d|2[0-3]):[0-5]\d/.exec(record.time)?.[0] : undefined
+  if (record.kind === 'once' || record.kind === 'at' || record.kind === 'after') {
+    if (!Number.isFinite(scheduledAt)) return { timing: null, timeZone, reason: 'The original one-time schedule has no valid run time.' }
+    if (scheduledAt <= now) return { timing: null, timeZone, reason: 'The one-time schedule is already due or past; it needs manual review.' }
+    return { timing: { kind: 'once', run_at: new Date(scheduledAt).toISOString(), time_zone: timeZone }, timeZone }
+  }
+  if (record.kind === 'daily') {
+    if (!time) return { timing: null, timeZone, reason: 'The daily schedule has no valid local time.' }
+    return { timing: { kind: 'daily', starts_on: zonedDate(date, timeZone), local_time: time, time_zone: timeZone }, timeZone }
+  }
+  if (record.kind === 'weekly') {
+    const weekdays = Array.isArray(record.weekdays) ? [...new Set(record.weekdays)] : []
+    if (!time || !weekdays.length || weekdays.some((day) => !Number.isSafeInteger(day) || day < 1 || day > 7)) {
+      return { timing: null, timeZone, reason: 'The weekly schedule has invalid weekdays or local time.' }
+    }
+    return { timing: { kind: 'weekly', starts_on: zonedDate(date, timeZone), local_time: time, time_zone: timeZone, weekdays: weekdays.sort((a, b) => a - b) }, timeZone }
+  }
+  if (record.kind === 'every') {
+    const intervalSeconds = record.everySeconds
+    if (typeof intervalSeconds !== 'number' || !Number.isSafeInteger(intervalSeconds) || intervalSeconds < 3600 || intervalSeconds % 3600 !== 0 || intervalSeconds / 3600 > 168) {
+      return { timing: null, timeZone, reason: 'Only whole-hour intervals from 1 to 168 hours can be represented.' }
+    }
+    const anchorAt = legacyScheduleAnchor(record.scheduledAt)
+    if (!anchorAt) return { timing: null, timeZone, reason: 'The old interval schedule has no valid RFC3339 next-run anchor.' }
+    return { timing: { kind: 'every_n_hours', interval_hours: intervalSeconds / 3600, anchor_at: anchorAt, time_zone: timeZone }, timeZone }
+  }
+  return { timing: null, timeZone, reason: `The legacy schedule kind “${record.kind}” has no Morde equivalent.` }
+}
+
+function legacyScheduleView(sessionID: string, record: ScheduleRecordLike, fallbackTimeZone: string, importedID?: string): LegacyMordeSchedule {
+  const objective = typeof record.prompt === 'string' ? record.prompt : ''
+  const title = typeof record.title === 'string' ? record.title : ''
+  const hasTitle = Boolean(title.trim())
+  const mapped = legacyScheduleTiming(record, fallbackTimeZone)
+  const unsupportedFields = legacyScheduleUnsupportedFields(record)
+  const reasons = [
+    !Number.isFinite(Date.parse(record.scheduledAt)) ? 'The source schedule has no valid scheduled time.' : '',
+    !objective.trim() ? 'The source schedule has no prompt/objective.' : '',
+    Buffer.byteLength(objective, 'utf8') > 32768 ? 'The source prompt exceeds Morde’s 32768-byte limit.' : '',
+    Buffer.byteLength(title, 'utf8') > 32768 ? 'The source title exceeds Morde’s 32768-byte limit.' : '',
+    mapped.reason ?? '',
+    unsupportedFields.length ? `Unsupported source fields: ${unsupportedFields.join(', ')}.` : '',
+  ].filter(Boolean)
+  return {
+    source_id: legacyScheduleSourceID(sessionID, record.id), source_session_id: sessionID, id: record.id,
+    title: hasTitle ? title : objective.trim() || record.id,
+    title_is_derived: !hasTitle, objective, kind: record.kind, source_scheduled_at: record.scheduledAt,
+    ...(Number.isSafeInteger(record.everySeconds) ? { source_every_seconds: record.everySeconds } : {}),
+    timing: mapped.timing, time_zone: mapped.timeZone,
+    fingerprint: legacyScheduleFingerprint(record), unsupported_fields: unsupportedFields,
+    ...(reasons.length ? { unavailable_reason: reasons.join(' ') } : {}), imported: Boolean(importedID),
+    ...(importedID ? { imported_schedule_id: importedID } : {}),
+  }
+}
 
 const KINDS: Record<string, LibraryKind> = {
   '.md': 'document', '.markdown': 'document', '.txt': 'document', '.rtf': 'document', '.doc': 'document', '.docx': 'document', '.pdf': 'document', '.pptx': 'document', '.xlsx': 'document', '.csv': 'document', '.json': 'document', '.tex': 'document',
@@ -432,6 +716,14 @@ export default class NanomuseRooms extends Service {
   private ready = false
   private studio = { description: '', style: 'muse', at: 0 }
   private writing: Promise<void> = Promise.resolve()
+  private mordeScope = ''
+  private mordeLastSync = 0
+  private mordeSyncing: Promise<void> | undefined
+  private mordeSyncAgain = false
+  private mordeGeneration = 0
+  private mordeScopeChanging: Promise<void> = Promise.resolve()
+  private pendingMordeSync: NodeJS.Timeout | undefined
+  private mordeProfile: { name: string; description: string; style: string } | undefined
   private timer: NodeJS.Timeout | undefined
   /** A broadcast is due: coalesced, so a burst of tool calls is one frame. */
   private pendingFrame: NodeJS.Timeout | undefined
@@ -451,7 +743,10 @@ export default class NanomuseRooms extends Service {
   }
 
   async [Service.init](): Promise<void> {
+    this.mordeScope = this.ctx.nanomuseCloud.mordePersonalScope()
     this.store = await this.read()
+    this.restoreMordeProfile()
+    if (this.mordeScope) void this.syncMordePersonal(true).catch((error: unknown) => this.warn('Morde personal sync', error))
     this.firstRun = await this.readSmall(this.firstRunPath, readFirstRun)
     const nudges = await this.readSmall(this.nudgesPath, (raw) => raw)
     const saved = nudges && typeof nudges === 'object' ? (nudges as Record<string, unknown>) : {}
@@ -467,7 +762,7 @@ export default class NanomuseRooms extends Service {
     for (const goal of this.store.goals) this.goalBySession.set(goal.sessionId, goal.id)
     this.ctx.effect(() => this.ctx.on('session/event', (session: Session, event: SessionEvent) => this.onEvent(session, event)), 'nanomuse rooms: session events')
     this.ctx.effect(() => this.ctx.on('schedule/changed' as never, (() => void this.refreshAutomations()) as never), 'nanomuse rooms: schedule changes')
-    this.ctx.effect(() => this.ctx.nanomuseCloud.onChange(() => void this.syncReady().catch(() => undefined)), 'nanomuse rooms: cloud changes')
+    this.ctx.effect(() => this.ctx.nanomuseCloud.onChange(() => void this.selectMordeScope().then(() => Promise.all([this.syncReady(), this.syncMordePersonal(false)])).catch(() => undefined)), 'nanomuse rooms: cloud changes')
     mountGuarded(this.ctx, API_PREFIX, this.handle, 'nanomuse rooms: api')
     this.timer = setInterval(() => void this.tick().catch((error: unknown) => this.warn('tick', error)), CHECK_EVERY_MS)
     const first = setTimeout(() => void this.tick().catch((error: unknown) => this.warn('tick', error)), FIRST_CHECK_MS)
@@ -476,6 +771,7 @@ export default class NanomuseRooms extends Service {
       clearTimeout(first)
       if (this.pendingFrame) clearTimeout(this.pendingFrame)
       if (this.pendingSave) clearTimeout(this.pendingSave)
+      if (this.pendingMordeSync) clearTimeout(this.pendingMordeSync)
       for (const res of this.streams) res.end()
       this.streams.clear()
       for (const run of this.runs.values()) run.reject(new Error('nanomuse rooms: shutting down'))
@@ -489,8 +785,10 @@ export default class NanomuseRooms extends Service {
   view(): RoomsView {
     // the records travel without their steps' texts; `/activity?session=` has one in full
     const activity = this.store.activity.map((r) => ({ ...r, steps: r.steps.map((s) => ({ ...s, detail: '', result: '' })) }))
+    const { mordeSync: _mordeSync, ...visible } = this.store
     return {
-      ...this.store,
+      ...visible,
+      ...(this.mordeScope ? { mordeProfile: this.store.mordeSync.profile ?? { revision: 0, body: DEFAULT_MORDE_PROFILE } } : {}),
       ideas: { ...this.store.ideas, items: this.ideaItems() },
       activity,
       busy: { ...this.busy },
@@ -513,10 +811,334 @@ export default class NanomuseRooms extends Service {
     return this.firstRun
   }
 
+  private roomProfile(): { name: string; description: string; style: string } {
+    if (this.mordeScope) return this.mordeProfile ?? { name: 'nanoMuse', description: '', style: '' }
+    const profile = this.ctx.nanomuseCloud.profile.current()
+    return { name: profile.name, description: profile.description, style: profile.style }
+  }
+
+  private restoreMordeProfile(): void {
+    const profile = this.store.mordeSync.profile?.body
+    this.mordeProfile = profile ? { name: profile.name, description: profile.description, style: profile.style } : undefined
+  }
+
+  async updateMordeProfile(patch: MordeProfilePatch): Promise<{ revision: number; body: MordeProfileBody }> {
+    const cloud = this.ctx.nanomuseCloud
+    const scope = this.mordeScope
+    const generation = this.mordeGeneration
+    if (!scope || cloud.mordePersonalScope() !== scope) throw new RelayError(401, 'signed_out', 'Sign in to Morde first')
+
+    const remote = await cloud.mordePersonalObject('profile', 'default')
+    if (!this.isMordeSyncCurrent(scope, generation)) throw new RelayError(401, 'signed_out', 'The Morde account changed; try again')
+    const current = remote ? mordeProfileBody(remote.body) : DEFAULT_MORDE_PROFILE
+    if (!current) throw new RelayError(502, 'bad_response', 'Morde returned an invalid profile')
+    const body = mordeProfileBody({ ...current, ...patch })
+    if (!body || (patch.name !== undefined && (typeof patch.name !== 'string' || !patch.name.trim() || patch.name.trim().length > 60)) ||
+      (patch.avatar !== undefined && patch.avatar !== 'dragon' && patch.avatar !== 'emoji') ||
+      (patch.emoji !== undefined && (typeof patch.emoji !== 'string' || patch.emoji.length > 16)) ||
+      (patch.color !== undefined && (typeof patch.color !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(patch.color))) ||
+      (patch.description !== undefined && (typeof patch.description !== 'string' || patch.description.length > 200)) ||
+      (patch.style !== undefined && (typeof patch.style !== 'string' || (patch.style !== '' && !Object.hasOwn(STUDIO_STYLES, patch.style)))) ||
+      ((patch.avatar ?? current.avatar) === 'dragon' && (patch.emoji !== undefined || patch.color !== undefined))) {
+      throw new RelayError(400, 'invalid_profile', 'The Morde profile fields are invalid')
+    }
+
+    const receipt = await cloud.mordeReplacePersonalObject('profile', 'default', remote?.revision ?? 0, { ...body }, randomUUID())
+    if (!this.isMordeSyncCurrent(scope, generation)) throw new RelayError(401, 'signed_out', 'The Morde account changed; try again')
+    const saved = { revision: receipt.result_revision, body }
+    this.store.mordeSync.profile = saved
+    this.mordeProfile = { name: body.name, description: body.description, style: body.style }
+    await this.save()
+    this.mordeLastSync = Date.now()
+    return saved
+  }
+
+  async previewLegacyMordeImport(): Promise<{
+    memories: LegacyMordeMemory[]
+    goals: LegacyMordeGoal[]
+    retained: { feed_posts: number; library_items: number; routine: FeedRoutine }
+  }> {
+    const scope = this.mordeScope
+    const generation = this.mordeGeneration
+    if (!scope || this.ctx.nanomuseCloud.mordePersonalScope() !== scope) throw new RelayError(401, 'signed_out', 'Sign in to Morde first')
+    const legacy = await this.read(this.pathForScope(''))
+    if (!this.isMordeSyncCurrent(scope, generation)) throw new RelayError(401, 'signed_out', 'The Morde account changed; try again')
+    return {
+      memories: legacy.memory.flatMap((item) => {
+        if (!item || typeof item.id !== 'string' || !item.id || item.id.length > 160 || typeof item.text !== 'string' || !item.text.trim() || item.text.trim().length > MEMORY_LINE) return []
+        return [{ id: item.id, text: item.text.trim(), at: Number.isFinite(item.at) ? item.at : 0, imported: this.store.mordeSync.legacyImports.memories[item.id] === true }]
+      }),
+      goals: legacy.goals.flatMap((goal) => {
+        if (!goal || typeof goal.id !== 'string' || !goal.id || goal.id.length > 160 || typeof goal.title !== 'string' || !goal.title.trim()) return []
+        return [{
+          id: goal.id,
+          at: Number.isFinite(goal.createdAt) ? goal.createdAt : 0,
+          title: goal.title.trim().slice(0, 80),
+          description: typeof goal.description === 'string' ? goal.description.trim().slice(0, 2000) : '',
+          status: goal.status === 'done' || goal.status === 'paused' ? goal.status : 'tracking',
+          category: typeof goal.category === 'string' && (CATEGORIES as readonly string[]).includes(goal.category) ? goal.category : 'other',
+          steps: Array.isArray(goal.steps) ? goal.steps.filter((step): step is string => typeof step === 'string').map((step) => step.slice(0, 200)).slice(0, 100) : [],
+          imported: this.store.mordeSync.legacyImports.goals[goal.id] === true,
+        }]
+      }),
+      retained: { feed_posts: legacy.feed.posts.length, library_items: legacy.library.length, routine: { ...legacy.feed.routine } },
+    }
+  }
+
+  private async readLegacyMordeSchedules(): Promise<{ available: boolean; schedules: LegacyMordeSchedule[] }> {
+    const schedule = this.ctx.get('schedule') as ScheduleLike | undefined
+    const sessions = this.ctx.get('sessionController') as SessionsListLike | undefined
+    if (!schedule || !sessions) return { available: false, schedules: [] }
+    const sessionPage = await sessions.list({}, AbortSignal.timeout(30_000))
+    if (sessionPage.items.length > 2000) throw new RelayError(413, 'legacy_schedule_limit', 'More than 2000 local sessions are present; narrow the legacy schedule list before previewing')
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+    const records: { sessionID: string; schedule: ScheduleRecordLike }[] = []
+    for (let offset = 0; offset < sessionPage.items.length; offset += 10) {
+      const page = sessionPage.items.slice(offset, offset + 10)
+      const groups = await Promise.all(page.map(async (session) => ({ sessionID: session.sessionId, schedules: await schedule.list({ sessionId: session.sessionId }) })))
+      for (const group of groups) for (const item of group.schedules) {
+        if (item && typeof item.id === 'string' && item.id && typeof item.kind === 'string' && typeof item.scheduledAt === 'string') records.push({ sessionID: group.sessionID, schedule: item })
+      }
+    }
+    return {
+      available: true,
+      schedules: records.map(({ sessionID, schedule: item }) => {
+        const sourceID = legacyScheduleSourceID(sessionID, item.id)
+        return legacyScheduleView(sessionID, item, timeZone, this.store.mordeSync.legacyImports.schedules[sourceID])
+      }),
+    }
+  }
+
+  async previewLegacyMordeSchedules(): Promise<{
+    available: boolean
+    schedules: LegacyMordeSchedule[]
+    models: MordeAvailableModel[]
+    model_error?: string
+  }> {
+    const scope = this.mordeScope
+    const generation = this.mordeGeneration
+    if (!scope || this.ctx.nanomuseCloud.mordePersonalScope() !== scope) throw new RelayError(401, 'signed_out', 'Sign in to Morde first')
+    const local = await this.readLegacyMordeSchedules()
+    if (!this.isMordeSyncCurrent(scope, generation)) throw new RelayError(401, 'signed_out', 'The Morde account changed; try again')
+    try {
+      const models = await this.ctx.nanomuseCloud.mordeAvailableModels(scope)
+      if (!this.isMordeSyncCurrent(scope, generation)) throw new RelayError(401, 'signed_out', 'The Morde account changed; try again')
+      return { ...local, models: models.filter((model) => model.capabilities.text) }
+    } catch (error) {
+      if (error instanceof RelayError && error.code === 'signed_out') throw error
+      return { ...local, models: [], model_error: message(error) }
+    }
+  }
+
+  async exportLegacyMordeSchedules(input: { model_id?: unknown; budget?: unknown }): Promise<{
+    format: 'morde-nanomuse-dsh-schedules'
+    version: 1
+    exported_at: string
+    schedules: LegacyMordeScheduleExport[]
+  }> {
+    const scope = this.mordeScope
+    const generation = this.mordeGeneration
+    if (!scope || this.ctx.nanomuseCloud.mordePersonalScope() !== scope) throw new RelayError(401, 'signed_out', 'Sign in to Morde first')
+    if (typeof input.model_id !== 'string' || !input.model_id) throw new RelayError(400, 'bad_request', 'Choose a Morde text model first')
+    const budget = legacyScheduleBudget(input.budget)
+    if (!budget) throw new RelayError(400, 'bad_request', 'The Morde schedule budget is outside the allowed limits')
+    const models = await this.ctx.nanomuseCloud.mordeAvailableModels(scope)
+    if (!this.isMordeSyncCurrent(scope, generation)) throw new RelayError(401, 'signed_out', 'The Morde account changed; try again')
+    if (!models.some((model) => model.id === input.model_id && model.capabilities.text)) throw new RelayError(400, 'model_unavailable', 'Select a text model available to this Morde account')
+    const local = await this.readLegacyMordeSchedules()
+    if (!this.isMordeSyncCurrent(scope, generation)) throw new RelayError(401, 'signed_out', 'The Morde account changed; try again')
+    if (local.schedules.length > MAX_LEGACY_SCHEDULE_EXPORT_ITEMS) {
+      throw new RelayError(413, 'legacy_schedule_export_too_large', 'The schedule export exceeds the Portal import limits')
+    }
+    let previewTextBytes = 0
+    const bundle: {
+      format: 'morde-nanomuse-dsh-schedules'
+      version: 1
+      exported_at: string
+      schedules: LegacyMordeScheduleExport[]
+    } = {
+      format: 'morde-nanomuse-dsh-schedules',
+      version: 1,
+      exported_at: new Date().toISOString(),
+      schedules: local.schedules.map((item): LegacyMordeScheduleExport => {
+        const objective = legacyScheduleExportText(item.objective)
+        const title = item.title_is_derived && objective.trim()
+          ? objective.trim()
+          : legacyScheduleExportText(item.title)
+        const truncated = objective !== item.objective || (!item.title_is_derived && title !== item.title)
+        const exportItem: LegacyMordeSchedule = {
+          ...item,
+          title,
+          objective,
+          ...(truncated ? { unavailable_reason: [item.unavailable_reason, 'Long source text is shortened in this export preview.'].filter(Boolean).join(' ') } : {}),
+        }
+        previewTextBytes += Buffer.byteLength(title, 'utf8') + Buffer.byteLength(objective, 'utf8')
+        if (previewTextBytes > MAX_LEGACY_SCHEDULE_EXPORT_BYTES) {
+          throw new RelayError(413, 'legacy_schedule_export_too_large', 'The schedule export exceeds the Portal import limits')
+        }
+        if (item.imported || exportItem.unavailable_reason || !item.timing) return exportItem
+        const request: MordeScheduleCreateInput = {
+          ...(item.title_is_derived ? {} : { title }),
+          model_id: input.model_id as string,
+          objective,
+          host_id: null,
+          timing: item.timing,
+          budget,
+          misfire_policy: 'skip',
+          notification_events: ['completed', 'failed', 'waiting_user'],
+          observation: null,
+        }
+        previewTextBytes += Buffer.byteLength(objective, 'utf8') + (item.title_is_derived ? 0 : Buffer.byteLength(title, 'utf8'))
+        if (previewTextBytes > MAX_LEGACY_SCHEDULE_EXPORT_BYTES) {
+          throw new RelayError(413, 'legacy_schedule_export_too_large', 'The schedule export exceeds the Portal import limits')
+        }
+        return { ...exportItem, migration: { request, idempotency_key: legacyScheduleIdempotencyKey(scope, item.source_id) } }
+      }),
+    }
+    if (Buffer.byteLength(JSON.stringify(bundle, null, 2), 'utf8') > MAX_LEGACY_SCHEDULE_EXPORT_BYTES) {
+      throw new RelayError(413, 'legacy_schedule_export_too_large', 'The schedule export exceeds the Portal import limits')
+    }
+    return bundle
+  }
+
+  async importLegacyMordeSchedule(input: {
+    source_id?: unknown; fingerprint?: unknown; model_id?: unknown; time_zone?: unknown;
+    budget?: unknown; original_disabled?: unknown;
+  }): Promise<{ already_imported: true; source_id: string; schedule_id: string } | { already_imported: false; source_id: string; schedule: MordeScheduleReceipt }> {
+    const scope = this.mordeScope
+    const generation = this.mordeGeneration
+    if (!scope || this.ctx.nanomuseCloud.mordePersonalScope() !== scope) throw new RelayError(401, 'signed_out', 'Sign in to Morde first')
+    if (typeof input.source_id !== 'string' || !/^[a-f0-9]{64}$/.test(input.source_id) || typeof input.fingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(input.fingerprint) ||
+      typeof input.model_id !== 'string' || !input.model_id || typeof input.time_zone !== 'string' || input.time_zone.length > 64 || input.original_disabled !== true) {
+      throw new RelayError(400, 'bad_request', 'Review the schedule mapping and confirm the original DSH schedule is disabled first')
+    }
+    const budget = legacyScheduleBudget(input.budget)
+    if (!budget) throw new RelayError(400, 'bad_request', 'The Morde schedule budget is outside the allowed limits')
+    const existingID = this.store.mordeSync.legacyImports.schedules[input.source_id]
+    if (existingID) return { already_imported: true, source_id: input.source_id, schedule_id: existingID }
+    const local = await this.readLegacyMordeSchedules()
+    if (!this.isMordeSyncCurrent(scope, generation)) throw new RelayError(401, 'signed_out', 'The Morde account changed; try again')
+    const source = local.schedules.find((item) => item.source_id === input.source_id)
+    if (!source || source.fingerprint !== input.fingerprint) throw new RelayError(409, 'legacy_schedule_changed', 'The local schedule changed after preview; preview it again')
+    if (source.unavailable_reason || !source.timing) throw new RelayError(400, 'unsupported_schedule', source.unavailable_reason ?? 'The local schedule cannot be mapped safely')
+    const timezone = input.time_zone
+    try {
+      new Intl.DateTimeFormat('en', { timeZone: timezone }).format()
+    } catch {
+      throw new RelayError(400, 'invalid_time_zone', 'Choose a valid IANA time zone')
+    }
+    const cloud = this.ctx.nanomuseCloud
+    const models = await cloud.mordeAvailableModels(scope)
+    if (!this.isMordeSyncCurrent(scope, generation)) throw new RelayError(401, 'signed_out', 'The Morde account changed; try again')
+    if (!models.some((model) => model.id === input.model_id && model.capabilities.text)) throw new RelayError(400, 'model_unavailable', 'Select a text model available to this Morde account')
+    const scheduleService = this.ctx.get('schedule') as ScheduleLike
+    const original = (await scheduleService.list({ sessionId: source.source_session_id as SessionId })).find((item) => item.id === source.id)
+    if (!original || legacyScheduleFingerprint(original) !== input.fingerprint) {
+      throw new RelayError(409, 'legacy_schedule_changed', 'The local schedule changed after preview; preview it again')
+    }
+    const timing = legacyScheduleTiming(original, timezone)
+    if (timing.reason || !timing.timing) throw new RelayError(409, 'legacy_schedule_changed', timing.reason ?? 'The local schedule can no longer be mapped safely')
+    const title = typeof original.title === 'string' && original.title.trim() ? original.title : ''
+    const request: MordeScheduleCreateInput = {
+      ...(title ? { title } : {}), model_id: input.model_id, objective: original.prompt ?? '', host_id: null,
+      timing: timing.timing,
+      budget,
+      misfire_policy: 'skip', notification_events: ['completed', 'failed', 'waiting_user'], observation: null,
+    }
+    const idempotencyKey = legacyScheduleIdempotencyKey(scope, input.source_id)
+    const created = await cloud.mordeCreateSchedule(request, idempotencyKey, scope)
+    if (!this.isMordeSyncCurrent(scope, generation)) throw new RelayError(401, 'signed_out', 'The Morde account changed; retry from the active account')
+    if (request.timing.kind === 'every_n_hours' &&
+      (created.timing.kind !== 'every_n_hours' || created.timing.interval_hours !== request.timing.interval_hours ||
+        created.timing.anchor_at !== request.timing.anchor_at || !created.next_run_at)) {
+      throw new RelayError(502, 'bad_response', 'Morde did not confirm the imported schedule anchor and next run')
+    }
+    this.store.mordeSync.legacyImports.schedules[input.source_id] = created.id
+    await this.save()
+    return { already_imported: false, source_id: input.source_id, schedule: created }
+  }
+
+  async importLegacyMordeData(input: { memory_ids?: unknown; goal_ids?: unknown }): Promise<{
+    imported_memories: number
+    imported_goals: number
+    memory_sync_pending: boolean
+    goal_sync_pending: number
+    sync_error?: string
+  }> {
+    const scope = this.mordeScope
+    const generation = this.mordeGeneration
+    if (!scope || this.ctx.nanomuseCloud.mordePersonalScope() !== scope) throw new RelayError(401, 'signed_out', 'Sign in to Morde first')
+    const selected = (value: unknown, field: string, limit: number): string[] => {
+      if (value === undefined) return []
+      if (!Array.isArray(value) || value.length > limit || value.some((id) => typeof id !== 'string' || !id || id.length > 160)) {
+        throw new RelayError(400, 'bad_request', `${field} must be a list of up to ${limit} legacy IDs`)
+      }
+      return [...new Set(value as string[])]
+    }
+    const memoryIDs = selected(input.memory_ids, 'memory_ids', MEMORY_MAX)
+    const goalIDs = selected(input.goal_ids, 'goal_ids', 500)
+    if (!memoryIDs.length && !goalIDs.length) throw new RelayError(400, 'bad_request', 'Select at least one memory or goal')
+    const preview = await this.previewLegacyMordeImport()
+    if (!this.isMordeSyncCurrent(scope, generation)) throw new RelayError(401, 'signed_out', 'The Morde account changed; try again')
+    const memories = new Map(preview.memories.map((item) => [item.id, item]))
+    const goals = new Map(preview.goals.map((item) => [item.id, item]))
+    if (memoryIDs.some((id) => !memories.has(id)) || goalIDs.some((id) => !goals.has(id))) {
+      throw new RelayError(400, 'bad_request', 'A selected legacy item is no longer available')
+    }
+    const memoryCandidates = memoryIDs.map((id) => memories.get(id)!).filter((item) => !item.imported)
+    const existingMemory = new Set(this.store.memory.map((item) => titleKey(item.text)))
+    const newMemories = memoryCandidates.filter((item) => {
+      const key = titleKey(item.text)
+      if (existingMemory.has(key)) return false
+      existingMemory.add(key)
+      return true
+    })
+    if (this.store.memory.length + newMemories.length > MEMORY_MAX) throw new RelayError(409, 'memory_limit', 'There is not enough local memory space; remove some memories first')
+    const goalCandidates = goalIDs.map((id) => goals.get(id)!).filter((item) => !item.imported)
+    const existingGoals = new Set(this.store.goals.map((item) => `${titleKey(item.title)}\0${titleKey(item.description)}`))
+    const newGoals = goalCandidates.filter((item) => {
+      const key = `${titleKey(item.title)}\0${titleKey(item.description)}`
+      if (existingGoals.has(key)) return false
+      existingGoals.add(key)
+      return true
+    })
+
+    const now = Date.now()
+    for (const item of memoryCandidates) this.store.mordeSync.legacyImports.memories[item.id] = true
+    for (const item of newMemories) this.store.memory.push({ id: newId('mem'), at: item.at || now, text: item.text.slice(0, MEMORY_LINE), source: 'import' })
+    if (newMemories.length) this.store.mordeSync.pendingMemory = true
+    for (const item of goalCandidates) this.store.mordeSync.legacyImports.goals[item.id] = true
+    for (const item of newGoals) {
+      const goal: Goal = {
+        id: newId('goal'), title: item.title, description: item.description, category: item.category, status: item.status,
+        sessionId: '', createdAt: item.at || now, updatedAt: now, summary: '', activity: [], steps: item.steps,
+        progress: item.status === 'done' ? 100 : -1, attention: false,
+      }
+      this.store.goals.unshift(goal)
+      this.markMordeGoalPending(goal)
+    }
+    await this.save()
+
+    let syncError: string | undefined
+    try {
+      await this.syncMordePersonal(true)
+    } catch (error) {
+      syncError = message(error)
+      this.queueMordePersonalSync()
+    }
+    return {
+      imported_memories: newMemories.length,
+      imported_goals: newGoals.length,
+      memory_sync_pending: this.store.mordeSync.pendingMemory,
+      goal_sync_pending: Object.values(this.store.mordeSync.pendingGoals).filter(Boolean).length,
+      ...(syncError ? { sync_error: syncError } : {}),
+    }
+  }
+
   /** What the model is told for the first conversation in `sessionId`; empty elsewhere and once it is over. */
   firstRunAddendum(sessionId: string | undefined): string {
     if (!sessionId || !boundTo(this.firstRun, sessionId)) return ''
-    return promptAddendum(this.firstRun, this.lang, this.ctx.nanomuseCloud.profile.current().name) ?? ''
+    return promptAddendum(this.firstRun, this.lang, this.roomProfile().name) ?? ''
   }
 
   /** The setup pages' choices, as they are made. */
@@ -756,7 +1378,7 @@ export default class NanomuseRooms extends Service {
 
   /** The three documents as the editor shows them; the templates are ours, in the person's language. */
   docs(): Record<DocName, { text: string; updatedAt: number; template: boolean }> {
-    const profile = this.ctx.nanomuseCloud.profile.current()
+    const profile = this.roomProfile()
     const zh = this.lang.startsWith('zh')
     const identity = this.store.docs.identity || identityTemplate(profile.name, profile.description, zh)
     const soul = this.store.docs.soul || soulTemplate(profile.name, zh)
@@ -800,7 +1422,7 @@ export default class NanomuseRooms extends Service {
       .map((l) => l.replace(/^\(?\d{4}-\d{2}-\d{2}\)?[:：]?\s*/, '').trim())
       .filter((l) => l.length > 1)
     const keep = new Set(lines.map(titleKey))
-    const before = this.store.memory.length
+    const before = localMemoryBody(this.store.memory)
     this.store.memory = this.store.memory.filter((m) => keep.has(titleKey(m.text)))
     const have = new Set(this.store.memory.map((m) => titleKey(m.text)))
     for (const line of lines.slice(0, MEMORY_MAX)) {
@@ -808,7 +1430,11 @@ export default class NanomuseRooms extends Service {
       have.add(titleKey(line))
       this.store.memory.push({ id: newId('mem'), at: Date.now(), text: line.slice(0, MEMORY_LINE), source: 'person' })
     }
-    if (this.store.memory.length !== before || lines.length) await this.save()
+    if (localMemoryBody(this.store.memory) !== before) {
+      if (this.mordeScope) this.store.mordeSync.pendingMemory = true
+      await this.save()
+      this.queueMordePersonalSync()
+    }
   }
 
   // ---- activity: what each chat did -------------------------------------------------------------
@@ -957,14 +1583,20 @@ export default class NanomuseRooms extends Service {
     const item: MemoryItem = { id: newId('mem'), at: Date.now(), text: line, source }
     this.store.memory.push(item)
     if (this.store.memory.length > MEMORY_MAX) this.store.memory.splice(0, this.store.memory.length - MEMORY_MAX)
+    if (this.mordeScope) this.store.mordeSync.pendingMemory = true
     await this.save()
+    this.queueMordePersonalSync()
     return item
   }
 
   async forget(id: string): Promise<void> {
     const before = this.store.memory.length
     this.store.memory = this.store.memory.filter((m) => m.id !== id)
-    if (this.store.memory.length !== before) await this.save()
+    if (this.store.memory.length !== before) {
+      if (this.mordeScope) this.store.mordeSync.pendingMemory = true
+      await this.save()
+      this.queueMordePersonalSync()
+    }
   }
 
   /** Muse's "import memory": a text pasted from another assistant — one line or paragraph per memory. */
@@ -1262,7 +1894,9 @@ export default class NanomuseRooms extends Service {
     const goal: Goal = { id, title, description: text.slice(0, 2000), category, status: 'tracking', sessionId, createdAt: now, updatedAt: now, summary: '', activity: [], steps: [], progress: -1, attention: false }
     this.store.goals = [goal, ...this.store.goals]
     this.goalBySession.set(sessionId, id)
+    this.markMordeGoalPending(goal)
     await this.save()
+    this.queueMordePersonalSync()
     return goal
   }
 
@@ -1280,17 +1914,25 @@ export default class NanomuseRooms extends Service {
       goal.activity = [{ at: Date.now(), title: patch.activity.title.trim().slice(0, 120), text: (patch.activity.text ?? '').trim().slice(0, 600) }, ...goal.activity].slice(0, ACTIVITY_KEEP)
     }
     goal.updatedAt = Date.now()
+    this.markMordeGoalPending(goal)
     await this.save()
+    this.queueMordePersonalSync()
     return goal
   }
 
   async deleteGoal(id: string): Promise<void> {
     const goal = this.store.goals.find((g) => g.id === id)
     if (!goal) return
+    if (this.mordeScope) {
+      const revision = this.store.mordeSync.goalRevisions[id]
+      if (revision) this.store.mordeSync.deletedGoals[id] = revision
+      else delete this.store.mordeSync.pendingGoals[id]
+    }
     this.store.goals = this.store.goals.filter((g) => g.id !== id)
     this.goalBySession.delete(goal.sessionId)
     delete this.automations[id]
     await this.save()
+    this.queueMordePersonalSync()
     // Its automations stop with it; the chat stays in the archive.
     const schedule = this.ctx.get('schedule') as ScheduleLike | undefined
     if (schedule) {
@@ -1338,7 +1980,7 @@ export default class NanomuseRooms extends Service {
     const next: Record<string, GoalAutomation[]> = {}
     for (const goal of this.store.goals) {
       const list = await schedule.list({ sessionId: goal.sessionId as SessionId }).catch(() => [])
-      if (list.length) next[goal.id] = list.map((r) => ({ id: r.id, title: r.title, kind: r.kind, rule: ruleOf(r), next: r.scheduledAt }))
+      if (list.length) next[goal.id] = list.map((r) => ({ id: r.id, title: r.title?.trim() || r.prompt?.split(/\r?\n/, 1)[0]?.slice(0, 80) || r.id, kind: r.kind, rule: ruleOf(r), next: r.scheduledAt }))
     }
     if (JSON.stringify(next) === JSON.stringify(this.automations)) return
     this.automations = next
@@ -1545,7 +2187,9 @@ export default class NanomuseRooms extends Service {
     const goal: Goal = { id, title: block.title, description: description.slice(0, 2000), category: block.category, status: 'tracking', sessionId: home, createdAt: now, updatedAt: now, summary: block.why.slice(0, 240), activity: [], steps: block.steps, progress: -1, attention: false }
     this.store.goals = [goal, ...this.store.goals]
     this.goalBySession.set(home, id)
+    this.markMordeGoalPending(goal)
     await this.save()
+    this.queueMordePersonalSync()
     const schedule = this.ctx.get('schedule') as ScheduleLike | undefined
     if (schedule) {
       // the check carries the goal's own note, so the chat knows the protocol whenever it wakes
@@ -1565,6 +2209,7 @@ export default class NanomuseRooms extends Service {
   private async applyGoalUpdate(update: GoalUpdateBlock, sessionId: string): Promise<void> {
     const goal = (update.goalId ? this.findGoal(update.goalId) : undefined) ?? this.store.goals.find((g) => g.id === this.goalBySession.get(sessionId))
     if (!goal) return
+    const previousBody = this.mordeGoalFromLocal(goal, this.store.mordeSync.goalBodies[goal.id])
     if (update.progress >= 0) goal.progress = update.progress
     goal.attention = update.status === 'attention'
     if (update.status === 'done') {
@@ -1580,7 +2225,9 @@ export default class NanomuseRooms extends Service {
       }
     }
     goal.updatedAt = Date.now()
+    if (!sameMordeGoal(previousBody, this.mordeGoalFromLocal(goal, this.store.mordeSync.goalBodies[goal.id]))) this.markMordeGoalPending(goal)
     await this.save()
+    this.queueMordePersonalSync()
   }
 
   private async alive(sessionId: string): Promise<boolean> {
@@ -1748,6 +2395,7 @@ export default class NanomuseRooms extends Service {
   }
 
   private async tick(): Promise<void> {
+    if (this.mordeScope) await this.syncMordePersonal(false).catch((error: unknown) => this.warn('Morde personal sync', error))
     const ready = await this.syncReady()
     if (!ready) return
     const now = Date.now()
@@ -1785,14 +2433,14 @@ export default class NanomuseRooms extends Service {
 
   /** Something to write from: instructions, a goal, or a profile the person shaped. */
   private known(): boolean {
-    const profile = this.ctx.nanomuseCloud.profile.current()
+    const profile = this.roomProfile()
     return Boolean(this.store.feed.instructions || this.store.goals.length || profile.description || Object.values(this.store.ideas.marks).some((m) => m.started))
   }
 
   // ---- prompts ---------------------------------------------------------------------------
 
   private context(): string {
-    const profile = this.ctx.nanomuseCloud.profile.current()
+    const profile = this.roomProfile()
     const lines: string[] = []
     lines.push(`- the agent's name, as the person chose it: ${profile.name}`)
     if (profile.description) lines.push(`- the agent's look, as the person drew it: ${profile.description.slice(0, 200)}`)
@@ -1832,15 +2480,411 @@ export default class NanomuseRooms extends Service {
     ].join('\n')
   }
 
-  // ---- storage ---------------------------------------------------------------------------
-
-  private get path(): string {
-    return join(dshHome(), 'nanomuse', 'rooms.json')
+  private isMordeSyncCurrent(scope: string, generation: number): boolean {
+    return Boolean(scope && this.mordeScope === scope && this.mordeGeneration === generation &&
+      this.ctx.nanomuseCloud.mordePersonalScope() === scope)
   }
 
-  private async read(): Promise<Store> {
+  private queueMordePersonalSync(): void {
+    if (!this.mordeScope) return
+    if (this.pendingMordeSync) clearTimeout(this.pendingMordeSync)
+    this.pendingMordeSync = setTimeout(() => {
+      this.pendingMordeSync = undefined
+      void this.syncMordePersonal(true).catch((error: unknown) => this.warn('Morde personal sync', error))
+    }, 120)
+  }
+
+  private markMordeGoalPending(goal: Goal): void {
+    if (!this.mordeScope) return
+    const baseline = this.store.mordeSync.goalBodies[goal.id]
+    if (!baseline || !sameMordeGoal(this.mordeGoalFromLocal(goal, baseline), baseline)) this.store.mordeSync.pendingGoals[goal.id] = true
+    else delete this.store.mordeSync.pendingGoals[goal.id]
+  }
+
+  private selectMordeScope(): Promise<void> {
+    const next = this.ctx.nanomuseCloud.mordePersonalScope()
+    if (next === this.mordeScope) return this.mordeScopeChanging
+    const generation = ++this.mordeGeneration
+    this.mordeSyncAgain = true
+    const transition = this.mordeScopeChanging.then(async () => {
+      if (generation !== this.mordeGeneration) return
+      await this.save()
+      if (generation !== this.mordeGeneration) return
+      const nextStore = await this.read(this.pathForScope(next))
+      if (generation !== this.mordeGeneration) return
+      this.mordeScope = next
+      this.store = nextStore
+      this.restoreMordeProfile()
+      this.goalBySession.clear()
+      for (const goal of this.store.goals) if (goal.sessionId) this.goalBySession.set(goal.sessionId, goal.id)
+      this.automations = {}
+      await this.refreshAutomations()
+      this.mordeLastSync = 0
+      this.broadcast()
+      if (next) await this.syncMordePersonal(true)
+    })
+    this.mordeScopeChanging = transition.catch((error: unknown) => this.warn('Morde account switch', error))
+    return transition
+  }
+
+  private async syncMordePersonal(force: boolean): Promise<void> {
+    if (!this.mordeScope || this.ctx.nanomuseCloud.mordePersonalScope() !== this.mordeScope) return
+    if (!force && Date.now() - this.mordeLastSync < 30_000) return
+    if (this.mordeSyncing) {
+      this.mordeSyncAgain = true
+      return this.mordeSyncing
+    }
+    const run = async (): Promise<void> => {
+      do {
+        this.mordeSyncAgain = false
+        const scope = this.mordeScope
+        const generation = this.mordeGeneration
+        if (!scope || !this.isMordeSyncCurrent(scope, generation)) return
+        await this.syncMordePersonalFor(scope, generation)
+      } while (this.mordeSyncAgain && this.mordeScope && this.ctx.nanomuseCloud.mordePersonalScope() === this.mordeScope)
+    }
+    const task = run()
+    this.mordeSyncing = task
     try {
-      const raw = JSON.parse(await readFile(this.path, 'utf8')) as Partial<Store>
+      await task
+    } finally {
+      if (this.mordeSyncing === task) this.mordeSyncing = undefined
+    }
+  }
+
+  private async syncMordePersonalFor(scope: string, generation: number): Promise<void> {
+    const cloud = this.ctx.nanomuseCloud
+    const objects = new Map<string, MordePersonalObject>()
+    let cursor = ''
+    const cursors = new Set<string>()
+    for (let pageCount = 0; pageCount < 1000; pageCount++) {
+      if (!this.isMordeSyncCurrent(scope, generation)) return
+      const page = await cloud.mordePersonalSnapshot(cursor)
+      if (!this.isMordeSyncCurrent(scope, generation)) return
+      for (const object of page.items) objects.set(`${object.object_type}/${object.object_id}`, object)
+      if (!page.next_cursor) break
+      if (cursors.has(page.next_cursor)) throw new Error('Morde personal snapshot repeated a cursor')
+      cursors.add(page.next_cursor)
+      cursor = page.next_cursor
+      if (pageCount === 999) throw new Error('Morde personal snapshot exceeded the page limit')
+    }
+
+    const remoteGoals = new Map<string, { revision: number; body: MordeGoalBody }>()
+    let goalCursor = ''
+    const goalCursors = new Set<string>()
+    for (let pageCount = 0; pageCount < 1000; pageCount++) {
+      if (!this.isMordeSyncCurrent(scope, generation)) return
+      const page = await cloud.mordeGoals(goalCursor)
+      if (!this.isMordeSyncCurrent(scope, generation)) return
+      for (const object of page.items) {
+        const body = mordeGoalBodyMap({ [object.object_id]: object.body })[object.object_id]
+        if (!body) throw new Error(`Morde returned an invalid Goal object: ${object.object_id}`)
+        remoteGoals.set(object.object_id, { revision: object.revision, body })
+      }
+      if (!page.next_cursor) break
+      if (goalCursors.has(page.next_cursor)) throw new Error('Morde Goal list repeated a cursor')
+      goalCursors.add(page.next_cursor)
+      goalCursor = page.next_cursor
+      if (pageCount === 999) throw new Error('Morde Goal list exceeded the page limit')
+    }
+    if (!this.isMordeSyncCurrent(scope, generation)) return
+
+    let changed = false
+    const profile = objects.get('profile/default')
+    if (profile) {
+      const body = mordeProfileBody(profile.body)
+      if (!body) throw new Error('Morde returned an invalid profile object')
+      const previous = this.store.mordeSync.profile
+      if (!previous || previous.revision !== profile.revision || JSON.stringify(previous.body) !== JSON.stringify(body)) changed = true
+      this.store.mordeSync.profile = { revision: profile.revision, body }
+      this.mordeProfile = { name: body.name, description: body.description, style: body.style }
+    } else if (this.store.mordeSync.profile) {
+      delete this.store.mordeSync.profile
+      this.mordeProfile = undefined
+      changed = true
+    }
+
+    const memory = objects.get('memory/global')
+    const remoteMemory = memory && typeof memory.body.content === 'string' ? memoryBody(memory.body.content) : undefined
+    if (memory && remoteMemory === undefined) throw new Error('Morde returned an invalid memory object')
+    const localMemory = localMemoryBody(this.store.memory)
+    const previousMemory = this.store.mordeSync.memoryBodies.global
+    const hasMemoryBaseline = Object.hasOwn(this.store.mordeSync.memoryBodies, 'global')
+    const pendingMemory = this.store.mordeSync.pendingMemory
+    const remoteRevision = memory?.revision ?? 0
+
+    if (!hasMemoryBaseline && !memory) {
+      if (pendingMemory && localMemory) {
+        const receipt = await this.tryMordeMutation(scope, generation, () => cloud.mordeReplacePersonalObject('memory', 'global', 0, { content: localMemory }, randomUUID()))
+        if (!receipt) return
+        this.store.mordeSync.memoryBodies.global = localMemory
+        this.store.mordeSync.memoryRevisions.global = receipt.result_revision
+        this.store.mordeSync.pendingMemory = false
+        changed = true
+      } else if (pendingMemory) {
+        this.store.mordeSync.pendingMemory = false
+        changed = true
+      }
+    } else if (!hasMemoryBaseline && memory && remoteMemory !== undefined) {
+      if (!localMemory || localMemory === remoteMemory) {
+        if (localMemory !== remoteMemory) this.setMemoryFromMorde(remoteMemory)
+        this.store.mordeSync.memoryBodies.global = remoteMemory
+        this.store.mordeSync.memoryRevisions.global = remoteRevision
+        this.store.mordeSync.pendingMemory = false
+        changed = true
+      } else {
+        this.warn('Morde memory conflict', new Error('local draft and server memory both exist without a shared baseline'))
+      }
+    } else if (hasMemoryBaseline && !memory) {
+      if (localMemory === previousMemory) {
+        if (localMemory) {
+          this.store.memory = []
+          changed = true
+        }
+        delete this.store.mordeSync.memoryBodies.global
+        delete this.store.mordeSync.memoryRevisions.global
+        this.store.mordeSync.pendingMemory = false
+        changed = true
+      } else if (pendingMemory && !localMemory) {
+        delete this.store.mordeSync.memoryBodies.global
+        delete this.store.mordeSync.memoryRevisions.global
+        this.store.mordeSync.pendingMemory = false
+        changed = true
+      } else {
+        this.warn('Morde memory conflict', new Error('server deleted memory while a local draft has changed'))
+      }
+    } else if (memory && remoteMemory !== undefined) {
+      const localChanged = localMemory !== previousMemory
+      const remoteChanged = remoteMemory !== previousMemory
+      if (localMemory === remoteMemory) {
+        if (this.store.mordeSync.memoryRevisions.global !== remoteRevision || previousMemory !== remoteMemory || pendingMemory) changed = true
+        this.store.mordeSync.memoryBodies.global = remoteMemory
+        this.store.mordeSync.memoryRevisions.global = remoteRevision
+        this.store.mordeSync.pendingMemory = false
+      } else if (localChanged && remoteChanged) {
+        this.warn('Morde memory conflict', new Error('local and server memory changed from the saved revision'))
+      } else if (localChanged && pendingMemory) {
+        if (localMemory) {
+          const receipt = await this.tryMordeMutation(scope, generation, () => cloud.mordeReplacePersonalObject('memory', 'global', remoteRevision, { content: localMemory }, randomUUID()))
+          if (!receipt) return
+          this.store.mordeSync.memoryBodies.global = localMemory
+          this.store.mordeSync.memoryRevisions.global = receipt.result_revision
+        } else {
+          const receipt = await this.tryMordeMutation(scope, generation, () => cloud.mordeDeletePersonalObject('memory', 'global', remoteRevision, randomUUID()))
+          if (!receipt) return
+          delete this.store.mordeSync.memoryBodies.global
+          delete this.store.mordeSync.memoryRevisions.global
+        }
+        this.store.mordeSync.pendingMemory = false
+        changed = true
+      } else if (!localChanged) {
+        this.setMemoryFromMorde(remoteMemory)
+        if (this.store.mordeSync.memoryRevisions.global !== remoteRevision || previousMemory !== remoteMemory) changed = true
+        this.store.mordeSync.memoryBodies.global = remoteMemory
+        this.store.mordeSync.memoryRevisions.global = remoteRevision
+      } else {
+        this.warn('Morde memory conflict', new Error('local memory draft changed without an explicit sync action'))
+      }
+    } else if (hasMemoryBaseline && !memory && !localMemory) {
+      delete this.store.mordeSync.memoryBodies.global
+      delete this.store.mordeSync.memoryRevisions.global
+      this.store.mordeSync.pendingMemory = false
+      changed = true
+    }
+    if (changed) {
+      await this.save()
+      changed = false
+    }
+
+    const cachedBodies = this.store.mordeSync.goalBodies
+    const cachedRevisions = this.store.mordeSync.goalRevisions
+    const localGoals = new Map(this.store.goals.map((goal) => [goal.id, goal]))
+    const deletedGoals = this.store.mordeSync.deletedGoals
+    const allGoalIDs = new Set([...remoteGoals.keys(), ...Object.keys(cachedBodies), ...localGoals.keys(), ...Object.keys(deletedGoals)])
+    for (const id of allGoalIDs) {
+      if (!this.isMordeSyncCurrent(scope, generation)) return
+      const remote = remoteGoals.get(id)
+      const baseline = cachedBodies[id]
+      const local = localGoals.get(id)
+      const deletedRevision = deletedGoals[id]
+      if (deletedRevision) {
+        if (!remote) {
+          delete deletedGoals[id]
+          changed = true
+        } else if (remote.revision === deletedRevision) {
+          const receipt = await this.tryMordeMutation(scope, generation, () => cloud.mordeDeleteGoal(id, deletedRevision, randomUUID()))
+          if (!receipt) return
+          delete deletedGoals[id]
+          delete cachedBodies[id]
+          delete cachedRevisions[id]
+          delete this.store.mordeSync.pendingGoals[id]
+          changed = true
+          await this.save()
+          changed = false
+        } else {
+          this.warn('Morde Goal conflict', new Error(`server Goal ${id} changed after the local deletion was queued`))
+        }
+        continue
+      }
+      if (!local && remote) {
+        this.store.goals.unshift(this.goalFromMorde(id, remote.body))
+        cachedBodies[id] = remote.body
+        cachedRevisions[id] = remote.revision
+        changed = true
+        continue
+      }
+      if (!local && !remote) {
+        if (baseline || Object.hasOwn(cachedRevisions, id) || Object.hasOwn(this.store.mordeSync.pendingGoals, id)) changed = true
+        delete cachedBodies[id]
+        delete cachedRevisions[id]
+        delete this.store.mordeSync.pendingGoals[id]
+        continue
+      }
+      if (local && !remote) {
+        if (!baseline) {
+          if (!this.store.mordeSync.pendingGoals[id]) continue
+          const body = this.mordeGoalFromLocal(local)
+          try {
+            const receipt = await this.tryMordeMutation(scope, generation, () => cloud.mordeCreateGoal(id, body as unknown as Record<string, unknown>, randomUUID()))
+            if (!receipt) return
+            cachedBodies[id] = body
+            cachedRevisions[id] = receipt.result_revision
+            delete this.store.mordeSync.pendingGoals[id]
+            changed = true
+            await this.save()
+            changed = false
+          } catch (error) {
+            if (!mordeConflict(error)) throw error
+            this.warn('Morde Goal conflict', error)
+          }
+        } else if (sameMordeGoal(this.mordeGoalFromLocal(local, baseline), baseline)) {
+          this.store.goals = this.store.goals.filter((goal) => goal.id !== id)
+          delete cachedBodies[id]
+          delete cachedRevisions[id]
+          delete this.store.mordeSync.pendingGoals[id]
+          changed = true
+          await this.save()
+          changed = false
+        } else {
+          this.warn('Morde Goal conflict', new Error(`server deleted Goal ${id} while a local draft has changed`))
+        }
+        continue
+      }
+      if (!local || !remote) continue
+      const localBody = this.mordeGoalFromLocal(local, baseline)
+      if (!baseline) {
+        if (sameMordeGoal(localBody, remote.body)) {
+          cachedBodies[id] = remote.body
+          cachedRevisions[id] = remote.revision
+          delete this.store.mordeSync.pendingGoals[id]
+          changed = true
+        } else {
+          this.warn('Morde Goal conflict', new Error(`local draft and server Goal ${id} both exist without a shared baseline`))
+        }
+        continue
+      }
+      const localChanged = !sameMordeGoal(localBody, baseline)
+      const remoteChanged = !sameMordeGoal(remote.body, baseline)
+      if (localChanged && remoteChanged && !sameMordeGoal(localBody, remote.body)) {
+        this.warn('Morde Goal conflict', new Error(`local and server Goal ${id} changed from the saved revision`))
+      } else if (localChanged && !sameMordeGoal(localBody, remote.body) && this.store.mordeSync.pendingGoals[id]) {
+        try {
+          const receipt = await this.tryMordeMutation(scope, generation, () => cloud.mordeUpdateGoal(id, remote.revision, localBody as unknown as Record<string, unknown>, randomUUID()))
+          if (!receipt) return
+          cachedBodies[id] = localBody
+          cachedRevisions[id] = receipt.result_revision
+          delete this.store.mordeSync.pendingGoals[id]
+          changed = true
+          await this.save()
+          changed = false
+        } catch (error) {
+          if (!mordeConflict(error)) throw error
+          this.warn('Morde Goal conflict', error)
+        }
+      } else if (localChanged && !sameMordeGoal(localBody, remote.body)) {
+        this.warn('Morde Goal conflict', new Error(`local draft for Goal ${id} changed without an explicit sync action`))
+      } else {
+        if (!sameMordeGoal(localBody, remote.body)) this.updateGoalFromMorde(local, remote.body)
+        if (!sameMordeGoal(localBody, remote.body) || !sameMordeGoal(baseline, remote.body) || cachedRevisions[id] !== remote.revision) changed = true
+        cachedBodies[id] = remote.body
+        cachedRevisions[id] = remote.revision
+        delete this.store.mordeSync.pendingGoals[id]
+      }
+    }
+
+    if (!this.isMordeSyncCurrent(scope, generation)) return
+    if (changed) await this.save()
+    this.mordeLastSync = Date.now()
+  }
+
+  private async tryMordeMutation<T>(scope: string, generation: number, mutate: () => Promise<T>): Promise<T | undefined> {
+    if (!this.isMordeSyncCurrent(scope, generation)) return undefined
+    try {
+      const result = await mutate()
+      return this.isMordeSyncCurrent(scope, generation) ? result : undefined
+    } catch (error) {
+      if (!mordeConflict(error)) throw error
+      this.warn('Morde personal conflict', error)
+      return undefined
+    }
+  }
+
+  private setMemoryFromMorde(content: string): void {
+    const existing = new Map(this.store.memory.map((item) => [item.text.normalize('NFKC').toLocaleLowerCase().replace(/\s+/g, ' ').trim(), item]))
+    this.store.memory = memoryLines(content).map((text) => {
+      const key = text.normalize('NFKC').toLocaleLowerCase().replace(/\s+/g, ' ').trim()
+      const prior = existing.get(key)
+      return prior ? { ...prior, text } : { id: newId('mem'), at: Date.now(), text, source: 'person' as const }
+    })
+  }
+
+  private mordeGoalFromLocal(goal: Goal, baseline?: MordeGoalBody): MordeGoalBody {
+    const status: MordeGoalBody['status'] = goal.status === 'done' ? 'done' : goal.status === 'tracking' ? 'active' : baseline?.status === 'cancelled' ? 'cancelled' : 'paused'
+    return {
+      title: goal.title.trim().slice(0, 80),
+      description: goal.description.trim().slice(0, 2000),
+      status,
+      steps: goal.steps.slice(0, 100).map((title, index) => ({
+        id: baseline?.steps[index]?.id ?? `${goal.id}-step-${index + 1}`,
+        title: title.slice(0, 200), status: baseline?.steps[index]?.status ?? 'pending', note: baseline?.steps[index]?.note ?? '',
+      })),
+      related_material_ids: baseline?.related_material_ids ?? [],
+    }
+  }
+
+  private goalFromMorde(id: string, body: MordeGoalBody): Goal {
+    const now = Date.now()
+    return {
+      id, title: body.title, description: body.description, category: 'other',
+      status: body.status === 'done' ? 'done' : body.status === 'active' ? 'tracking' : 'paused',
+      sessionId: '', createdAt: now, updatedAt: now, summary: '', activity: [],
+      steps: body.steps.map((step) => step.title), progress: body.status === 'done' ? 100 : -1, attention: false,
+    }
+  }
+
+  private updateGoalFromMorde(goal: Goal, body: MordeGoalBody): void {
+    goal.title = body.title
+    goal.description = body.description
+    goal.status = body.status === 'done' ? 'done' : body.status === 'active' ? 'tracking' : 'paused'
+    goal.steps = body.steps.map((step) => step.title)
+    goal.progress = body.status === 'done' ? 100 : -1
+    goal.updatedAt = Date.now()
+  }
+
+  // ---- storage ---------------------------------------------------------------------------
+
+  private pathForScope(scope: string): string {
+    return join(dshHome(), 'nanomuse', scope ? `rooms.${scope}.json` : 'rooms.json')
+  }
+
+  private get path(): string {
+    return this.pathForScope(this.mordeScope)
+  }
+
+  private async read(path = this.path): Promise<Store> {
+    try {
+      const raw = JSON.parse(await readFile(path, 'utf8')) as Partial<Store>
+      const mordeSync = raw.mordeSync && typeof raw.mordeSync === 'object' ? raw.mordeSync as Partial<Store['mordeSync']> : {}
       return {
         lang: typeof raw.lang === 'string' ? raw.lang : '',
         feed: { ...EMPTY.feed, ...(raw.feed ?? {}), posts: Array.isArray(raw.feed?.posts) ? raw.feed!.posts : [], routine: feedRoutine(raw.feed?.routine) },
@@ -1851,6 +2895,30 @@ export default class NanomuseRooms extends Service {
         docs: { ...EMPTY.docs, ...(raw.docs && typeof raw.docs === 'object' ? raw.docs : {}) },
         activity: Array.isArray(raw.activity) ? raw.activity.filter((r) => r && typeof r === 'object' && Array.isArray(r.steps)) : [],
         introducedAt: typeof raw.introducedAt === 'number' ? raw.introducedAt : 0,
+        mordeSync: {
+          goalRevisions: integerMap(mordeSync.goalRevisions),
+          goalBodies: mordeGoalBodyMap(mordeSync.goalBodies),
+          pendingGoals: booleanMap(mordeSync.pendingGoals),
+          deletedGoals: integerMap(mordeSync.deletedGoals),
+          memoryRevisions: integerMap(mordeSync.memoryRevisions),
+          memoryBodies: mordeSync.memoryBodies && typeof mordeSync.memoryBodies === 'object' && !Array.isArray(mordeSync.memoryBodies)
+            ? Object.fromEntries(Object.entries(mordeSync.memoryBodies).filter((entry): entry is [string, string] => typeof entry[1] === 'string'))
+            : {},
+          pendingMemory: mordeSync.pendingMemory === true,
+          legacyImports: mordeSync.legacyImports && typeof mordeSync.legacyImports === 'object'
+            ? {
+                memories: booleanMap(mordeSync.legacyImports.memories),
+                goals: booleanMap(mordeSync.legacyImports.goals),
+                schedules: stringMap(mordeSync.legacyImports.schedules),
+              }
+            : { memories: {}, goals: {}, schedules: {} },
+          ...(mordeSync.profile && typeof mordeSync.profile === 'object' && Number.isSafeInteger(mordeSync.profile.revision) && mordeSync.profile.revision > 0 && mordeSync.profile.body && typeof mordeSync.profile.body === 'object'
+            ? (() => {
+              const body = mordeProfileBody(mordeSync.profile!.body as unknown as Record<string, unknown>)
+              return body ? { profile: { revision: mordeSync.profile!.revision, body } } : {}
+            })()
+            : {}),
+        },
       }
     } catch {
       return structuredClone(EMPTY)
@@ -1859,9 +2927,9 @@ export default class NanomuseRooms extends Service {
 
   /** Serialised atomic writes; every save reaches the browser. */
   private save(): Promise<void> {
+    const path = this.path
     const snapshot = JSON.stringify(this.store, null, 2) + '\n'
     this.writing = this.writing.then(async () => {
-      const path = this.path
       await mkdir(join(dshHome(), 'nanomuse'), { recursive: true })
       const tmp = `${path}.${process.pid}.tmp`
       await writeFile(tmp, snapshot, { mode: 0o600 })
@@ -1886,6 +2954,8 @@ export default class NanomuseRooms extends Service {
         await Promise.all([this.syncReady(), this.refreshAutomations()])
         return send(res, 200, this.view())
       }
+      if (req.method === 'GET' && route === '/morde/legacy-preview') return send(res, 200, await this.previewLegacyMordeImport())
+      if (req.method === 'GET' && route === '/morde/schedules-preview') return send(res, 200, await this.previewLegacyMordeSchedules())
       if (req.method === 'GET' && route === '/events') {
         await Promise.all([this.syncReady(), this.refreshAutomations()])
         // a window opened: a day of use, and the policy's daily read, off the request's path
@@ -1904,6 +2974,22 @@ export default class NanomuseRooms extends Service {
       if (req.method !== 'POST') return send(res, 404, { error: { code: 'not_found', message: `No ${req.method ?? ''} ${route}` } })
       const body = await json(req)
       switch (route) {
+        case '/morde/legacy-import':
+          return send(res, 200, await this.importLegacyMordeData({ memory_ids: body.memory_ids, goal_ids: body.goal_ids }))
+        case '/morde/schedules-export':
+          return send(res, 200, await this.exportLegacyMordeSchedules({ model_id: body.model_id, budget: body.budget }))
+        case '/morde/schedule-import':
+          return send(res, 200, await this.importLegacyMordeSchedule({
+            source_id: body.source_id, fingerprint: body.fingerprint, model_id: body.model_id,
+            time_zone: body.time_zone, budget: body.budget, original_disabled: body.original_disabled,
+          }))
+        case '/profile/update': {
+          const allowed = ['name', 'avatar', 'emoji', 'color', 'description', 'style']
+          if (Object.keys(body).some((key) => !allowed.includes(key)) || !Object.keys(body).length) {
+            return send(res, 400, { error: { code: 'invalid_profile', message: 'Only profile fields can be changed' } })
+          }
+          return send(res, 200, await this.updateMordeProfile(body as MordeProfilePatch))
+        }
         case '/lang': {
           const lang = String(body.lang ?? '').trim().slice(0, 20)
           if (lang && lang !== this.store.lang) {

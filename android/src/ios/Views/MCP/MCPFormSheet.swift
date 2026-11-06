@@ -165,8 +165,11 @@ struct MCPFormSheet: View {
                 }
             }
             .animation(.spring(response: 0.3), value: copiedToast)
-            .sheet(item: $shareURL) { url in
-                MCPConfigShareSheet(url: url)
+            .sheet(isPresented: Binding(
+                get: { shareURL != nil },
+                set: { if !$0 { shareURL = nil } }
+            )) {
+                if let shareURL { MCPConfigShareSheet(url: shareURL) }
             }
             .onAppear(perform: populate)
         }
@@ -330,7 +333,7 @@ struct MCPFormSheet: View {
             } header: {
                 Text("Startup timeout (seconds)")
             } footer: {
-                Text("How long to wait for this server's first initialize. Raise it for slow-starting servers (e.g. uvx). Leave blank for the default (60s). nanoMuse setting, not part of the MCP protocol.")
+                Text("How long to wait for this server's first initialize. Raise it for slow-starting servers (e.g. uvx). Leave blank for the default (60s). morde setting, not part of the MCP protocol.")
             }
         }
     }

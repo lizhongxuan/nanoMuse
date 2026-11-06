@@ -24,20 +24,98 @@ extension AIChatViewModel {
     /// for emulator scheduling.
     static let maxConcurrentTools = 10
 
-    /// Set-typed view of currently-running shell PIDs.
-    ///
-    /// Backed by the singular `runningCommandPid: Int32` slot on
-    /// AIChatViewModel so `AIChatViewModel+ISHCommand`'s pidCallback
-    /// (which assigns `runningCommandPid = pid`) keeps working
-    /// unchanged. The stop button enumerates this Set to kill every
-    /// in-flight shell across a concurrent batch. When per-task PID
-    /// tracking lands this can be promoted to true Set storage with
-    /// per-task insert/remove.
+    /// Compatibility view for lifecycle code that still reports legacy shell state.
     ///
     /// [T-ios-concurrent-toolcall-dup-id]
     var runningCommandPids: Set<Int32> {
         get { runningCommandPid > 0 ? [runningCommandPid] : [] }
         set { runningCommandPid = newValue.first ?? 0 }
+    }
+
+    /// Convert a Linux resource path into the equivalent `minis://` link.
+    func linuxPathToMinisURL(_ path: String) -> String? {
+        let prefix = MinisStoragePaths.minisLinuxBaseDir + "/"
+        guard path.hasPrefix(prefix) else { return nil }
+        let rest = String(path.dropFirst(prefix.count))
+        guard let slashIndex = rest.firstIndex(of: "/") else { return nil }
+        let namespace = String(rest[..<slashIndex])
+        let filename = String(rest[rest.index(after: slashIndex)...])
+        guard !namespace.isEmpty, !filename.isEmpty else { return nil }
+        let encoded = filename.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? filename
+        return "minis://\(namespace)/\(encoded)"
+    }
+
+    /// Resolve an image path without consulting the local shell executor.
+    /// Mounted-folder URLs come from the manager's active security-scoped bookmarks.
+    func resolveMinisPath(_ pathOrURL: String) -> URL? {
+        if let url = URL(string: pathOrURL), url.scheme == "minis", url.host == "mounts" {
+            let subPath = MinisURLPathDecoding.subPathCandidates(for: url).first ?? ""
+            return resolveMountedFolderSubpath(subPath)
+        }
+        if let url = URL(string: pathOrURL), url.scheme == "minis" {
+            guard isSafeMinisURL(url) else { return nil }
+            return Self.resolveMinisURL(url)
+        }
+
+        guard pathOrURL.hasPrefix("/"), isSafeReadPath(pathOrURL) else { return nil }
+        let mountsPrefix = MinisStoragePaths.minisMountsLinuxDir + "/"
+        if pathOrURL.hasPrefix(mountsPrefix) {
+            return resolveMountedFolderSubpath(String(pathOrURL.dropFirst(mountsPrefix.count)))
+        }
+        if let minisURLString = linuxPathToMinisURL(pathOrURL),
+           let minisURL = URL(string: minisURLString) {
+            if minisURL.host == "mounts" {
+                let subPath = MinisURLPathDecoding.subPathCandidates(for: minisURL).first ?? ""
+                return resolveMountedFolderSubpath(subPath)
+            }
+            guard isSafeMinisURL(minisURL) else { return nil }
+            return Self.resolveMinisURL(minisURL)
+        }
+
+        let dataPath = RootfsManager.shared.dataPath
+        let candidate = dataPath.appendingPathComponent(String(pathOrURL.dropFirst()))
+        guard FileManager.default.fileExists(atPath: candidate.path) else { return candidate }
+        let rootPath = dataPath.resolvingSymlinksInPath().standardizedFileURL.path
+        let resolvedPath = candidate.resolvingSymlinksInPath().standardizedFileURL.path
+        guard resolvedPath == rootPath || resolvedPath.hasPrefix(rootPath + "/") else { return nil }
+        return candidate
+    }
+
+    private func resolveMountedFolderSubpath(_ subPath: String) -> URL? {
+        let components = subPath.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
+        guard components.count >= 2,
+              components.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }),
+              let mountName = components.first,
+              let mountURL = MountedFoldersManager.shared.resolvedURL(forName: mountName) else {
+            return nil
+        }
+        let candidate = components.dropFirst().reduce(mountURL) { url, component in
+            url.appendingPathComponent(component)
+        }
+        guard FileManager.default.fileExists(atPath: candidate.path) else { return nil }
+
+        // Do not let an in-folder symlink redirect read_image outside the active bookmark.
+        let canonicalRoot = mountURL.resolvingSymlinksInPath().standardizedFileURL.path
+        let canonicalCandidate = candidate.resolvingSymlinksInPath().standardizedFileURL.path
+        guard canonicalCandidate == canonicalRoot || canonicalCandidate.hasPrefix(canonicalRoot + "/") else {
+            return nil
+        }
+        return candidate
+    }
+
+    private func isSafeReadPath(_ path: String) -> Bool {
+        !(path as NSString).pathComponents.contains { $0 == ".." || $0 == "." }
+    }
+
+    private func isSafeMinisURL(_ url: URL) -> Bool {
+        guard url.scheme == "minis", let host = url.host,
+              host != ".", host != ".." else { return false }
+        return MinisURLPathDecoding.subPathCandidates(for: url).allSatisfy { path in
+            guard !path.hasPrefix("/") else { return false }
+            if path.isEmpty { return true }
+            return path.split(separator: "/", omittingEmptySubsequences: false)
+                .allSatisfy { !$0.isEmpty && $0 != "." && $0 != ".." }
+        }
     }
 
     /// Tiny actor wrapping the per-turn image budget so concurrent tool
@@ -75,6 +153,34 @@ extension AIChatViewModel {
         let cancelled: Bool
     }
 
+    private func disabledLocalToolOutcome(
+        _ tu: StreamResult.ToolEntry,
+        msgIdx: Int,
+        message: String
+    ) async -> ToolExecOutcome {
+        let blockIdx = tu.blockIdx
+        if msgIdx < messages.count, blockIdx < messages[msgIdx].blocks.count {
+            messages[msgIdx].blocks[blockIdx].content = message
+            messages[msgIdx].blocks[blockIdx].toolStatus = .failed(message: message)
+        }
+        toolLoopDetector.record(
+            toolName: tu.name, params: tu.args,
+            result: nil, errorMessage: message, toolCallId: tu.id
+        )
+        let snapshot = ToolSnapshot(type: .text, text: message, mediaRef: nil, duration: nil)
+        let item = ToolSnapshotItem(
+            id: tu.id, toolName: tu.name, snapshot: snapshot,
+            mediaResolver: await ChatStore.shared.mediaFileURLResolver()
+        )
+        return ToolExecOutcome(
+            toolId: tu.id, toolName: tu.name,
+            resultPart: .toolResult(id: tu.id, name: tu.name, content: message, isError: true),
+            snapshotEntry: (toolName: tu.name, snapshot: snapshot),
+            snapshotItem: item,
+            cancelled: false
+        )
+    }
+
     /// Execute a single tool use, returning a self-contained outcome.
     /// All mutations to `messages[msgIdx].blocks[blockIdx]` happen inside
     /// (the VM is @MainActor so this is safe even when invoked from
@@ -109,6 +215,13 @@ extension AIChatViewModel {
                 snapshotEntry: (toolName: tu.name, snapshot: cancelSnap),
                 snapshotItem: item,
                 cancelled: true
+            )
+        }
+
+        if ["shell_execute", "file_read", "file_write", "file_edit"].contains(tu.name) {
+            // nanoMuse: Historical local Agent tool calls fail without touching iSH or user files.
+            return await disabledLocalToolOutcome(
+                tu, msgIdx: msgIdx, message: MordeLocalExecutionPolicy.disabledMessage
             )
         }
 
@@ -183,62 +296,6 @@ extension AIChatViewModel {
             }
         }
 
-        // [T-truncated-args-visibility #119] Refuse to execute a WRITE whose
-        // argument stream was truncated.
-        //
-        // The repair pass closes an unterminated JSON string by appending `"}`,
-        // which for file_write is indistinguishable from the model having ended
-        // `content` right there: the JSON parses, every required field is
-        // present, preflight passes, and a HALF file lands on disk while both
-        // the UI and the model's tool result report plain success. The user
-        // finds a truncated file later; the model, seeing "success", keeps
-        // building on it.
-        //
-        // For writes a partial artifact is strictly worse than none — it is
-        // silent corruption of the user's data, and unlike a blocked call it
-        // cannot be recovered by simply retrying. Read-only and shell tools
-        // keep the existing repair-and-run behaviour: there the repaired call
-        // is at worst a wasted round-trip, and refusing them would regress
-        // recoveries that work today.
-        if let tag = truncationRepairTag,
-           tu.name == "file_write" || tu.name == "file_edit" {
-            let path = (toolArgs["path"] as? String) ?? (toolArgs["file_path"] as? String) ?? ""
-            AppLogger(category: "ToolPreflight").warning(
-                "[ToolRepair] REFUSED truncated write tool=\(tu.name) id=\(tu.id) strategy=\(tag) path=\(path)"
-            )
-            let uiMessage = AppLocalized("Blocked: arguments were truncated in transit")
-            let modelMessage = """
-            Error: This call was NOT executed. Its argument stream was truncated in transit \
-            (repair strategy: \(tag)), so the `content` your client sent was cut short and would \
-            have written an incomplete file\(path.isEmpty ? "" : " to \(path)"). Nothing was \
-            written to disk — the target file is unchanged.
-
-            The most likely cause is the response hitting its output-token limit mid-argument. \
-            Re-issue this write in smaller pieces: write the first part, then append the rest \
-            with follow-up calls, rather than repeating the same oversized call.
-            """
-            if msgIdx < messages.count, blockIdx < messages[msgIdx].blocks.count {
-                messages[msgIdx].blocks[blockIdx].content = uiMessage
-                messages[msgIdx].blocks[blockIdx].toolStatus = .failed(message: uiMessage)
-            }
-            toolLoopDetector.record(
-                toolName: tu.name, params: tu.args,
-                result: nil, errorMessage: modelMessage, toolCallId: tu.id
-            )
-            let refusedSnap = ToolSnapshot(type: .text, text: modelMessage, mediaRef: nil, duration: nil)
-            let item = ToolSnapshotItem(
-                id: tu.id, toolName: tu.name, snapshot: refusedSnap,
-                mediaResolver: await ChatStore.shared.mediaFileURLResolver()
-            )
-            return ToolExecOutcome(
-                toolId: tu.id, toolName: tu.name,
-                resultPart: .toolResult(id: tu.id, name: tu.name, content: modelMessage, isError: true),
-                snapshotEntry: (toolName: tu.name, snapshot: refusedSnap),
-                snapshotItem: item,
-                cancelled: false
-            )
-        }
-
         // Preflight: reject empty / missing-required-field tool calls.
         if let preflightError = Self.preflightValidateToolCall(name: tu.name, args: toolArgs, tools: tools) {
             let chunkRing = tu.inputChunkRing
@@ -279,271 +336,6 @@ extension AIChatViewModel {
 
         do {
         switch tu.name {
-        case "shell_execute":
-            let (command, timeout, delay) = parseToolInput(from: argsJson)
-
-            if command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                ctLogger.warning("[ToolArgsProbe] shell_execute called with empty command — argsJson=<<<\(argsJson)>>>")
-                toolOutput = "Error: Missing required 'command' parameter. Please call shell_execute again with a non-empty `command` field."
-                toolSuccess = false
-                if msgIdx < messages.count, blockIdx < messages[msgIdx].blocks.count {
-                    messages[msgIdx].blocks[blockIdx].content = toolOutput
-                }
-                break
-            }
-
-            // Offload permission check.
-            ctLogger.info("[OffloadPerm] shell command: \(command)")
-            if let offloadCmd = OffloadPermissionManager.extractOffloadCommand(from: command) {
-                ctLogger.info("[OffloadPerm] matched offload: \(offloadCmd), level: \(OffloadPermissionManager.shared.permissionLevel(for: offloadCmd).rawValue)")
-                let permResult = await OffloadPermissionManager.shared.checkPermission(
-                    for: offloadCmd, sessionId: self.sessionId, fullCommand: command
-                )
-                if case .denied(let msg) = permResult {
-                    ctLogger.info("[OffloadPerm] DENIED: \(offloadCmd)")
-                    toolOutput = msg
-                    toolSuccess = false
-                    if msgIdx < messages.count, blockIdx < messages[msgIdx].blocks.count {
-                        messages[msgIdx].blocks[blockIdx].content = msg
-                    }
-                    break
-                }
-                ctLogger.info("[OffloadPerm] ALLOWED: \(offloadCmd)")
-            } else {
-                ctLogger.info("[OffloadPerm] no offload match for first token")
-            }
-
-            // Delay execution.
-            if delay > 0 {
-                toolDelayWaitCount += 1
-                defer { toolDelayWaitCount -= 1 }
-                // [T-delay-stop-latency] The stop button during the countdown
-                // sets `commandCancelledByUser` (stopCurrentCommand guards on
-                // `toolDelayWaitActive`), but the old loop only re-checked that
-                // flag once per whole second and then slept a FULL second — a
-                // tap landing just after a check waited up to ~1s before the
-                // next check, which read as "stop does nothing" during the
-                // delay phase (the user report). Poll on a short tick instead so
-                // both the button flag AND Task cancellation are honored within
-                // ~100ms, while the visible countdown still refreshes once per
-                // whole second.
-                let totalSeconds = Int(delay)
-                let tickNanos: UInt64 = 100_000_000 // 100ms
-                let ticksPerSecond = 10
-                var lastShownRemaining = -1
-                for tick in 0..<(totalSeconds * ticksPerSecond) {
-                    if commandCancelledByUser || Task.isCancelled {
-                        throw CancellationError()
-                    }
-                    let remaining = totalSeconds - (tick / ticksPerSecond)
-                    if remaining != lastShownRemaining,
-                       msgIdx < self.messages.count, blockIdx < self.messages[msgIdx].blocks.count {
-                        lastShownRemaining = remaining
-                        let mm = remaining / 60
-                        let ss = remaining % 60
-                        let countdown = mm > 0 ? String(format: "%d:%02d", mm, ss) : "\(ss)s"
-                        self.messages[msgIdx].blocks[blockIdx].content = "⏳ Waiting \(countdown) before executing..."
-                        self.scrollToBottomSignal.send()
-                    }
-                    try await Task.sleep(nanoseconds: tickNanos)
-                }
-                // Final cancellation check after the last tick so a tap in the
-                // final 100ms window still aborts before we launch the process.
-                if commandCancelledByUser || Task.isCancelled {
-                    throw CancellationError()
-                }
-            }
-
-            let preSnapshot = snapshotMinisFiles()
-            let result: CommandResult
-            do {
-                var lineBuffer: [String] = []
-                var lastFlush = Date.distantPast
-                let kMaxStreamingDisplayChars = 30_000
-                let flushLines: () -> Void = { [weak self] in
-                    guard let self, !lineBuffer.isEmpty else { return }
-                    let joined = lineBuffer.joined(separator: "\n")
-                    lineBuffer.removeAll()
-                    lastFlush = Date()
-                    if msgIdx < self.messages.count && blockIdx < self.messages[msgIdx].blocks.count {
-                        let current = self.messages[msgIdx].blocks[blockIdx].content
-                        var newContent: String
-                        if current.hasSuffix("Executing...") {
-                            newContent = joined
-                        } else {
-                            newContent = current + "\n" + joined
-                        }
-                        if newContent.count > kMaxStreamingDisplayChars {
-                            newContent = "…[output truncated]…\n" + String(newContent.suffix(kMaxStreamingDisplayChars))
-                        }
-                        self.messages[msgIdx].blocks[blockIdx].content = newContent
-                        self.scrollToBottomSignal.send()
-                    }
-                }
-                // [T-tool-exec-breadcrumb] Durable, written BEFORE the command
-                // launches. `[ToolLifecycle] COMPLETED` only lands after a tool
-                // returns, so a process killed mid-execution (watchdog SIGKILL,
-                // Jetsam, SIGABRT) left no record of what was running. This line
-                // is on disk (O_SYNC) before executeCommand is entered, so the
-                // last breadcrumb after a kill names the command that was live.
-                // Command is truncated — enough to identify it, not enough to
-                // bloat the file with a large heredoc.
-                #if DEBUG
-                CrashReporter.writeToolBreadcrumb(
-                    "[ToolExec] STARTING shell_execute id=\(tu.id.prefix(20)) sid=\(sessionId?.prefix(8) ?? "nil") timeout=\(timeout)s command=\"\(command.prefix(500))\""
-                )
-                #endif
-                result = try await executeCommand(command, timeout: timeout) { [weak self] line in
-                    guard let self else { return }
-                    let (cleanedLine, capturedURLs) = MinisURLMarker.extract(from: line)
-                    if !capturedURLs.isEmpty {
-                        Task { @MainActor in
-                            for raw in capturedURLs {
-                                if let u = URL(string: raw),
-                                   MinisOpenURLBroker.isSupportedScheme(u.scheme) {
-                                    MinisOpenURLBroker.shared.offer(u)
-                                }
-                            }
-                        }
-                    }
-                    if cleanedLine.isEmpty && !line.isEmpty { return }
-                    lineBuffer.append(cleanedLine)
-                    if Date().timeIntervalSince(lastFlush) >= 0.2 {
-                        flushLines()
-                    }
-                }
-                flushLines()
-            } catch {
-                result = CommandResult(output: "Error: \(error.localizedDescription)", exitCode: -1)
-            }
-            // [T-tool-exec-breadcrumb] Pair for the STARTING line above. The
-            // existing `[ToolLifecycle] COMPLETED` covers every tool, but it
-            // travels the droppable NSLog pipe; this one shares the STARTING
-            // line's durable file so a STARTING with no matching FINISHED is
-            // unambiguous evidence that the process died inside this command.
-            #if DEBUG
-            CrashReporter.writeToolBreadcrumb(
-                "[ToolExec] FINISHED shell_execute id=\(tu.id.prefix(20)) exit=\(result.exitCode)"
-            )
-            #endif
-            if msgIdx < messages.count, blockIdx < messages[msgIdx].blocks.count {
-                let existingContent = messages[msgIdx].blocks[blockIdx].content
-                let hasStreamedContent = !existingContent.isEmpty
-                    && !existingContent.hasSuffix("Executing...")
-                if !hasStreamedContent {
-                    let (cleaned, capturedURLs) = MinisURLMarker.extract(from: result.output)
-                    for raw in capturedURLs {
-                        if let u = URL(string: raw),
-                           MinisOpenURLBroker.isSupportedScheme(u.scheme) {
-                            MinisOpenURLBroker.shared.offer(u)
-                        }
-                    }
-                    let resultTrimmed = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !resultTrimmed.isEmpty {
-                        messages[msgIdx].blocks[blockIdx].content = resultTrimmed
-                    }
-                }
-            }
-            if commandCancelledByUser {
-                // NOTE: don't reset commandCancelledByUser here under
-                // concurrent execution — sibling shell tasks still need
-                // the signal to abort their own delay loops. The outer
-                // dispatcher resets it once per batch.
-                toolOutput = "<system-reminder>The user cancelled this operation. The returned result may be incomplete.</system-reminder>\n" + result.output
-                cancelledHere = true
-            } else {
-                toolOutput = result.output
-            }
-            toolSuccess = result.exitCode == 0
-
-            // Scan for new/modified files under /var/minis/
-            let postSnapshot = snapshotMinisFiles()
-            let newOrModified = postSnapshot.filter { key, date in
-                preSnapshot[key] == nil || preSnapshot[key]! < date
-            }
-            if !newOrModified.isEmpty {
-                for (path, _) in newOrModified {
-                    var isDir: ObjCBool = false
-                    if let hostURL = resolveHostPath(path) {
-                        FileManager.default.fileExists(atPath: hostURL.path, isDirectory: &isDir)
-                    }
-                    ensureParentDirsInMetaDB(for: path)
-                    ensureFakefsMetadata(for: path, isDirectory: isDir.boolValue)
-                }
-                toolOutput += "\n\n[minis] New/modified files:"
-                for path in newOrModified.keys.sorted() {
-                    if let url = linuxPathToMinisURL(path) {
-                        toolOutput += "\n  \(url)"
-                    }
-                }
-            }
-
-            let (redactedOut, redactHits) = EnvVarRedactor.redactIfEnabled(toolOutput)
-            if redactHits > 0 {
-                ctLogger.info("[EnvVarRedact] shell_execute: masked \(redactHits) env-var value(s) in tool result")
-            }
-            toolOutput = redactedOut
-
-        case "file_read":
-            let fileResult: FileToolResult
-            do {
-                fileResult = try await executeFileRead(from: argsJson)
-            } catch {
-                fileResult = FileToolResult(output: "Error: \(error.localizedDescription)", success: false)
-            }
-            if msgIdx < messages.count, blockIdx < messages[msgIdx].blocks.count {
-                messages[msgIdx].blocks[blockIdx].content = fileResult.output
-            }
-            toolOutput = fileResult.output
-            toolSuccess = fileResult.success
-            if fileResult.success,
-               let data = argsJson.data(using: .utf8),
-               let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let readPath = dict["path"] as? String,
-               let skillId = SkillStore.shared.skillIdFromPath(readPath) {
-                await MainActor.run { SkillStore.shared.recordSkillUse(skillId) }
-            }
-
-        case "file_write":
-            let fileResult: FileToolResult
-            do {
-                fileResult = try await executeFileWrite(from: argsJson)
-            } catch {
-                fileResult = FileToolResult(output: "Error: \(error.localizedDescription)", success: false)
-            }
-            if msgIdx < messages.count, blockIdx < messages[msgIdx].blocks.count {
-                messages[msgIdx].blocks[blockIdx].content = fileResult.output
-            }
-            toolOutput = fileResult.output
-            toolSuccess = fileResult.success
-            if fileResult.success,
-               let data = argsJson.data(using: .utf8),
-               let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let writtenPath = dict["path"] as? String,
-               writtenPath.contains("/skills/") && writtenPath.hasSuffix("SKILL.md") {
-                await MainActor.run { SkillStore.shared.reload() }
-            }
-
-        case "file_edit":
-            let fileResult: FileToolResult
-            do {
-                fileResult = try await executeFileEdit(from: argsJson)
-            } catch {
-                fileResult = FileToolResult(output: "Error: \(error.localizedDescription)", success: false)
-            }
-            if msgIdx < messages.count, blockIdx < messages[msgIdx].blocks.count {
-                messages[msgIdx].blocks[blockIdx].content = fileResult.output
-            }
-            toolOutput = fileResult.output
-            toolSuccess = fileResult.success
-            if fileResult.success,
-               let data = argsJson.data(using: .utf8),
-               let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let editedPath = dict["path"] as? String,
-               editedPath.contains("/skills/") && editedPath.hasSuffix("SKILL.md") {
-                await MainActor.run { SkillStore.shared.reload() }
-            }
-
         case "browser_use":
             var browserResult: BrowserActionResult
             if let input = BrowserActionInput.parse(from: argsJson) {
@@ -616,8 +408,7 @@ extension AIChatViewModel {
 
             // [T-browser-download-ux] Surface native WKDownload activity in the
             // tool result so the agent KNOWS a page interaction triggered a
-            // download and doesn't re-download the same file via shell
-            // curl/wget. WebKit's decideDestination callback can land a beat
+            // download. WebKit's decideDestination callback can land a beat
             // after the action resolves (navigation-turned-download resumes
             // the continuation first), so if a download is in flight but not
             // yet registered, wait briefly for the filename to be known.
@@ -629,8 +420,8 @@ extension AIChatViewModel {
                     downloadReport = BrowserDownloadCenter.shared.agentReport(for: sid)
                         ?? "[browser_downloads] This action triggered a native browser file "
                          + "download that is still starting (filename not yet resolved). It will "
-                         + "be saved into /var/minis/workspace/ — do NOT re-download it with "
-                         + "curl/wget; check the workspace or the next browser_use result instead."
+                         + "be saved into /var/minis/workspace/; check the workspace or the next "
+                         + "browser_use result for it."
                 }
                 if let downloadReport {
                     toolOutput += "\n\n" + downloadReport
@@ -639,7 +430,7 @@ extension AIChatViewModel {
 
         case "read_image":
             let pathArg = toolArgs["path"] as? String ?? ""
-            let resolvedURL = await resolveMinisPath(pathArg)
+            let resolvedURL = resolveMinisPath(pathArg)
             ctLogger.info("[read_image] pathArg=\(pathArg) resolvedURL=\(resolvedURL?.path ?? "nil") exists=\(resolvedURL.map { FileManager.default.fileExists(atPath: $0.path) } ?? false)")
             if let resolvedURL {
                 let dataOK = (try? Data(contentsOf: resolvedURL)) != nil
@@ -872,16 +663,6 @@ extension AIChatViewModel {
             } else {
                 snapshot = ToolSnapshot(type: .text, text: toolOutput, mediaRef: nil, duration: toolDuration)
             }
-        case "file_write", "file_edit":
-            if let path = toolArgs["path"] as? String,
-               let hostURL = await resolvePathForDirectRead(path),
-               let fileContent = try? String(contentsOf: hostURL, encoding: .utf8) {
-                let lines = fileContent.components(separatedBy: "\n")
-                let preview = lines.prefix(200).joined(separator: "\n")
-                snapshot = ToolSnapshot(type: .text, text: preview, mediaRef: nil, duration: toolDuration)
-            } else {
-                snapshot = ToolSnapshot(type: .text, text: toolOutput, mediaRef: nil, duration: toolDuration)
-            }
         default:
             snapshot = ToolSnapshot(type: .text, text: toolOutput, mediaRef: nil, duration: toolDuration)
         }
@@ -924,7 +705,7 @@ extension AIChatViewModel {
             let offloadResult = offloadToolOutput(toolOutput, toolName: tu.name, toolId: tu.id)
             let offloadMinisURL = linuxPathToMinisURL(offloadResult.linuxPath)
             let truncatedBody: String
-            if tu.name == "shell_execute" || tu.name == "browser_use" {
+            if tu.name == "browser_use" {
                 let halfLen = maxToolResultLength / 2
                 truncatedBody = String(toolOutput.prefix(halfLen))
                     + "\n\n...\n\n"
@@ -935,7 +716,7 @@ extension AIChatViewModel {
             finalOutput = truncatedBody
                 + "\n\n[OUTPUT TRUNCATED] Full output (\(toolOutput.count) chars) saved to: \(offloadResult.linuxPath)"
                 + (offloadMinisURL.map { "\nminis_url: \($0)" } ?? "")
-                + "\nUse file_read tool to read the complete output."
+                + "\nOpen the saved resource link to inspect the complete output."
         } else {
             finalOutput = toolOutput
         }
@@ -975,8 +756,7 @@ extension AIChatViewModel {
         // [T-truncated-args-visibility #119] Tell the MODEL when the call it
         // just got a success for was built from truncated arguments.
         //
-        // Writes never reach here (refused above), so this covers the tools we
-        // still run repaired — shell_execute, browser_use, file_read, … There
+        // This covers supported tools that still run after argument repair.
         // the repaired call may well have done the right thing, but the model
         // has no way to know its own arguments were altered, and silently
         // assuming they were intact is how a half-truth propagates downstream.

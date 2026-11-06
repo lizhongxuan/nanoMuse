@@ -75,7 +75,7 @@ struct LLMCorrectionStrategy: CorrectionStrategy {
         let diagnostics = PromptDiagnosticsSink()
         let prompt = Self.buildPrompt(transcript: transcript, candidates: candidates,
                                       context: context, diagnostics: diagnostics)
-        let provider = await AIChatViewModel.makeAgentProvider(for: resolved.entry)
+        let provider = try await Self.makeAgentProvider(for: resolved.entry)
 
         // thinkingLevel: .off, exactly like title generation — this is a mechanical
         // rewrite, reasoning traces would only add latency (and on some providers cause
@@ -112,6 +112,37 @@ struct LLMCorrectionStrategy: CorrectionStrategy {
                                  durationMs: ms,
                                  prompt: prompt,
                                  diagnostics: diagnostics)
+    }
+
+    @MainActor
+    private static func makeAgentProvider(for entry: ModelEntry) async throws -> AgentProvider {
+        let store = ProviderConfigStore.shared
+        guard let instance = store.instance(for: entry.providerInstanceId) else {
+            throw CorrectionError.noModelAvailable
+        }
+
+        let provider: AgentProvider
+        switch instance.providerType {
+        case .anthropic:
+            provider = AnthropicAgentProvider(provider: LLMProviderFactory.makeAnthropicProvider(instance: instance, model: entry.model))
+        case .gemini:
+            provider = GeminiAgentProvider(provider: await LLMProviderFactory.makeGeminiProvider(instance: instance, model: entry.model))
+        case .openAI:
+            provider = OpenAIAgentProvider(provider: LLMProviderFactory.makeOpenAIProvider(instance: instance, model: entry.model))
+        case .antigravity:
+            provider = AntigravityAgentProvider(provider: await LLMProviderFactory.makeAntigravityProvider(instance: instance, model: entry.model))
+        case .openRouter:
+            provider = OpenAIAgentProvider(provider: LLMProviderFactory.makeOpenRouterProvider(instance: instance, model: entry.model))
+        case .openAIResponses:
+            provider = OpenAIAgentProvider(provider: LLMProviderFactory.makeOpenAIResponsesProvider(instance: instance, model: entry.model))
+        case .xAI:
+            provider = OpenAIAgentProvider(provider: LLMProviderFactory.makeXAIProvider(instance: instance, model: entry.model))
+        case .kimiCode:
+            provider = OpenAIAgentProvider(provider: LLMProviderFactory.makeKimiProvider(instance: instance, model: entry.model))
+        case .unsupported:
+            throw CorrectionError.noModelAvailable
+        }
+        return NanoMuseOwnTurns.wrap(entry: entry, provider)
     }
 
     /// Output-token budget for one correction call (user decision 2026-07-17):
@@ -280,7 +311,7 @@ struct LLMCorrectionStrategy: CorrectionStrategy {
 
 /// Sub-model-group → primary-model-group fallback (design §6), but VM-independent so the
 /// engine and the debug RPCs can both use it. Mirrors the *intent* of
-/// `AIChatViewModel.resolveSubEntry()`: prefer the cheap sub group, degrade to primary
+/// the configured sub-group resolver: prefer the cheap sub group, degrade to primary
 /// rather than failing.
 enum CorrectionModelResolver {
     struct Resolved {

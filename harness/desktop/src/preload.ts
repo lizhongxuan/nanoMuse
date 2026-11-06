@@ -60,6 +60,8 @@ const bridge = {
   reportBug: (): Promise<{ screenshot: string; url: string }> => ipcRenderer.invoke("nanomuse:report-bug"),
   /** Show a file in the system's file manager. */
   reveal: (path: string): Promise<void> => ipcRenderer.invoke("nanomuse:reveal", path),
+  /** Let the person choose one folder for a local Morde Hub file grant. */
+  chooseDirectory: (): Promise<string | null> => ipcRenderer.invoke("nanomuse:choose-directory"),
   // since 0.1.34
   /** The macOS permissions, asked for in order with a word on why; answers with what is granted now. */
   guidePermissions: (): Promise<Record<PermissionKind, PermissionState>> => ipcRenderer.invoke("nanomuse:permissions:guide"),

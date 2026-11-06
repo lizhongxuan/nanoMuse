@@ -3,11 +3,13 @@
  * makes to the others and the few it answers (`docs/hub.md`, "Frames").
  *
  * One outbound WebSocket to `wss://…/v1/hub`, kept alive and reconnected with a
- * growing pause; the key travels in the `hello` frame, the way a browser sends
- * it, because Node's WebSocket cannot set headers. Plain `WebSocket`, no Cordis
- * — the service in `cloud.ts` owns the lifetime and the tests drive this
- * against a fake socket.
+ * growing pause. The nanoMuse relay uses its legacy hello key; Morde uses a
+ * client installation credential in the Authorization header. The service in
+ * `cloud.ts` owns the lifetime and the tests drive this against fake sockets.
  */
+import { createRequire } from 'node:module'
+
+const require = createRequire(import.meta.url)
 
 /** A device as the relay lists it. */
 export interface HubDevice {
@@ -61,12 +63,20 @@ export interface Caller {
   id: string
   name: string
   kind: string
+  /** Valid only when the service supplied the complete Task and target grant fence. */
+  taskContext?: {
+    taskID: string
+    authorizationVersion: number
+    targetGrantVersion: number
+    operationID: string
+  }
 }
 
 /** One call this device is answering: the id to reply with and a way to send progress. */
 export interface IncomingCall {
   id: string
   from: Caller
+  signal: AbortSignal
   event(body: Record<string, unknown>): void
 }
 
@@ -110,13 +120,15 @@ export interface SocketLike {
 }
 
 export interface HubClientOptions {
-  /** `wss://cloud.nanomuse.cn/v1/hub`. */
+  /** The WebSocket endpoint. */
   url: string
-  /** The account key when signed in; nothing when not — the client then waits. */
+  /** The credential when signed in; nothing when not — the client then waits. */
   key: () => Promise<string | undefined>
-  device: () => HelloDevice
-  /** Opens a socket; defaults to the global WebSocket. */
-  socket?: (url: string) => SocketLike
+  /** `hello` is the nanoMuse relay contract; `bearer` is Morde's installation-bound contract. */
+  auth?: 'hello' | 'bearer'
+  device?: () => HelloDevice
+  /** Opens a socket; defaults to the global WebSocket or `ws` when bearer headers are needed. */
+  socket?: (url: string, credential?: string) => SocketLike
   log?: (level: 'info' | 'warn' | 'debug', text: string) => void
   /** Reconnect pauses, for tests. */
   backoffMs?: { min: number; max: number }
@@ -153,10 +165,12 @@ export class HubClient {
   private generation = 0
   private reconnectTimer: ReturnType<typeof setTimeout> | undefined
   private pingTimer: ReturnType<typeof setInterval> | undefined
+  private credentialRefused = false
   /** Whether any frame arrived since the last ping went out (the pong, or anything else). */
   private heard = true
   private readonly pending = new Map<string, Pending>()
   private readonly handlers = new Map<string, ActionHandler>()
+  private readonly activeCalls = new Map<string, { action: string; socket: SocketLike; controller: AbortController }>()
   private readonly listeners = {
     state: new Set<Listener>(),
     devices: new Set<Listener>(),
@@ -179,6 +193,7 @@ export class HubClient {
 
   /** Close and stay closed; pending calls fail. */
   stop(reason = 'stopped'): void {
+    this.abortIncomingCalls(new HubError('disconnected', reason))
     this.running = false
     this.clearReconnect()
     this.closeSocket(1000, reason)
@@ -189,6 +204,7 @@ export class HubClient {
 
   /** Reconnect now (a new key, a renamed device). */
   restart(): void {
+    this.abortIncomingCalls(new HubError('disconnected', 'The hub connection is being restarted'))
     if (!this.running) return this.start()
     this.clearReconnect()
     this.closeSocket(1000, 'restart')
@@ -272,18 +288,28 @@ export class HubClient {
           this.pending.delete(id)
         },
       }
+      let sent = false
       const onAbort = () => {
+        if (this.pending.get(id) !== entry) return
+        if (sent) this.send({ type: 'cancel', id })
         entry.cleanup()
         reject(new HubError('aborted', 'The call was stopped'))
       }
-      if (options.signal?.aborted) return onAbort()
+      if (options.signal?.aborted) {
+        reject(new HubError('aborted', 'The call was stopped'))
+        return
+      }
       options.signal?.addEventListener('abort', onAbort, { once: true })
       const timeoutMs = options.timeoutMs ?? 120_000
       entry.timer = setTimeout(() => {
+        if (this.pending.get(id) !== entry) return
+        if (sent) this.send({ type: 'cancel', id })
         entry.cleanup()
         reject(new HubError('timeout', `${action}: the device did not answer within ${Math.round(timeoutMs / 1000)}s`))
       }, timeoutMs)
       this.pending.set(id, entry)
+      if (options.signal?.aborted) return onAbort()
+      sent = true
       this.send({ type: 'call', id, to, action, args })
     })
   }
@@ -326,41 +352,63 @@ export class HubClient {
       // Not signed in: nothing to connect with. `restart()` is called at sign-in.
       return
     }
-    const open = this.options.socket ?? ((url: string) => new WebSocket(url) as unknown as SocketLike)
+    const open = this.options.socket ?? ((url: string, credential?: string) => {
+      if (this.options.auth === 'bearer') {
+        const WebSocketWithHeaders = require('ws') as new (url: string, options: { headers: Record<string, string> }) => SocketLike
+        return new WebSocketWithHeaders(url, { headers: { authorization: `Bearer ${credential}` } })
+      }
+      return new WebSocket(url) as unknown as SocketLike
+    })
     let socket: SocketLike
     try {
-      socket = open(this.options.url)
+      socket = open(this.options.url, this.options.auth === 'bearer' ? key : undefined)
     } catch (error: unknown) {
       this.lastError = message(error)
       this.scheduleReconnect()
       return
     }
     this.socket = socket
-    const device = this.options.device()
     socket.addEventListener('open', () => {
       if (this.socket !== socket) return
-      socket.send(JSON.stringify({ type: 'hello', key, device }))
+      socket.send(JSON.stringify(this.options.auth === 'bearer'
+        ? { type: 'hello' }
+        : { type: 'hello', key, device: this.options.device?.() }))
     })
     socket.addEventListener('message', (event: { data: unknown }) => {
       if (this.socket !== socket) return
       this.receive(typeof event.data === 'string' ? event.data : String(event.data))
     })
-    socket.addEventListener('error', () => {
+    socket.addEventListener('error', (event: unknown) => {
       if (this.socket !== socket) return
+      const error = event && typeof event === 'object' ? event as { message?: unknown; error?: unknown } : undefined
+      const text = typeof error?.message === 'string' ? error.message : error?.error instanceof Error ? error.error.message : ''
+      if (this.options.auth === 'bearer' && /^Unexpected server response: 40[13]$/.test(text)) {
+        this.lastError = 'the service refused the credential'
+        this.running = false
+        this.credentialRefused = true
+        for (const listener of this.listeners.unauthorized) listener()
+        return
+      }
       this.lastError = 'socket error'
     })
     socket.addEventListener('close', (event: { code?: number; reason?: string }) => {
       if (this.socket !== socket) return
       this.socket = undefined
       this.clearPing()
+      this.abortIncomingCalls(new HubError('disconnected', 'The hub connection closed'), socket)
       const code = event.code ?? 1006
       const wasConnected = this.connected
       this.setConnected(false)
       this.failPending(new HubError('disconnected', 'The hub connection closed'))
+      if (this.credentialRefused) {
+        this.credentialRefused = false
+        this.lastError = 'the service refused the credential'
+        return
+      }
       if (code === 4001) {
-        this.lastError = 'the relay refused the key'
+        this.lastError = this.options.auth === 'bearer' ? 'the service refused the credential' : 'the relay refused the key'
         this.running = false
-        this.log('warn', 'hub: the relay refused the key; signed out')
+        this.log('warn', this.options.auth === 'bearer' ? 'hub: the service refused the credential' : 'hub: the relay refused the key; signed out')
         for (const listener of this.listeners.unauthorized) listener()
         return
       }
@@ -396,7 +444,7 @@ export class HubClient {
     this.heard = true
     switch (frame.type) {
       case 'welcome': {
-        this.deviceId = String(frame.device_id ?? this.options.device().id)
+        this.deviceId = String(frame.device_id ?? this.options.device?.().id ?? '')
         this.devices = toDevices(frame.devices)
         this.attempt = 0
         this.lastError = undefined
@@ -460,6 +508,11 @@ export class HubClient {
       case 'call':
         void this.answer(frame)
         return
+      case 'cancel': {
+        const active = this.activeCalls.get(String(frame.id ?? ''))
+        active?.controller.abort(new HubError('cancelled', 'The Hub action was cancelled'))
+        return
+      }
       default:
         return
     }
@@ -475,13 +528,37 @@ export class HubClient {
       this.send({ type: 'result', id, ok: false, error: 'unknown_action', message: `this computer does not do '${action}'` })
       return
     }
-    const call: IncomingCall = { id, from, event: (body) => this.send({ type: 'event', id, body }) }
+    const socket = this.socket
+    if (!socket) return
+    if (this.activeCalls.has(id)) {
+      this.send({ type: 'result', id, ok: false, error: 'duplicate_call', message: 'this Hub call is already running' })
+      return
+    }
+    const controller = new AbortController()
+    this.activeCalls.set(id, { action, socket, controller })
+    const call: IncomingCall = {
+      id,
+      from,
+      signal: controller.signal,
+      event: (body) => {
+        if (this.socket === socket) this.send({ type: 'event', id, body })
+      },
+    }
     try {
       const body = await handler(args, call)
-      this.send({ type: 'result', id, ok: true, body })
+      if (controller.signal.aborted) throw controller.signal.reason
+      if (this.socket === socket) this.send({ type: 'result', id, ok: true, body })
     } catch (error: unknown) {
       const code = error instanceof HubError ? error.code : 'failed'
-      this.send({ type: 'result', id, ok: false, error: code, message: message(error) })
+      if (this.socket === socket) this.send({ type: 'result', id, ok: false, error: code, message: message(error) })
+    } finally {
+      if (this.activeCalls.get(id)?.controller === controller) this.activeCalls.delete(id)
+    }
+  }
+
+  private abortIncomingCalls(reason: Error, socket?: SocketLike): void {
+    for (const active of this.activeCalls.values()) {
+      if ((!socket || active.socket === socket) && !active.controller.signal.aborted) active.controller.abort(reason)
     }
   }
 
@@ -549,6 +626,7 @@ export class HubClient {
   /** The relay answered nothing for two ping intervals: the link is dead whatever the socket says. */
   private dropSilent(): void {
     this.log('warn', 'hub: the relay answered nothing for two pings; reconnecting')
+    this.abortIncomingCalls(new HubError('disconnected', 'The hub relay stopped answering'))
     this.closeSocket(1000, 'no pong')
     this.lastError = 'the relay stopped answering'
     this.failPending(new HubError('disconnected', 'The hub connection stopped answering'))
@@ -598,7 +676,23 @@ function toDevices(value: unknown): HubDevice[] {
 
 function toCaller(value: unknown): Caller {
   const d = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
-  return { id: String(d.id ?? ''), name: String(d.name ?? ''), kind: String(d.kind ?? '') }
+  const taskID = typeof d.task_id === 'string' && /^q[a-z0-9]{7}$/.test(d.task_id) ? d.task_id : undefined
+  const authorizationVersion = Number.isSafeInteger(d.authorization_version) && (d.authorization_version as number) > 0
+    ? d.authorization_version as number
+    : undefined
+  const targetGrantVersion = Number.isSafeInteger(d.target_grant_version) && (d.target_grant_version as number) > 0
+    ? d.target_grant_version as number
+    : undefined
+  const operationID = typeof d.operation_id === 'string' && /^[A-Za-z0-9._:-]{4,80}$/.test(d.operation_id)
+    ? d.operation_id
+    : undefined
+  const taskContext = d.kind === 'task' && taskID && authorizationVersion && targetGrantVersion && operationID
+    ? { taskID, authorizationVersion, targetGrantVersion, operationID }
+    : undefined
+  return {
+    id: String(d.id ?? ''), name: String(d.name ?? ''), kind: String(d.kind ?? ''),
+    ...(taskContext ? { taskContext } : {}),
+  }
 }
 
 function message(error: unknown): string {

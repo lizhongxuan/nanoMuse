@@ -7,7 +7,7 @@ import { createServer } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { GLOW_HIDE_MS, GLOW_SETTLE_MS, type Leak, LeakLog, leakIsEvidence, leakIsReal, pointerAction, REARM_DELAYS_MS, staleInstance } from "./glow";
-import { defaultHelperPath, HELPER_NAME, MacHelper } from "./mac-helper";
+import { defaultHelperPath, HELPER_DISPLAY_NAME, MacHelper } from "./mac-helper";
 import * as macPermissions from "./mac-permissions";
 import { Operator, SCREEN_PERMISSION_TEXT, type Marker } from "./operator";
 import { startOperatorServer, type OperatorServer } from "./operator-server";
@@ -53,9 +53,9 @@ const HARNESS_PAGE = "https://github.com/deepseek-ai/deepseek-harness";
 const zh = (app.getLocale() || "").toLowerCase().startsWith("zh");
 const T = {
   starting: zh ? "正在启动…" : "Starting…",
-  notReady: zh ? "nanoMuse 没能启动" : "nanoMuse could not start",
-  stopped: zh ? "nanoMuse 的后台停止了" : "nanoMuse's host stopped",
-  stillStarting: zh ? "nanoMuse 还在启动" : "nanoMuse is still starting",
+  notReady: zh ? "Morde 没能启动" : "Morde could not start",
+  stopped: zh ? "Morde 的后台停止了" : "Morde's host stopped",
+  stillStarting: zh ? "Morde 还在启动" : "Morde is still starting",
   stillStartingDetail: (waited: string) =>
     zh
       ? `后台已经启动了 ${waited}，进程还在运行。装好之后的第一次启动可能要好几分钟：系统会把应用的每个文件检查一遍（Windows 上是实时防护在扫描），磁盘慢的话更久；之后再启动就快了。可以继续等，也可以退出（退出会停掉还在启动的后台）。`
@@ -67,8 +67,8 @@ const T = {
   copied: zh ? "已复制。到 GitHub 发一个 issue 时贴上即可。" : "Copied. Paste it into a GitHub issue.",
   openLogFolder: zh ? "打开日志文件夹" : "Open the log folder",
   reportHint: zh ? "「复制详情」会把这段话和日志末尾复制下来，发 issue 时贴上：" : "Copy details puts this and the end of the log on the clipboard for an issue at",
-  about: zh ? "关于 nanoMuse" : "About nanoMuse",
-  website: zh ? "nanoMuse 官网" : "nanoMuse website",
+  about: zh ? "关于 Morde" : "About Morde",
+  website: zh ? "项目网站" : "Project website",
   docs: zh ? "这个桌面版的说明" : "About this desktop",
   issue: zh ? "报告问题" : "Report an issue",
   builtOn: zh ? "基于 DeepSeek Harness（MIT）" : "Built on DeepSeek Harness (MIT)",
@@ -79,10 +79,10 @@ const T = {
   window: zh ? "窗口" : "Window",
   help: zh ? "帮助" : "Help",
   edit: zh ? "编辑" : "Edit",
-  open: zh ? "打开 nanoMuse" : "Open nanoMuse",
+  open: zh ? "打开 Morde" : "Open Morde",
   newChat: zh ? "新聊天" : "New chat",
   quickChat: zh ? "快速唤起" : "Quick chat",
-  quitApp: zh ? "退出 nanoMuse" : "Quit nanoMuse",
+  quitApp: zh ? "退出 Morde" : "Quit Morde",
   // the protected exit: what a real quit (later, a restart-update) would end
   exitBusyTitle: zh ? "有工作还在进行" : "Work is still in progress",
   exitBusyLead: zh ? "现在退出会结束这些工作：" : "Quitting now would end this work:",
@@ -330,6 +330,9 @@ function startHost(): Promise<string> {
           // the bundle can make (after the permission card), never by the model's own word.
           NANOMUSE_MCP_CONFIRM: randomBytes(24).toString("hex"),
         };
+        delete env.MORDE_SYNC_BIN;
+        const mordeSync = join(resourcesDir(), "bin", process.platform === "win32" ? "morde-sync.exe" : "morde-sync");
+        if (existsSync(mordeSync)) env.MORDE_SYNC_BIN = mordeSync;
         if (operatorServer) {
           // The hands themselves: the runtime's `nanomuse mcp` (a child of the host, which
           // inherits this environment) finds the operator here and moves the mouse, types
@@ -444,7 +447,7 @@ async function askKeepWaiting(watch: HostStartWatch, state: WaitState): Promise<
     if (quitting || startWatch !== watch) return;
     if (response === 1) {
       clipboard.writeText(details(`${T.stillStarting} (${waited})`));
-      await dialog.showMessageBox({ type: "info", title: "nanoMuse", message: T.copied, buttons: ["OK"] });
+      await dialog.showMessageBox({ type: "info", title: "Morde", message: T.copied, buttons: ["OK"] });
       continue;
     }
     if (response === 2) {
@@ -607,7 +610,7 @@ function details(message: string): string {
   return [
     message,
     "",
-    `nanoMuse Desktop ${app.getVersion()} · dsh ${s.dsh ?? "?"} · ${BUNDLE} ${s.bundle ?? "?"}`,
+    `Morde Desktop ${app.getVersion()} · dsh ${s.dsh ?? "?"} · ${BUNDLE} ${s.bundle ?? "?"}`,
     `Electron ${process.versions.electron} · ${process.platform} ${process.arch}`,
     `home: ${harnessHome()}`,
     "",
@@ -634,7 +637,7 @@ async function reportStartupFailure(exc: unknown): Promise<void> {
     });
     if (response === 0) {
       clipboard.writeText(details(message));
-      await dialog.showMessageBox({ type: "info", title: "nanoMuse", message: T.copied, buttons: ["OK"] });
+      await dialog.showMessageBox({ type: "info", title: "Morde", message: T.copied, buttons: ["OK"] });
       continue;
     }
     if (response === 1) {
@@ -762,7 +765,7 @@ async function helperReady(): Promise<boolean> {
 
 /** What the permission dialogs name as the switch to flip. */
 function permissionTarget(): string {
-  return macPermissions.helperInUse() ? HELPER_NAME : "nanoMuse Desktop";
+  return macPermissions.helperInUse() ? HELPER_DISPLAY_NAME : "Morde Desktop";
 }
 
 let awakeBlocker: number | null = null;
@@ -882,7 +885,7 @@ function applyMenuBar(): void {
     log(`menu bar: ${String(exc)}`);
     return;
   }
-  tray.setToolTip("nanoMuse");
+  tray.setToolTip("Morde");
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: T.open, click: () => void showWindow() },
@@ -903,7 +906,7 @@ function applyOpenAtLogin(): void {
       if (prefs.openAtLogin) {
         mkdirSync(dir, { recursive: true });
         const exe = process.env.APPIMAGE || process.execPath;
-        writeFileSync(file, `[Desktop Entry]\nType=Application\nName=nanoMuse\nExec="${exe}"\nIcon=nanomuse-desktop\nX-GNOME-Autostart-enabled=true\nTerminal=false\n`);
+        writeFileSync(file, `[Desktop Entry]\nType=Application\nName=Morde\nExec="${exe}"\nIcon=nanomuse-desktop\nX-GNOME-Autostart-enabled=true\nTerminal=false\n`);
       } else rmSync(file, { force: true });
     } catch (exc) {
       log(`open at login: ${String(exc)}`);
@@ -933,7 +936,7 @@ function prefsView(): Prefs & { quickChatKey: string; quickChatDefault: string; 
 async function reportBug(): Promise<{ screenshot: string; url: string }> {
   const s = shipped();
   const facts = [
-    `nanoMuse Desktop ${app.getVersion()} · ${process.platform} ${process.arch}`,
+    `Morde Desktop ${app.getVersion()} · ${process.platform} ${process.arch}`,
     `DeepSeek Harness ${s.dsh ?? "?"} · dsh-nanomuse ${s.bundle ?? "?"} · Electron ${process.versions.electron}`,
   ];
   let screenshot = "";
@@ -941,7 +944,7 @@ async function reportBug(): Promise<{ screenshot: string; url: string }> {
     try {
       const image = await mainWindow.webContents.capturePage();
       const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-      screenshot = join(app.getPath("downloads"), `nanoMuse-${stamp}.png`);
+      screenshot = join(app.getPath("downloads"), `Morde-${stamp}.png`);
       writeFileSync(screenshot, image.toPNG());
     } catch (exc) {
       log(`report: no screenshot: ${String(exc)}`);
@@ -956,7 +959,7 @@ async function reportBug(): Promise<{ screenshot: string; url: string }> {
     surface: "Desktop app",
     version: app.getVersion(),
     os: facts.join(" · "),
-    what: screenshot ? `\n\n(Drag the screenshot nanoMuse saved to Downloads, ${screenshot.split(/[\\/]/).pop()}, in here.)` : "",
+    what: screenshot ? `\n\n(Drag the screenshot Morde saved to Downloads, ${screenshot.split(/[\\/]/).pop()}, in here.)` : "",
   });
   const url = `${ISSUES_PAGE}/new?${params.toString()}`;
   void shell.openExternal(url);
@@ -967,6 +970,15 @@ async function reportBug(): Promise<{ screenshot: string; url: string }> {
 function registerBridge(): void {
   // appImage: the Linux build runs from an AppImage (the runtime sets APPIMAGE), so About offers the AppImage of a newer version, not the .deb
   ipcMain.handle("nanomuse:info", () => ({ version: app.getVersion(), platform: process.platform, arch: process.arch, appImage: Boolean(process.env.APPIMAGE) }));
+  ipcMain.handle("nanomuse:choose-directory", async (e) => {
+    const parent = mainWindow;
+    if (!parent || e.sender !== parent.webContents || e.senderFrame !== parent.webContents.mainFrame) return null;
+    const result = await dialog.showOpenDialog(parent, {
+      properties: ["openDirectory"],
+      buttonLabel: zh ? "选择文件夹" : "Choose folder",
+    });
+    return result.canceled ? null : result.filePaths[0] ?? null;
+  });
   ipcMain.handle("nanomuse:permissions", async () => {
     // the helper's grants, fresh, when it runs — started again when it went away (the
     // "Quit & Reopen" the Screen Recording switch offers ends it); `helper` tells the page
@@ -1612,14 +1624,14 @@ async function guidePermissions(): Promise<Record<PermissionKind, PermissionStat
   if (permissionState("accessibility") !== "granted") {
     const { response } = await dialog.showMessageBox({
       type: "info",
-      message: zh ? "nanoMuse 需要「辅助功能」权限" : "nanoMuse needs Accessibility",
+      message: zh ? "Morde 需要「辅助功能」权限" : "Morde needs Accessibility",
       detail: zh
         ? viaHelper
-          ? `动手操作电脑要靠它移动鼠标和输入。系统会弹出请求；在「系统设置 → 隐私与安全性 → 辅助功能」里打开 ${target} 即可。这是 nanoMuse 自带的一个小程序，专门负责截图和操作，权限只给它。`
-          : "动手操作电脑要靠它移动鼠标和输入。系统会弹出请求；在「系统设置 → 隐私与安全性 → 辅助功能」里打开 nanoMuse Desktop 即可。它附带的运行时作为应用的一部分运行，不会单独出现在列表里。"
+          ? `动手操作电脑要靠它移动鼠标和输入。系统会弹出请求；在「系统设置 → 隐私与安全性 → 辅助功能」里打开 ${target} 即可。这是 Morde 自带的一个小程序，专门负责截图和操作，权限只给它。`
+          : "动手操作电脑要靠它移动鼠标和输入。系统会弹出请求；在「系统设置 → 隐私与安全性 → 辅助功能」里打开 Morde Desktop 即可。它附带的运行时作为应用的一部分运行，不会单独出现在列表里。"
         : viaHelper
-          ? `The hands move the mouse and type through it. The system asks next; in System Settings → Privacy & Security → Accessibility, switch on ${target}, the small program nanoMuse brings along for the screenshots and the input. Only it needs the permission.`
-          : "The hands move the mouse and type through it. The system asks next; in System Settings → Privacy & Security → Accessibility, switch on nanoMuse Desktop. The runtime it bundles runs as part of the app and does not appear separately.",
+          ? `The hands move the mouse and type through it. The system asks next; in System Settings → Privacy & Security → Accessibility, switch on ${target}, the small program Morde brings along for the screenshots and the input. Only it needs the permission.`
+          : "The hands move the mouse and type through it. The system asks next; in System Settings → Privacy & Security → Accessibility, switch on Morde Desktop. The runtime it bundles runs as part of the app and does not appear separately.",
       buttons: [zh ? "继续" : "Continue", zh ? "以后再说" : "Later"],
       defaultId: 0,
       cancelId: 1,
@@ -1629,14 +1641,14 @@ async function guidePermissions(): Promise<Record<PermissionKind, PermissionStat
   if (permissionState("screen") !== "granted") {
     const { response } = await dialog.showMessageBox({
       type: "info",
-      message: zh ? "nanoMuse 需要「屏幕录制」权限" : "nanoMuse needs Screen Recording",
+      message: zh ? "Morde 需要「屏幕录制」权限" : "Morde needs Screen Recording",
       detail: zh
         ? viaHelper
           ? `它靠截图看到屏幕上有什么。点「继续」后系统会询问一次；在「屏幕录制」面板里打开 ${target}（只需要这一项）。打开后它会自己重新启动，应用本身不用重启。`
-          : "它靠截图看到屏幕上有什么。点「继续」后系统会询问一次；在「屏幕录制」面板里打开 nanoMuse Desktop（只需要这一项），然后重新启动应用：macOS 的这项权限只对重新启动后的应用生效。"
+          : "它靠截图看到屏幕上有什么。点「继续」后系统会询问一次；在「屏幕录制」面板里打开 Morde Desktop（只需要这一项），然后重新启动应用：macOS 的这项权限只对重新启动后的应用生效。"
         : viaHelper
           ? `It sees the screen through screenshots. After Continue the system asks once; switch on ${target} in the Screen Recording pane (that one entry is all). It restarts by itself once the switch is on; the app does not need to.`
-          : "It sees the screen through screenshots. After Continue the system asks once; switch on nanoMuse Desktop in the Screen Recording pane (that one entry is all), then relaunch the app: macOS applies this permission to freshly started apps only.",
+          : "It sees the screen through screenshots. After Continue the system asks once; switch on Morde Desktop in the Screen Recording pane (that one entry is all), then relaunch the app: macOS applies this permission to freshly started apps only.",
       buttons: [zh ? "继续" : "Continue", zh ? "以后再说" : "Later"],
       defaultId: 0,
       cancelId: 1,
@@ -1698,7 +1710,7 @@ async function ensureMacPermissionsAtLaunch(): Promise<void> {
   const screen = permissionState("screen");
   const status = macHelper?.cachedStatus();
   // the helper's word on the screen (ScreenCaptureKit on macOS 14+) goes next to the TCC state: `screen=granted (capture ScreenCaptureKit)` is the line to look for when a screenshot is in doubt
-  const source = macPermissions.helperInUse() ? `${HELPER_NAME} ${status?.version ?? ""}${status?.capture ? `, capture ${status.capture}` : ""}${status?.screenDetail ? `, ${status.screenDetail}` : ""}`.trim() : macPermissions.loaded() ? "native" : `systemPreferences — ${macPermissions.loadError()}`;
+  const source = macPermissions.helperInUse() ? `${HELPER_DISPLAY_NAME} ${status?.version ?? ""}${status?.capture ? `, capture ${status.capture}` : ""}${status?.screenDetail ? `, ${status.screenDetail}` : ""}`.trim() : macPermissions.loaded() ? "native" : `systemPreferences — ${macPermissions.loadError()}`;
   log(`permissions: accessibility=${accessibility} screen=${screen} (${source}${!macPermissions.helperInUse() && macHelper ? `; helper: ${macHelper.failure()}` : ""})`);
   if (accessibility === "granted" && screen === "granted") return;
   if (screen !== "granted") void requestScreenRecording(true);
@@ -1772,8 +1784,8 @@ function watchScreenGrant(): void {
         type: "info",
         message: zh ? "屏幕录制已允许，重新启动后生效" : "Screen Recording is on; it takes effect after a restart",
         detail: zh
-          ? "macOS 只对重新启动后的应用应用这项权限。现在重新启动 nanoMuse，手就能看到屏幕；否则截图仍是一片黑。"
-          : "macOS applies this permission to freshly started apps only. Restart nanoMuse now and the hands see the screen; until then screenshots come back black.",
+          ? "macOS 只对重新启动后的应用应用这项权限。现在重新启动 Morde，手就能看到屏幕；否则截图仍是一片黑。"
+          : "macOS applies this permission to freshly started apps only. Restart Morde now and the hands see the screen; until then screenshots come back black.",
         buttons: [zh ? "立即重启" : "Restart now", zh ? "稍后" : "Later"],
         defaultId: 0,
         cancelId: 1,
@@ -1810,7 +1822,7 @@ function createWindow(): BrowserWindow {
     height: 840,
     minWidth: 960,
     minHeight: 620,
-    title: "nanoMuse",
+    title: "Morde",
     icon: process.platform === "darwin" ? undefined : nativeImage.createFromPath(iconPath()),
     backgroundColor: nativeTheme.shouldUseDarkColors ? BASE_DARK : BASE_LIGHT,
     show: false,
@@ -1911,20 +1923,20 @@ function about(): void {
   const s = shipped();
   const lines = [
     // the same version line as the web client's About (About.tsx `versionLine`)
-    `nanoMuse Desktop ${app.getVersion()} · harness ${s.bundle ?? "?"}`,
+    `Morde Desktop ${app.getVersion()} · harness ${s.bundle ?? "?"}`,
     zh ? "一个开源的个人智能体，装在你的每一台设备上。" : "An open-source personal agent for every device you own.",
     "",
     `DeepSeek Harness ${s.dsh ?? "?"} (MIT) · ${BUNDLE} ${s.bundle ?? "?"} (GPL-3.0-or-later)`,
     `Electron ${process.versions.electron} · Chromium ${process.versions.chrome}`,
     "",
     zh
-      ? "nanoMuse 是社区项目，与 Meta 无关；Muse 是 Meta 的商标。基于 DeepSeek Harness 构建，DeepSeek Harness 是 DeepSeek 的名称。"
-      : "nanoMuse is a community project with no affiliation to Meta; Muse is a trademark of Meta. Built on DeepSeek Harness, a name of DeepSeek's.",
+      ? "原 nanoMuse 项目与 Meta 无关；Muse 是 Meta 的商标。Morde 基于 DeepSeek Harness 构建，DeepSeek Harness 是 DeepSeek 的名称。"
+      : "The original nanoMuse project has no affiliation to Meta; Muse is a trademark of Meta. Morde is built on DeepSeek Harness, a name of DeepSeek's.",
   ];
   void dialog.showMessageBox({
     type: "info",
     title: T.about,
-    message: "nanoMuse",
+    message: "Morde",
     detail: lines.join("\n"),
     buttons: ["OK"],
     icon: nativeImage.createFromPath(iconPath()),
@@ -1951,7 +1963,7 @@ function buildMenu(): void {
     ...(process.platform === "darwin"
       ? [
           {
-            label: "nanoMuse",
+            label: "Morde",
             submenu: [
               { label: T.about, click: about },
               { type: "separator" },
@@ -2013,7 +2025,7 @@ if (!app.requestSingleInstanceLock({ version: app.getVersion() })) {
     showWindow();
   });
   app.setAboutPanelOptions({
-    applicationName: "nanoMuse",
+    applicationName: "Morde",
     applicationVersion: app.getVersion(),
     copyright: "GPL-3.0-or-later · the nanoMuse community · built on DeepSeek Harness (MIT)",
     website: "https://nanomuse.cn/",
@@ -2025,7 +2037,7 @@ if (!app.requestSingleInstanceLock({ version: app.getVersion() })) {
     prefs = readPrefs();
     applyPrefs();
     exitGuard = new ProtectedExit({ work: workSource, dialog: exitDialog, finish: () => app.quit(), log });
-    log(`nanoMuse Desktop ${app.getVersion()} starting (${process.platform} ${process.arch}, packaged=${app.isPackaged})`);
+    log(`Morde Desktop ${app.getVersion()} starting (${process.platform} ${process.arch}, packaged=${app.isPackaged})`);
     if (operatorCheckFlag) {
       await operatorCheck(operatorCheckFlag);
       return;

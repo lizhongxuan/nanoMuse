@@ -8,6 +8,26 @@ import XCTest
 @MainActor
 final class NanoMuseLogicTests: XCTestCase {
 
+    // MARK: - Root navigation
+
+    // nanoMuse: Pin the Morde merge to the four root routes while retired boards stay unavailable.
+    func testBottomNavigationHasFourMordeRooms() {
+        XCTAssertEqual(NanoMuseTab.allCases, [.chat, .tasks, .approvals, .resources])
+    }
+
+    func testRemovedBoardRoutesAreRejectedAndLibraryMapsToResources() {
+        XCTAssertEqual(NanoMuseRoomDestination.resolve("chat")?.tab, .chat)
+        XCTAssertEqual(NanoMuseRoomDestination.resolve("tasks")?.tab, .tasks)
+        XCTAssertEqual(NanoMuseRoomDestination.resolve("approvals")?.tab, .approvals)
+        XCTAssertEqual(NanoMuseRoomDestination.resolve("resources")?.tab, .resources)
+        let library = NanoMuseRoomDestination.resolve("library")
+        XCTAssertEqual(library?.tab, .resources)
+        XCTAssertNil(NanoMuseRoomDestination.resolve("feed"))
+        XCTAssertNil(NanoMuseRoomDestination.resolve("ideas"))
+        XCTAssertNil(NanoMuseRoomDestination.resolve("goals"))
+        XCTAssertNil(NanoMuseRoomDestination.resolve("unknown"))
+    }
+
     // MARK: - Step visibility
 
     func testHiddenStepsStayOffWhenMainChatIsReset() {
@@ -119,37 +139,7 @@ final class NanoMuseLogicTests: XCTestCase {
         XCTAssertNil(NanoMuseDay.parseClock(nil))
     }
 
-    // MARK: - Avatar words
-
-    func testAvatarRequestsEnglish() {
-        XCTAssertEqual(NanoMuseAvatarIntent.parseRequest("Change your avatar to a red panda"), "red panda")
-        XCTAssertEqual(NanoMuseAvatarIntent.parseRequest("please switch your look into a small robot."), "small robot")
-        XCTAssertEqual(NanoMuseAvatarIntent.parseRequest("new avatar: cyberpunk fox"), "cyberpunk fox")
-        XCTAssertEqual(NanoMuseAvatarIntent.parseRequest("become a dragon"), "dragon")
-        // "become better" is not a face.
-        XCTAssertNil(NanoMuseAvatarIntent.parseRequest("become better at math"))
-        XCTAssertNil(NanoMuseAvatarIntent.parseRequest("be quiet"))
-        XCTAssertNil(NanoMuseAvatarIntent.parseRequest("What is the weather like?"))
-    }
-
-    func testAvatarRequestsChinese() {
-        XCTAssertEqual(NanoMuseAvatarIntent.parseRequest("把你的形象换成一只橘猫"), "一只橘猫")
-        XCTAssertEqual(NanoMuseAvatarIntent.parseRequest("换个头像：赛博朋克狐狸"), "赛博朋克狐狸")
-        XCTAssertEqual(NanoMuseAvatarIntent.parseRequest("变成一条小龙吧"), "一条小龙")
-        XCTAssertNil(NanoMuseAvatarIntent.parseRequest("今天天气怎么样"))
-    }
-
-    func testAvatarChoices() {
-        XCTAssertEqual(NanoMuseAvatarIntent.parseChoice("2"), .index(1))
-        XCTAssertEqual(NanoMuseAvatarIntent.parseChoice("the third one"), .index(2))
-        XCTAssertEqual(NanoMuseAvatarIntent.parseChoice("I'll take the first"), .index(0))
-        XCTAssertEqual(NanoMuseAvatarIntent.parseChoice("第二个"), .index(1))
-        XCTAssertEqual(NanoMuseAvatarIntent.parseChoice("就第四个吧"), .index(3))
-        XCTAssertEqual(NanoMuseAvatarIntent.parseChoice("右下"), .index(3))
-        XCTAssertEqual(NanoMuseAvatarIntent.parseChoice("regenerate"), .regenerate)
-        XCTAssertEqual(NanoMuseAvatarIntent.parseChoice("都不喜欢"), .regenerate)
-        XCTAssertNil(NanoMuseAvatarIntent.parseChoice("tell me more about option two"))
-    }
+    // nanoMuse: Avatar edits now go through the studio, not local-chat intent parsing.
 
     // MARK: - Goals
 
@@ -268,6 +258,91 @@ final class NanoMuseLogicTests: XCTestCase {
         XCTAssertEqual(routine.nextDue(after: fired.addingTimeInterval(60), calendar: cal), fired.addingTimeInterval(6 * 3600))
     }
 
+    func testCloudImportMapsDailyAndWeekdayRoutinesWithoutChangingTheSource() throws {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "UTC")!
+        let now = date(2026, 10, 1, 7, 0, cal)
+        var daily = NanoMuseRoutine(label: "Brief", prompt: "Review today's notes", hour: 8, minute: 30)
+        daily.createdAt = date(2026, 9, 30, 9, 0, cal)
+
+        let first = NanoMuseScheduleImportMapper.preview(daily, hostID: "h1234567", modelID: "morde-default", now: now, timeZone: cal.timeZone)
+        let second = NanoMuseScheduleImportMapper.preview(daily, hostID: "h1234567", modelID: "morde-default", now: now, timeZone: cal.timeZone)
+        let changedTarget = NanoMuseScheduleImportMapper.preview(daily, hostID: "h7654321", modelID: "another-model", now: now, timeZone: cal.timeZone)
+        let dailyRequest = try XCTUnwrap(first.request)
+        XCTAssertEqual(dailyRequest.timing.kind, "daily")
+        XCTAssertEqual(dailyRequest.timing.starts_on, "2026-10-01")
+        XCTAssertEqual(dailyRequest.timing.local_time, "08:30")
+        XCTAssertEqual(dailyRequest.objective, "Review today's notes")
+        XCTAssertEqual(first.idempotencyKey, second.idempotencyKey)
+        XCTAssertEqual(first.idempotencyKey, changedTarget.idempotencyKey, "A lost create response must not allow a second schedule under a changed target")
+        XCTAssertTrue(daily.enabled, "Previewing must leave the local source enabled and unchanged")
+
+        var weekdays = daily
+        weekdays.repeatMode = .weekdays
+        let weekly = try XCTUnwrap(NanoMuseScheduleImportMapper.preview(weekdays, hostID: "h1234567", modelID: "morde-default", now: now, timeZone: cal.timeZone).request)
+        XCTAssertEqual(weekly.timing.kind, "weekly")
+        XCTAssertEqual(weekly.timing.weekdays, [1, 2, 3, 4, 5])
+    }
+
+    func testCloudImportMapsOneTimeRunAndRejectsUnsupportedInterval() throws {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "UTC")!
+        let now = date(2026, 10, 1, 8, 30, cal)
+        var once = NanoMuseRoutine(label: "Call", prompt: "Call the clinic", hour: 9, minute: 15, repeatMode: .once)
+        once.createdAt = date(2026, 10, 1, 8, 0, cal)
+        let plan = try XCTUnwrap(NanoMuseScheduleImportMapper.preview(once, hostID: "h1234567", modelID: "morde-default", now: now, timeZone: cal.timeZone).request)
+        XCTAssertEqual(plan.timing.kind, "once")
+        XCTAssertEqual(plan.timing.run_at, "2026-10-01T09:15:00Z")
+
+        var interval = once
+        interval.intervalHours = 6
+        let unavailable = NanoMuseScheduleImportMapper.preview(interval, hostID: "h1234567", modelID: "morde-default", now: now, timeZone: cal.timeZone)
+        XCTAssertFalse(unavailable.isAvailable)
+        XCTAssertTrue(unavailable.unavailableReason?.contains("not supported") == true)
+        XCTAssertTrue(interval.enabled, "Unsupported plans must remain untouched")
+    }
+
+    func testLinkedRoutineIsReadOnlyWhileUnlinkedRoutineRetainsCRUD() throws {
+        var linked = NanoMuseRoutine(label: "Cloud archive", prompt: "Original", hour: 8, minute: 30, enabled: false)
+        linked.cloudScheduleID = "schedule-123"
+        linked.cloudScheduleVersion = 4
+        let linkedSnapshot = [linked]
+
+        XCTAssertNil(NanoMuseRoutineLocalMutationPolicy.adding(linked, to: []))
+        XCTAssertEqual(NanoMuseRoutineLocalMutationPolicy.disablingCloudArchives(in: [linked]), [linked])
+        XCTAssertNil(NanoMuseRoutineLocalMutationPolicy.replacing(linked, in: linkedSnapshot))
+
+        var editedLinked = linked
+        editedLinked.prompt = "Changed locally"
+        XCTAssertNil(NanoMuseRoutineLocalMutationPolicy.replacing(editedLinked, in: linkedSnapshot))
+        editedLinked.cloudScheduleID = nil
+        editedLinked.cloudScheduleVersion = nil
+        XCTAssertNil(NanoMuseRoutineLocalMutationPolicy.replacing(editedLinked, in: linkedSnapshot),
+                     "A local update cannot unlink an archive to edit it")
+        XCTAssertNil(NanoMuseRoutineLocalMutationPolicy.settingEnabled(linked.id, to: true, in: linkedSnapshot))
+        XCTAssertNil(NanoMuseRoutineLocalMutationPolicy.deleting(linked.id, from: linkedSnapshot))
+        XCTAssertEqual(linkedSnapshot, [linked], "Rejected mutations must leave the archived source unchanged")
+
+        var legacyEnabledArchive = linked
+        legacyEnabledArchive.enabled = true
+        let normalized = NanoMuseRoutineLocalMutationPolicy.disablingCloudArchives(in: [legacyEnabledArchive])
+        XCTAssertFalse(try XCTUnwrap(normalized.first).enabled,
+                       "An older imported source cannot keep a local reminder after reload")
+
+        let local = NanoMuseRoutine(label: "Local", prompt: "Before", hour: 9, minute: 0)
+        let created = try XCTUnwrap(NanoMuseRoutineLocalMutationPolicy.adding(local, to: []))
+        XCTAssertEqual(created, [local])
+
+        var editedLocal = local
+        editedLocal.prompt = "After"
+        let updated = try XCTUnwrap(NanoMuseRoutineLocalMutationPolicy.replacing(editedLocal, in: created))
+        XCTAssertEqual(updated, [editedLocal])
+
+        let enabled = try XCTUnwrap(NanoMuseRoutineLocalMutationPolicy.settingEnabled(local.id, to: false, in: updated))
+        XCTAssertFalse(try XCTUnwrap(enabled.first).enabled)
+        XCTAssertTrue(NanoMuseRoutineLocalMutationPolicy.deleting(local.id, from: enabled)?.isEmpty == true)
+    }
+
     // MARK: - Region (contract C5)
 
     func testMainlandRule() {
@@ -343,13 +418,6 @@ final class NanoMuseLogicTests: XCTestCase {
         XCTAssertNil(NanoMuseVision.guess(id: "some-unknown-model"))
     }
 
-    func testOwnKeyPresets() {
-        XCTAssertEqual(NanoMuseOwnKeyPreset.bailian.chatModel, "deepseek-v4.1-flash")
-        XCTAssertEqual(NanoMuseOwnKeyPreset.bailian.guiModel, "qwen3.8-27b")
-        XCTAssertEqual(NanoMuseOwnKeyPreset.openrouter.chatModel, "deepseek/deepseek-v4.1-flash")
-        XCTAssertEqual(NanoMuseOwnKeyPreset.openrouter.guiModel, "qwen/qwen3.8-27b")
-    }
-
     // MARK: - First run
 
     func testFirstRunNeeded() {
@@ -361,6 +429,13 @@ final class NanoMuseLogicTests: XCTestCase {
         XCTAssertTrue(NanoMuseFirstRun.needed(signedIn: true, hasProviders: true, hasSessions: false, done: false))
         XCTAssertFalse(NanoMuseFirstRun.needed(signedIn: true, hasProviders: true, hasSessions: false, done: true))
         XCTAssertFalse(NanoMuseFirstRun.needed(signedIn: true, hasProviders: true, hasSessions: true, done: false))
+        // nanoMuse: Morde-only clients bypass setup, even before a cloud conversation exists.
+        XCTAssertFalse(NanoMuseFirstRun.needed(signedIn: false, hasProviders: false, hasSessions: false,
+                                               done: false, mordeSignedIn: true))
+        XCTAssertFalse(NanoMuseFirstRun.needed(signedIn: false, hasProviders: false, hasSessions: true,
+                                               done: false, mordeSignedIn: true))
+        XCTAssertTrue(NanoMuseFirstRun.needed(signedIn: false, hasProviders: false, hasSessions: false,
+                                              done: false, mordeSignedIn: false))
     }
 
     func testFirstRunStages() {
@@ -788,5 +863,66 @@ final class NanoMuseLogicTests: XCTestCase {
         // GitHub's release object.
         XCTAssertEqual(NanoMuseUpdateCheck.parseGitHubLatest(["tag_name": "v1.0.0", "html_url": "https://example.invalid/tag"]), NanoMuseUpdateCheck.Found(version: "v1.0.0", page: "https://example.invalid/tag"))
         XCTAssertNil(NanoMuseUpdateCheck.parseGitHubLatest(["message": "Not Found"]))
+    }
+
+    func testMCPOAuthRegistrationUsesMordeClientMetadata() {
+        XCTAssertEqual(NanoMuseMcpAuthDiscovery.clientName, "morde")
+        XCTAssertEqual(NanoMuseMcpAuthDiscovery.clientURI, "https://portal.120.25.178.93.sslip.io")
+    }
+
+    func testLocalHistoryImportKeepsOnlyStableUserAssistantText() throws {
+        let media = MediaRef(id: "media-1", relativePath: "private/photo.png", mimeType: "image/png",
+                             originalFileName: "photo.png")
+        let source = [
+            RawMessage(id: "user-1", sessionId: "conversation-1", role: .user,
+                       parts: [.text("Question"), .mediaRef(media)], createdAt: Date()),
+            RawMessage(id: "assistant-1", sessionId: "conversation-1", role: .assistant,
+                       parts: [.text("Answer"), .toolUse(ToolUse(toolUseId: "tool-1", name: "browser",
+                           input: "private tool input", description: nil, thoughtSignature: nil))],
+                       createdAt: Date(), reasoningContent: "Private reasoning"),
+            RawMessage(id: "tool-result-1", sessionId: "conversation-1", role: .user,
+                       parts: [.toolResult(ToolResult(toolUseId: "tool-1", output: "Private tool output",
+                           success: true, mediaRef: nil, snapshot: nil, pageURL: nil, status: "success"))],
+                       createdAt: Date()),
+            RawMessage(id: "media-only-1", sessionId: "conversation-1", role: .user,
+                       parts: [.mediaRef(media)], createdAt: Date()),
+        ]
+
+        let messages = try NanoMuseLegacyHistoryImport.messages(from: source)
+        XCTAssertEqual(messages, [
+            MordePersonalHistoryImportMessage(source_message_id: "user-1", role: "user", content: "Question"),
+            MordePersonalHistoryImportMessage(source_message_id: "assistant-1", role: "assistant", content: "Answer"),
+        ])
+        let requests = try NanoMuseLegacyHistoryImport.requests(
+            sessionID: "conversation-1", title: " Legacy chat ", messages: messages, deviceAccountID: "device-1")
+        let request = try XCTUnwrap(requests.first)
+        XCTAssertEqual(request.title, "Legacy chat")
+        XCTAssertNil(request.target_conversation_id)
+        XCTAssertTrue(MordePersonalHistoryImportContract.isValid(request))
+        XCTAssertFalse(String(data: try JSONEncoder().encode(request), encoding: .utf8)!.contains("private"))
+
+        let receipt = MordePersonalHistoryImportReceipt(conversation_id: "c1234567", title: "Legacy chat", replay: false,
+            messages: messages.enumerated().map { index, message in
+                MordePersonalHistoryImportReceiptMessage(source_message_id: message.source_message_id,
+                    message_id: "m000000\(index + 1)", conversation_id: "c1234567", role: message.role,
+                    content: message.content, sequence: Int64(index + 1), attachment_ids: [], replay: false)
+            })
+        XCTAssertTrue(MordePersonalHistoryImportContract.isValid(receipt, for: request))
+    }
+
+    func testLocalHistoryImportBatchesWithinServerLimits() throws {
+        let messages = (0..<201).map { index in
+            MordePersonalHistoryImportMessage(source_message_id: "message-\(index)",
+                role: index.isMultiple(of: 2) ? "user" : "assistant", content: "Message \(index)")
+        }
+        let requests = try NanoMuseLegacyHistoryImport.requests(
+            sessionID: "conversation-1", title: "History", messages: messages, deviceAccountID: "device-1")
+        XCTAssertEqual(requests.map(\.messages.count), [200, 1])
+        XCTAssertEqual(requests.map(\.source_conversation_id), ["conversation-1", "conversation-1"])
+        XCTAssertTrue(requests.allSatisfy(MordePersonalHistoryImportContract.isValid))
+
+        let oversized = RawMessage(id: "oversized", sessionId: "conversation-1", role: .user,
+            parts: [.text(String(repeating: "x", count: 32 * 1024 + 1))], createdAt: Date())
+        XCTAssertThrowsError(try NanoMuseLegacyHistoryImport.messages(from: [oversized]))
     }
 }

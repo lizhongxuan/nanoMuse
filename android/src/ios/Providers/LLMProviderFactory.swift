@@ -13,6 +13,8 @@ enum LLMProviderFactory {
 
     /// Create an LLMProvider for the given entry, looking up its ProviderInstance and credentials.
     static func makeProvider(for entry: ModelEntry) async throws -> any LLMProvider {
+        // nanoMuse: Prevent standalone local model entry points from creating a provider.
+        guard MordeLocalExecutionPolicy.isEnabled else { throw MordeLocalExecutionDisabledError() }
         let store = ProviderConfigStore.shared
         guard let instance = store.instance(for: entry.providerInstanceId) else {
             throw FactoryError.noInstance
@@ -185,7 +187,7 @@ enum LLMProviderFactory {
         let provider = OpenAIProvider(apiKey: key, model: model, customBaseURL: customBase ?? "https://openrouter.ai/api", appendV1Suffix: customBase == nil)
         provider.extraHeaders = [
             "HTTP-Referer": "https://github.com/OpenMinis/OpenMinis",
-            "X-Title": "nanoMuse App",
+            "X-Title": "morde",
         ]
         provider.useOpenRouterCompat = true
         return applyCustomUserAgent(provider, instance: instance)

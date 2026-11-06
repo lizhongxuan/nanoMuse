@@ -159,7 +159,7 @@ final class MCPOAuthController: NSObject, ObservableObject {
     /// not a storage location. Returns true when a seed was imported.
     @discardableResult
     static func importPendingSecretIfAny(server: String) -> Bool {
-        let url = AIChatViewModel.minisMcpServersPersistentDir
+        let url = MinisStoragePaths.minisMcpServersPersistentDir
             .appendingPathComponent("oauth", isDirectory: true)
             .appendingPathComponent("\(server).secret")
         guard let data = try? Data(contentsOf: url),
@@ -239,7 +239,7 @@ final class MCPOAuthController: NSObject, ObservableObject {
     /// Host URL of the guest-visible token bridge for `server`
     /// (bind-mounted at /var/minis/mcp-servers/oauth/<name>.json).
     nonisolated static func bridgeFileURL(server: String) -> URL {
-        AIChatViewModel.minisMcpServersPersistentDir
+        MinisStoragePaths.minisMcpServersPersistentDir
             .appendingPathComponent("oauth", isDirectory: true)
             .appendingPathComponent("\(server).json")
     }

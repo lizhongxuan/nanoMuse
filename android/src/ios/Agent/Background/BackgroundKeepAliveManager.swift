@@ -393,8 +393,10 @@ final class BackgroundKeepAliveManager: NSObject, ObservableObject, CLLocationMa
         // a later real didEnterBackground is a no-op).
         if UIApplication.shared.applicationState == .background {
             appIsInBackground = true
+#if !MINIS_CLOUD_ONLY
             ISHKernel.shared.beginBackgroundCPUGovernor()
-            logger.info("[BKA] launched in background — iSH CPU governor armed at setup")
+#endif
+            logger.info("[BKA] launched in background")
         }
 
         // Observe app lifecycle
@@ -411,8 +413,11 @@ final class BackgroundKeepAliveManager: NSObject, ObservableObject, CLLocationMa
                 // old fixed 80% duty cycle (which sat exactly on the iOS
                 // background kill line and still measured 91% — see
                 // docs/ish-bg-cpu-governor-design.md).
+                // nanoMuse: The Morde target does not include the iSH CPU governor.
+#if !MINIS_CLOUD_ONLY
                 ISHKernel.shared.beginBackgroundCPUGovernor()
-                logger.info("[BKA] iSH background CPU governor STARTED")
+#endif
+                logger.info("[BKA] entered background")
                 self.logLifecycleSnapshot("Background")
                 // [T-ios-bg-location-arm-delay] Don't start location keep-alive
                 // immediately on backgrounding — arm it after a delay so a brief
@@ -445,8 +450,11 @@ final class BackgroundKeepAliveManager: NSObject, ObservableObject, CLLocationMa
                     guard self.pendingForegroundTransition else { return }
                     self.pendingForegroundTransition = false
                     self.appIsInBackground = false
+                    // nanoMuse: The Morde target does not include the iSH CPU governor.
+#if !MINIS_CLOUD_ONLY
                     ISHKernel.shared.endBackgroundCPUGovernor()
-                    logger.info("[BKA] iSH background CPU governor STOPPED (foreground)")
+#endif
+                    logger.info("[BKA] returned to foreground")
                     self.logLifecycleSnapshot("Foreground")
                     // [T-ios-bg-location-arm-delay] Unified location-state
                     // cleanup on every foreground return — disarms, tears down

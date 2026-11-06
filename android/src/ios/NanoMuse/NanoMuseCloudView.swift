@@ -52,7 +52,7 @@ struct NanoMuseCloudView: View {
                 signInSections
             }
         }
-        .navigationTitle(NanoMuseCloud.label)
+        .navigationTitle(NanoMuseCloud.displayLabel)
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $pickingRelay, onDismiss: { Task { config = await NanoMuseCloud.config() } }) {
             NanoMuseRelayPickerSheet()
@@ -100,27 +100,12 @@ struct NanoMuseCloudView: View {
     /// Where the account's pieces live in the rest of the app.
     @ViewBuilder
     private var linksSection: some View {
-        if let inst = NanoMuseCloud.instance {
+        if NanoMuseCloud.instance != nil {
             Section {
-                NavigationLink {
-                    NanoMuseMediaModelsView()
-                } label: {
-                    Label(AppLocalized("Image & video models"), systemImage: "photo.on.rectangle")
-                }
                 NavigationLink {
                     NanoMuseAvatarStudioView(embedded: true)
                 } label: {
                     Label(AppLocalized("Avatar"), systemImage: "face.smiling")
-                }
-                NavigationLink {
-                    ProviderInstanceDetailView(instanceId: inst.id)
-                } label: {
-                    Label(AppLocalized("Provider settings"), systemImage: "slider.horizontal.3")
-                }
-                NavigationLink {
-                    ModelGroupsView()
-                } label: {
-                    Label(AppLocalized("Model groups"), systemImage: "square.stack.3d.up")
                 }
                 NavigationLink {
                     NanoMuseDataControlsView()
@@ -128,7 +113,7 @@ struct NanoMuseCloudView: View {
                     Label(AppLocalized("Data controls"), systemImage: "hand.raised")
                 }
             } footer: {
-                Text(AppLocalized("nanoMuse Cloud is an ordinary provider in this app: its models are listed under Providers and can be mixed with your own in a model group."))
+                Text("This legacy cloud account is separate from the morde account above.")
             }
         }
     }
@@ -186,7 +171,7 @@ struct NanoMuseCloudView: View {
         switch confirm {
         case .everywhere: return AppLocalized("Every device signed in to this account loses its key, this phone included. The account stays; sign in again any time.")
         case .delete: return AppLocalized("The account, its sign-ins, usage and history are deleted at the relay, and this account's chats, memory, feed, goals and face are removed from this phone. This cannot be undone.")
-        case .here, .none: return AppLocalized("The nanoMuse Cloud provider and its models will be removed from this phone.")
+        case .here, .none: return AppLocalized("The morde Cloud provider and its models will be removed from this phone.")
         }
     }
 
@@ -195,7 +180,7 @@ struct NanoMuseCloudView: View {
         Section {
             VStack(alignment: .leading, spacing: 6) {
                 Text(AppLocalized("Free, open source, non-profit")).font(.subheadline.weight(.semibold))
-                Text(AppLocalized("nanoMuse is a non-profit open-source community project, free, forever. The model comes with a free allowance paid by the developer; after that, your own key. Nothing is sold; what the relay keeps is in the privacy policy, and Settings → Data controls is yours."))
+                Text(AppLocalized("morde is a non-profit open-source community project, free, forever. Nothing is sold; what the relay keeps is in the privacy policy, and Settings → Data controls is yours."))
                     .font(.caption).foregroundStyle(.secondary)
                 Text(AppLocalized("Found a bug, want a feature, have a patch? The GitHub repository is the place."))
                     .font(.caption).foregroundStyle(.secondary)
@@ -219,7 +204,7 @@ struct NanoMuseCloudView: View {
                 Label(AppLocalized("Your sign-in on this phone was ended. Sign in again to continue; your chats are kept on this device until then."), systemImage: "person.crop.circle.badge.clock")
                     .font(.subheadline)
             }
-            Text(AppLocalized("Sign in with a phone number or an e-mail address and start right away with a starter allowance, no key of your own needed. A provider of your own can be added at any time."))
+            Text(AppLocalized("Sign in with a phone number or an e-mail address to use this separate morde Cloud account."))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             if let allowance = config.allowanceCny, allowance > 0 {
@@ -477,7 +462,7 @@ struct NanoMuseCloudRow: View {
                 .foregroundStyle(Color.accentColor)
                 .frame(width: 28)
             VStack(alignment: .leading, spacing: 2) {
-                Text(NanoMuseCloud.label)
+                Text(NanoMuseCloud.displayLabel)
                 if let account {
                     // Who is signed in, and what is left by the same rule as the Settings card: the
                     // yuan on a relay that prices in money, tokens on an older one, nothing to count

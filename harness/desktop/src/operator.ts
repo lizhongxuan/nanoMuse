@@ -6,7 +6,7 @@
 // `setOfMarks` (the point, the action's name beside it).
 import { clipboard, desktopCapturer, nativeImage, screen as electronScreen } from "electron";
 import type * as Nut from "@computer-use/nut-js";
-import { describeAction, HELPER_NAME, HELPER_SCREEN_PERMISSION_TEXT, MacHelperError, type HelperWindow, type HelperWindowShot, type MacHelper } from "./mac-helper";
+import { describeAction, HELPER_DISPLAY_NAME, HELPER_SCREEN_PERMISSION_TEXT, MacHelperError, type HelperWindow, type HelperWindowShot, type MacHelper } from "./mac-helper";
 
 /**
  * The hands of nanoMuse Desktop: the mouse, the keyboard and the screenshot, done by this
@@ -152,7 +152,7 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
 /** What a Mac without Screen Recording is told — the one text, from `/info` and from a refused `/screenshot` alike. */
-export const SCREEN_PERMISSION_TEXT = "macOS: switch on nanoMuse Desktop under System Settings → Privacy & Security → Screen Recording, then quit and reopen the app.";
+export const SCREEN_PERMISSION_TEXT = "macOS: switch on Morde Desktop under System Settings → Privacy & Security → Screen Recording, then quit and reopen the app.";
 /** A channel below this in every sampled pixel means a black picture (macOS without the permission). */
 const BLACK_LEVEL = 8;
 
@@ -245,7 +245,7 @@ export class Operator {
     // macOS with a helper bundle that was tried and did not start: that is the reason, not the
     // app's own grants (which nobody switched on — the panes name the helper)
     if (process.platform === "darwin" && this.options.helper?.present() && this.options.helper.failedToStart() && !this.options.helper.busy()) {
-      return { available: false, reason: `${HELPER_NAME} did not start (${this.options.helper.failure()})` };
+      return { available: false, reason: `${HELPER_DISPLAY_NAME} did not start (${this.options.helper.failure()})` };
     }
     if (process.platform === "darwin" && this.options.permissions) {
       const p = this.options.permissions();
@@ -259,7 +259,7 @@ export class Operator {
             ? helper
               ? HELPER_SCREEN_PERMISSION_TEXT
               : SCREEN_PERMISSION_TEXT
-            : `macOS: switch on ${helper ? "nanoMuse Computer Use" : "nanoMuse Desktop"} under System Settings → Privacy & Security → ${missing.join(" and ")}${p.screen || helper ? "" : ", then quit and reopen the app"}.`,
+            : `macOS: switch on ${helper ? HELPER_DISPLAY_NAME : "Morde Desktop"} under System Settings → Privacy & Security → ${missing.join(" and ")}${p.screen || helper ? "" : ", then quit and reopen the app"}.`,
         };
       }
     }
@@ -295,7 +295,7 @@ export class Operator {
     // macOS with the helper bundle: its picture, already at the asked size and format
     // (mac-helper.ts) — or its reason, never desktopCapturer's picture in its place
     if (process.platform === "darwin" && this.options.helper?.present()) {
-      if (!(await this.options.helper.ready())) throw new OperatorError(`no screenshot: ${HELPER_NAME} did not start (${this.options.helper.failure()})`, 503);
+      if (!(await this.options.helper.ready())) throw new OperatorError(`no screenshot: ${HELPER_DISPLAY_NAME} did not start (${this.options.helper.failure()})`, 503);
       return this.helperScreenshot(space, want, format, quality);
     }
     await this.options.onCapture?.("before");
@@ -349,7 +349,7 @@ export class Operator {
       const why = String((exc as Error).message ?? exc).replace(/^no screenshot:\s*/, "");
       this.log(`helper screenshot failed (${why}) — not falling back to desktopCapturer`);
       // 503 when the helper itself is gone (the next call starts it again), 500 when it answered that the capture failed
-      throw new OperatorError(`no screenshot: ${HELPER_NAME} could not take the picture: ${why}`, exc instanceof MacHelperError && exc.code === "not_running" ? 503 : 500);
+      throw new OperatorError(`no screenshot: ${HELPER_DISPLAY_NAME} could not take the picture: ${why}`, exc instanceof MacHelperError && exc.code === "not_running" ? 503 : 500);
     }
   }
 
@@ -382,8 +382,8 @@ export class Operator {
 
   private async helperForWindows(what: string): Promise<MacHelper> {
     const helper = this.options.helper;
-    if (process.platform !== "darwin" || !helper?.present()) throw new OperatorError(`${what}: window mode needs ${HELPER_NAME}, which this build does not have`, 503);
-    if (!(await helper.ready())) throw new OperatorError(`${what}: ${HELPER_NAME} did not start (${helper.failure()})`, 503);
+    if (process.platform !== "darwin" || !helper?.present()) throw new OperatorError(`${what}: window mode needs ${HELPER_DISPLAY_NAME}, which this build does not have`, 503);
+    if (!(await helper.ready())) throw new OperatorError(`${what}: ${HELPER_DISPLAY_NAME} did not start (${helper.failure()})`, 503);
     return helper;
   }
 
@@ -393,7 +393,7 @@ export class Operator {
       if (exc.status === 403) return new OperatorError(`${what}: ${HELPER_SCREEN_PERMISSION_TEXT}`, 403);
       if (exc.status === 404) return new OperatorError(`${what}: ${exc.message}`, 404);
       this.log(`helper window capture failed (${exc.message})`);
-      return new OperatorError(`${what}: ${HELPER_NAME}: ${exc.message}`, exc.code === "not_running" ? 503 : exc.status);
+      return new OperatorError(`${what}: ${HELPER_DISPLAY_NAME}: ${exc.message}`, exc.code === "not_running" ? 503 : exc.status);
     }
     return new OperatorError(`${what}: ${String((exc as Error).message ?? exc)}`, 500);
   }
@@ -449,7 +449,7 @@ export class Operator {
     // macOS with the helper bundle: CGEvent in the helper's process; this one clamps and marks
     // (mac-helper.ts). A helper that did not start is the reason, not a libnut move in its place.
     if (process.platform === "darwin" && this.options.helper?.present()) {
-      if (!(await this.options.helper.ready())) throw new OperatorError(`the hands are not available: ${HELPER_NAME} did not start (${this.options.helper.failure()})`, 503);
+      if (!(await this.options.helper.ready())) throw new OperatorError(`the hands are not available: ${HELPER_DISPLAY_NAME} did not start (${this.options.helper.failure()})`, 503);
       return this.runWithHelper(this.options.helper, action);
     }
     const nut = this.load();
@@ -639,7 +639,7 @@ export class Operator {
     try {
       return await helper.execute({ ...action, action: kind, ...(start ? { x: start.x, y: start.y } : {}), ...(end ? { x2: end.x, y2: end.y } : {}) });
     } catch (exc) {
-      if (exc instanceof MacHelperError) throw new OperatorError(exc.status === 403 ? `macOS: switch on nanoMuse Computer Use under System Settings → Privacy & Security → Accessibility.` : exc.message, exc.status === 403 ? 403 : exc.status >= 500 ? 503 : exc.status);
+      if (exc instanceof MacHelperError) throw new OperatorError(exc.status === 403 ? `macOS: switch on ${HELPER_DISPLAY_NAME} under System Settings → Privacy & Security → Accessibility.` : exc.message, exc.status === 403 ? 403 : exc.status >= 500 ? 503 : exc.status);
       throw exc;
     }
   }

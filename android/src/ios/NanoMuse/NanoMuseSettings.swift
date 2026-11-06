@@ -4,7 +4,7 @@
 //
 //  Settings as Muse cards, in Android's order: the model, the agent, the
 //  phone, the app, about. Reached from the drawer, the ••• menus and the
-//  agent page; the classic layout's Settings sheet has it as its first row.
+//  agent page.
 //  Also the "All routines" page. Android: ui/settings/SettingsScreen.kt.
 //
 
@@ -14,75 +14,46 @@ import UIKit
 // MARK: - Settings home
 
 struct NanoMuseSettingsHomeView: View {
-    /// Open the upstream Settings sheet (every OpenMinis page is there); nil when already inside it.
-    var onAllSettings: (() -> Void)? = nil
-
+    var onOpenCloudTasks: (() -> Void)? = nil
     @ObservedObject private var store = ProviderConfigStore.shared
+#if !MINIS_CLOUD_ONLY
     @ObservedObject private var hub = NanoMuseHub.shared
+#endif
     @ObservedObject private var updates = NanoMuseUpdateCheck.shared // C2: the installed build and the latest release
     @Environment(\.openURL) private var openURL
 
     var body: some View {
         NanoMusePage(title: AppLocalized("Settings")) {
-            modelCard
+            accountCard
             agentCard
             phoneCard
             appCard
             aboutCard
-            if let onAllSettings {
-                NanoMuseCard {
-                    NanoMuseActionRow(title: AppLocalized("All settings"), action: onAllSettings)
-                }
-                NanoMuseCaption(text: AppLocalized("Providers, model groups, skills, appearance and the rest of the OpenMinis settings."))
-            }
         }
         .onAppear { updates.checkIfStale() }
     }
 
-    // MARK: Card 1 — the model
+    // MARK: Card 1 — accounts
 
-    /// The chat slot's line, `<provider> · <model>`, under the card's title.
-    private var chatLine: String? {
-        _ = store.modelGroups
-        _ = store.instances
-        return NanoMuseModelSlots.line(.chat)
-    }
-
-    private var modelCard: some View {
+    private var accountCard: some View {
         NanoMuseCard {
-            NavigationLink {
-                NanoMuseModelsView()
-            } label: {
-                HStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(AppLocalized("Models"))
-                            .font(.headline)
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
-                        Text(chatLine ?? AppLocalized("Add a provider and pick its models"))
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
-                    Spacer(minLength: 8)
-                    Text(AppLocalized("Change"))
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(NanoMuseTones.action)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
-                .contentShape(Rectangle())
+#if !MINIS_CLOUD_ONLY
+            NanoMuseLinkRow(title: NanoMuseCloud.displayLabel, value: cloudLine) { NanoMuseCloudView() }
+            NanoMuseRowDivider()
+            if let onOpenCloudTasks {
+                NanoMuseActionRow(title: AppLocalized("Morde cloud tasks"), action: onOpenCloudTasks)
+                    .accessibilityIdentifier("morde.settings.cloudTasks")
+            } else {
+                NanoMuseLinkRow(title: AppLocalized("Morde cloud tasks")) { MordeEmbeddedView(ownsLifecycle: false) }
+                    .accessibilityIdentifier("morde.settings.cloudTasks")
             }
-            .buttonStyle(.plain)
             NanoMuseRowDivider()
-            NanoMuseLinkRow(title: NanoMuseCloud.label, value: cloudLine) { NanoMuseCloudView() }
+            NanoMuseLinkRow(title: AppLocalized("Cloud task execution")) { NanoMuseCloudExecutionView() }
+                .accessibilityIdentifier("morde.settings.executionControl")
             NanoMuseRowDivider()
-            NanoMuseLinkRow(title: AppLocalized("Manage Providers")) { ProviderInstancesView() }
-            NanoMuseRowDivider()
-            NanoMuseLinkRow(title: AppLocalized("Image & video models")) { NanoMuseMediaModelsView() }
-            NanoMuseRowDivider()
-            NanoMuseLinkRow(title: AppLocalized("Token Usage")) { UsageStatsView() }
+#endif
+            NanoMuseLinkRow(title: AppLocalized("Morde account")) { MordeAccountSettingsView() }
+                .accessibilityIdentifier("morde.settings.account")
         }
     }
 
@@ -97,7 +68,9 @@ struct NanoMuseSettingsHomeView: View {
 
     // MARK: Card 2 — the agent
 
+#if !MINIS_CLOUD_ONLY
     private var computers: Int { hub.others.filter(\.isComputer).count }
+#endif
 
     private var agentCard: some View {
         NanoMuseCard {
@@ -109,23 +82,27 @@ struct NanoMuseSettingsHomeView: View {
                 }
                 NanoMuseRowDivider()
                 NanoMuseLinkRow(title: AppLocalized("Memory")) { MemoryManagementView() }
+#if !MINIS_CLOUD_ONLY
                 NanoMuseRowDivider()
                 NanoMuseLinkRow(title: AppLocalized("System files")) { NanoMuseSystemFilesView() }
                 NanoMuseRowDivider()
                 NanoMuseLinkRow(title: AppLocalized("Skills")) { SkillsManagementView() }
                 NanoMuseRowDivider()
+#endif
             }
             Group {
+#if !MINIS_CLOUD_ONLY
                 NanoMuseLinkRow(title: AppLocalized("Connectors")) { NanoMuseConnectorsView() }
                 NanoMuseRowDivider()
                 // Android's Hands row; on iPhone the page explains why the switch is not here.
                 NanoMuseLinkRow(title: AppLocalized("Hands"), value: AppLocalized("Not on iPhone")) { NanoMuseHandsView() }
+                    .accessibilityIdentifier("morde.settings.hands")
                 NanoMuseRowDivider()
                 NanoMuseLinkRow(title: AppLocalized("Computers"), value: computers == 0 ? AppLocalized("None") : "\(computers)") { NanoMuseComputersView() }
-                NanoMuseRowDivider()
-                NanoMuseLinkRow(title: AppLocalized("Coding agents")) { NanoMuseCodingView() }
+                    .accessibilityIdentifier("morde.settings.legacyComputers")
                 NanoMuseRowDivider()
                 NanoMuseLinkRow(title: AppLocalized("Environment Variables")) { EnvironmentVariablesView() }
+#endif
             }
         }
     }
@@ -135,8 +112,6 @@ struct NanoMuseSettingsHomeView: View {
     private var phoneCard: some View {
         NanoMuseCard {
             Group {
-                NanoMuseLinkRow(title: AppLocalized("Permissions")) { OffloadPermissionSettingsView() }
-                NanoMuseRowDivider()
                 // Android: "Background & notifications" — what the phone lets the agent do while the app is away.
                 NanoMuseLinkRow(title: AppLocalized("Background & notifications")) { NanoMuseBackgroundView() }
                 NanoMuseRowDivider()
@@ -147,10 +122,12 @@ struct NanoMuseSettingsHomeView: View {
             Group {
                 NanoMuseRowDivider()
                 NanoMuseLinkRow(title: AppLocalized("Mount External Folders")) { MountedFoldersSettingsView() }
+#if !MINIS_CLOUD_ONLY
                 if #available(iOS 17.0, *) {
                     NanoMuseRowDivider()
                     NanoMuseLinkRow(title: AppLocalized("iCloud Sync")) { CloudSyncSettingsV2View() }
                 }
+#endif
                 NanoMuseRowDivider()
                 NanoMuseLinkRow(title: AppLocalized("Backup & Restore")) { BackupAndRestoreView() }
             }
@@ -164,8 +141,10 @@ struct NanoMuseSettingsHomeView: View {
             NanoMuseLinkRow(title: AppLocalized("Appearance")) { NanoMuseAppearanceView() }
             NanoMuseRowDivider()
             NanoMuseLinkRow(title: AppLocalized("Data controls")) { NanoMuseDataControlsView() }
+#if !MINIS_CLOUD_ONLY
             NanoMuseRowDivider()
             NanoMuseLinkRow(title: AppLocalized("Network")) { NanoMuseNetworkView() }
+#endif
             NanoMuseRowDivider()
             NanoMuseLinkRow(title: AppLocalized("Logs")) { LogManagementView() }
         }
@@ -175,7 +154,7 @@ struct NanoMuseSettingsHomeView: View {
 
     private var aboutCard: some View {
         NanoMuseCard {
-            NanoMuseLinkRow(title: AppLocalized("About nanoMuse")) { AboutView() }
+            NanoMuseLinkRow(title: AppLocalized("About morde")) { AboutView() }
             NanoMuseRowDivider()
             NanoMuseActionRow(title: AppLocalized("Privacy Policy")) {
                 openURL(NanoMuseLinks.privacy)
@@ -209,6 +188,77 @@ struct NanoMuseSettingsHomeView: View {
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 12)
+        }
+    }
+}
+
+private struct NanoMuseCloudExecutionView: View {
+    @StateObject private var store = MIFExecutionControlStore.shared
+    @State private var confirmsStop = false
+
+    private var statusTitle: String {
+        switch store.state {
+        case "enabled": AppLocalized("Cloud execution is enabled")
+        case "stopping": AppLocalized("Cloud execution is stopping")
+        case "disabled": AppLocalized("Cloud execution is disabled")
+        default: AppLocalized("Execution status unavailable")
+        }
+    }
+
+    var body: some View {
+        NanoMusePage(title: AppLocalized("Cloud task execution")) {
+            NanoMuseCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    Label(statusTitle, systemImage: store.state == "disabled" ? "pause.circle" : "play.circle")
+                        .font(.headline)
+                        .accessibilityIdentifier("morde.execution.state")
+                    if let count = store.pendingTaskCount {
+                        Text(String(format: AppLocalized("Pending tasks: %d"), count))
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
+                    if let count = store.activeTaskCount {
+                        Text(String(format: AppLocalized("Active cloud tasks: %d"), count))
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
+                    if let error = store.error {
+                        Text(error).font(.footnote).foregroundStyle(.orange)
+                            .accessibilityIdentifier("morde.execution.error")
+                    }
+                    HStack {
+                        if store.isBusy || (store.state == "stopping" && store.isLoading) {
+                            ProgressView().controlSize(.small)
+                        }
+                        Spacer()
+                        if store.state == "enabled" {
+                            Button(AppLocalized("Stop all cloud tasks"), role: .destructive) {
+                                confirmsStop = true
+                            }
+                            .accessibilityIdentifier("morde.execution.stop")
+                            .disabled(store.isBusy)
+                        } else if store.state == "disabled" {
+                            Button(AppLocalized("Enable cloud execution")) {
+                                Task { await store.enable() }
+                            }
+                            .accessibilityIdentifier("morde.execution.enable")
+                            .disabled(store.isBusy)
+                        }
+                        Button(AppLocalized("Refresh")) { Task { await store.refresh() } }
+                            .accessibilityIdentifier("morde.execution.refresh")
+                            .disabled(store.isBusy || store.isLoading)
+                    }
+                }
+                .padding(16)
+            }
+        }
+        .task { await store.refresh() }
+        .confirmationDialog(AppLocalized("Stop all cloud tasks?"), isPresented: $confirmsStop) {
+            Button(AppLocalized("Stop all cloud tasks"), role: .destructive) {
+                Task { await store.stopAll() }
+            }
+            .accessibilityIdentifier("morde.execution.stop.confirm")
+            Button(AppLocalized("Cancel"), role: .cancel) {}
+        } message: {
+            Text(AppLocalized("This stops current cloud tasks and keeps future cloud execution disabled until you enable it."))
         }
     }
 }
@@ -328,7 +378,8 @@ struct NanoMuseRoutinesView: View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(label(for: routine)).font(.body.weight(.medium))
-                Text(routine.enabled ? routine.cadence : AppLocalized("Off")).font(.caption).foregroundStyle(.secondary)
+                Text(routine.isCloudArchive ? "Imported to cloud" : (routine.enabled ? routine.cadence : AppLocalized("Off")))
+                    .font(.caption).foregroundStyle(.secondary)
                 if let next = routine.nextDue(after: Date()), routine.enabled {
                     Text(String(format: AppLocalized("next %@"), NanoMuseDay.relative(next))).font(.caption2).foregroundStyle(.tertiary)
                 }
@@ -338,7 +389,11 @@ struct NanoMuseRoutinesView: View {
                 }
             }
             Spacer()
-            if scheduler.running.contains(routine.id) {
+            if routine.isCloudArchive {
+                Image(systemName: "icloud")
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel(Text("Managed in Cloud schedules"))
+            } else if scheduler.running.contains(routine.id) {
                 ProgressView()
             } else {
                 Toggle("", isOn: Binding(get: { routine.enabled }, set: { scheduler.setEnabled(routine.id, $0) }))
@@ -348,11 +403,14 @@ struct NanoMuseRoutinesView: View {
             }
         }
         .contentShape(Rectangle())
-        .onTapGesture { editing = routine }
+        .onTapGesture {
+            guard !routine.isCloudArchive else { return }
+            editing = routine
+        }
         .swipeActions(edge: .trailing) {
-            Button(role: .destructive) { scheduler.delete(routine.id) } label: { Label(AppLocalized("Delete"), systemImage: "trash") }
-            Button { Task { @MainActor in await scheduler.run(routine.id) } } label: { Label(AppLocalized("Run now"), systemImage: "play") }
-                .tint(NanoMuseTones.action)
+            if !routine.isCloudArchive {
+                Button(role: .destructive) { scheduler.delete(routine.id) } label: { Label(AppLocalized("Delete"), systemImage: "trash") }
+            }
         }
     }
 }

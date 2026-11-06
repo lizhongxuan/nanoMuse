@@ -21,9 +21,7 @@
 
 // ISH Kernel Wrapper
 #import "ISHKernel.h"
-
-// ISH Shell Executor (pipe-based process execution)
-#import "ISHShellExecutor.h"
+// nanoMuse: Minis no longer bridges the retired local shell executor.
 
 // Native Offloads (native offload handlers for iSH commands)
 #import "FFmpegOffload.h"

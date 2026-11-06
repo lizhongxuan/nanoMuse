@@ -7,7 +7,7 @@ import UserNotifications
 /// The agent continues running in the background — use Get Session Status to poll for completion.
 struct SendPromptIntent: AppIntent {
     static var title: LocalizedStringResource = "Send Prompt"
-    static var description = IntentDescription("Sends a prompt to the nanoMuse AI agent. Returns session info immediately while the task runs in the background.")
+    static var description = IntentDescription("Sends a prompt to the morde AI agent. Returns session info immediately while the task runs in the background.")
     static var openAppWhenRun = false
 
     // [T-shortcuts-automation-no-prompt-field] `requestValueDialog` alone marks
@@ -19,7 +19,7 @@ struct SendPromptIntent: AppIntent {
     // makes the text field appear. `inputConnectionBehavior` additionally lets
     // the field accept the previous action's output as a variable.
     @Parameter(title: "Prompt",
-               requestValueDialog: "What would you like to ask nanoMuse?",
+               requestValueDialog: "What would you like to ask morde?",
                inputConnectionBehavior: .connectToPreviousIntentResult)
     var prompt: String
 
@@ -42,6 +42,9 @@ struct SendPromptIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<SendPromptResult> & ProvidesDialog {
+        // nanoMuse: Reject local execution before intent side effects.
+        try MordeLocalExecutionPolicy.requireEnabled()
+
         // Ensure BackgroundKeepAliveManager is set up
         BackgroundKeepAliveManager.shared.setup()
 
@@ -178,7 +181,7 @@ struct SendPromptIntent: AppIntent {
             let promptPreview = String(prompt.prefix(50))
             ShortcutNotification.post(
                 id: "shortcut-start-\(sid)",
-                title: AppLocalized("nanoMuse Task Started"),
+                title: AppLocalized("morde Task Started"),
                 body: "\(modelName): \(promptPreview)\(prompt.count > 50 ? "…" : "")",
                 sessionId: sid
             )
@@ -200,7 +203,7 @@ struct SendPromptIntent: AppIntent {
             if sendCompletionNotification {
                 ShortcutNotification.post(
                     id: "shortcut-done-\(sid)",
-                    title: AppLocalized("nanoMuse Task Completed"),
+                    title: AppLocalized("morde Task Completed"),
                     body: "\(modelName): \(String(responseText.prefix(200)))",
                     sessionId: sid
                 )
@@ -235,7 +238,7 @@ struct SendPromptIntent: AppIntent {
             if capturedSendCompletionNotification {
                 ShortcutNotification.post(
                     id: "shortcut-done-\(capturedSid)",
-                    title: AppLocalized("nanoMuse Task Completed"),
+                    title: AppLocalized("morde Task Completed"),
                     body: "\(capturedModelName): \(summary)",
                     sessionId: capturedSid
                 )
@@ -265,7 +268,7 @@ struct SendPromptIntent: AppIntent {
     // the "Show More" section — `\.$files` first so the attachment slot is the
     // first thing surfaced when chaining from a previous action.
     static var parameterSummary: some ParameterSummary {
-        Summary("Send \(\.$prompt) to nanoMuse") {
+        Summary("Send \(\.$prompt) to morde") {
             \.$files
             \.$session
             \.$model
@@ -363,57 +366,6 @@ enum ShortcutNotification {
             trigger: nil  // deliver immediately
         )
         center.add(request)
-    }
-}
-
-/// [T-notification-tap-vs-launch-session] Cold-launch handoff for a
-/// notification-tap navigation. On a cold launch the delegate's `didReceive`
-/// fires before ContentView has mounted its `.onReceive(.openSessionFromIntent)`
-/// subscriber, so the posted NotificationCenter event is simply lost — and the
-/// Launch Session preference (e.g. "New Chat") then opens a fresh session
-/// instead of the tapped one. The delegate buffers the target here;
-/// ContentView's launch `.task` consumes it with top priority, and the warm
-/// path (`.onReceive` did navigate) marks it handled so the launch-screen
-/// logic yields either way.
-@MainActor
-final class NotificationNavigationStore {
-    static let shared = NotificationNavigationStore()
-
-    private var pendingSessionId: String?
-    private var pendingSetAt: Date?
-    private var handledAt: Date?
-
-    /// Buffer a tap target (called from didReceive before posting the event).
-    func setPending(_ sessionId: String) {
-        pendingSessionId = sessionId
-        pendingSetAt = Date()
-    }
-
-    /// One-shot consume for the cold-launch path. Entries older than 30s are
-    /// stale (a warm tap that `.onReceive` already navigated for) and ignored.
-    func takePending() -> String? {
-        defer { pendingSessionId = nil; pendingSetAt = nil }
-        guard let sid = pendingSessionId,
-              let t = pendingSetAt,
-              Date().timeIntervalSince(t) < 30 else { return nil }
-        return sid
-    }
-
-    /// Warm path: `.onReceive` navigated directly — drop the buffered copy so
-    /// a later launch can't replay it, and remember when it happened so an
-    /// in-flight launch `.task` (post arrived during its await) doesn't
-    /// clobber the navigation with the Launch Session default.
-    func markHandled() {
-        pendingSessionId = nil
-        pendingSetAt = nil
-        handledAt = Date()
-    }
-
-    /// True when a notification navigation happened moments ago — the
-    /// launch-screen logic must not override it.
-    var handledRecently: Bool {
-        guard let t = handledAt else { return false }
-        return Date().timeIntervalSince(t) < 10
     }
 }
 

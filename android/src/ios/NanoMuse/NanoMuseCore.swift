@@ -16,13 +16,13 @@ enum NanoMuseDirs {
     /// Our own files, beside upstream's private config (goals, routines, the feed).
     /// Kept out of the Files-visible app-group folder on purpose.
     static var root: URL {
-        let url = AIChatViewModel.minisConfigRoot.appendingPathComponent("nanomuse", isDirectory: true)
+        let url = MinisStoragePaths.minisConfigRoot.appendingPathComponent("nanomuse", isDirectory: true)
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url
     }
 
     /// The memory folder the agent sees as /var/minis/memory (SOUL.md, GLOBAL.md, the diary).
-    static var memory: URL { AIChatViewModel.minisMemoryPersistentDir }
+    static var memory: URL { MinisStoragePaths.minisMemoryPersistentDir }
 }
 
 // MARK: - Dates

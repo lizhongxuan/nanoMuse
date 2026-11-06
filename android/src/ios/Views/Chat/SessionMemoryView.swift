@@ -8,8 +8,10 @@
 import SwiftUI
 
 struct SessionMemoryView: View {
-    @ObservedObject var vm: AIChatViewModel
     @Environment(\.dismiss) private var dismiss
+
+    // The old chat call site still supplies its VM; this sheet only reads app-scoped files.
+    init(vm _: AnyObject) {}
 
     var body: some View {
         NavigationStack {
@@ -93,7 +95,7 @@ struct SessionMemoryView: View {
     private var autoInjected: [AutoItem] {
         var items: [AutoItem] = []
         let fm = FileManager.default
-        let memDir = AIChatViewModel.minisMemoryPersistentDir
+        let memDir = MinisStoragePaths.minisMemoryPersistentDir
 
         // SOUL.md — listed first because it's the identity/personality
         // layer that SystemPromptBuilder.identitySection() injects at
@@ -191,56 +193,8 @@ struct SessionMemoryView: View {
     }
 
     private var toolMemories: [ToolMemoryItem] {
-        var items: [ToolMemoryItem] = []
-        for message in vm.messages {
-            for block in message.blocks {
-                guard case .memoryTool(let action) = block.kind else { continue }
-                let isWrite = action == "memory_write"
-                let summary = block.toolSummary ?? action
-
-                var writtenContent: String?
-                var keywords: String?
-
-                if let argsJson = block.toolInputArgs,
-                   let data = argsJson.data(using: .utf8),
-                   let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                    if isWrite {
-                        writtenContent = dict["content"] as? String
-                    } else {
-                        keywords = dict["keywords"] as? String
-                    }
-                }
-
-                // Build a meaningful detail preview
-                let detail: String
-                if isWrite, let written = writtenContent {
-                    // Show what was written
-                    let firstLine = written.components(separatedBy: "\n").first(where: { !$0.isEmpty }) ?? ""
-                    detail = String(firstLine.prefix(100))
-                } else if !isWrite {
-                    // Show keywords + result summary
-                    let resultLines = block.content.components(separatedBy: "\n").filter { !$0.isEmpty }
-                    if let kw = keywords, !kw.isEmpty {
-                        let matchCount = resultLines.filter { $0.hasPrefix("---") || $0.hasPrefix("## ") }.count
-                        detail = "Search: \(kw)" + (matchCount > 0 ? " (\(matchCount) files)" : "")
-                    } else {
-                        detail = String((resultLines.first ?? "").prefix(100))
-                    }
-                } else {
-                    detail = String(block.content.prefix(100))
-                }
-
-                items.append(ToolMemoryItem(
-                    title: summary,
-                    detail: detail,
-                    content: block.content,
-                    isWrite: isWrite,
-                    writtenContent: writtenContent,
-                    keywords: keywords
-                ))
-            }
-        }
-        return items
+        // nanoMuse: Tool memory activity belonged to the local Agent VM; don't expose stale VM state.
+        []
     }
 }
 
@@ -440,7 +394,7 @@ private struct MemoryWriteDetailView: View {
     /// Returns the filename on success, nil on failure.
     private func replaceEntryInLog(oldContent: String, newContent: String) -> String? {
         let fm = FileManager.default
-        let memDir = AIChatViewModel.minisMemoryPersistentDir
+        let memDir = MinisStoragePaths.minisMemoryPersistentDir
         let dateFmt = DateFormatter()
         dateFmt.dateFormat = "yyyy-MM-dd"
         let candidates = [

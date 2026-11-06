@@ -2061,149 +2061,11 @@ final class DebugJSONRPC: @unchecked Sendable {
         ] as [String: Any]
     }
 
-    // MARK: - Shell execute (synchronous, returns stdout/stderr)
+    // MARK: - Shell execute compatibility
 
-    /// Run a shell command inside the iSH guest. Blocks until the process
-    /// exits or the timeout fires. Returns captured stdout/stderr plus exit
-    /// code and duration. Intended for automated debugging / test harnesses
-    /// — not for interactive sessions.
-    ///
-    /// Params:
-    ///   - command: shell command string (passed to `/bin/sh -c` in default
-    ///     mode, or written to `/bin/sh`'s stdin pipe when `stdinScript=true`
-    ///     to mirror the agent's `ISHExecutionCoordinator.runCommand` path).
-    ///   - timeout: max wait seconds (default 60, clamped to 600)
-    ///   - stdinScript: when true, run `/bin/sh` with no argv and feed the
-    ///     command as a script via stdin (the agent tool path). When false
-    ///     (default), use `/bin/sh -c <command>` (the debug/test path).
-    ///   - env: optional [String:String] of environment overrides to pass
-    ///     to the child process (mirrors EnvVarStore injection in agent
-    ///     path when `stdinScript=true`).
-    private func handleShellExecute(params: [String: Any]) async throws -> Any {
-        guard let command = params["command"] as? String, !command.isEmpty else {
-            throw RPCError(code: -32602, message: "Invalid params: 'command' is required")
-        }
-        let rawTimeout = (params["timeout"] as? NSNumber)?.doubleValue ?? 60
-        let timeout = max(1, min(600, rawTimeout))
-        let stdinScript = params["stdinScript"] as? Bool ?? false
-        let env = params["env"] as? [String: String]
-        // Optional sessionId to stamp the shell's task group with the matching
-        // fs_context, so /var/minis/{offloads,attachments,workspace,browser}
-        // route to that session's bucket. Omit (or pass nil) for the default
-        // global view (fs_context = 0).
-        let sessionId = params["sessionId"] as? String
-        let fsContext: UInt64 = sessionId.map { MinisFsRouter.shared.context(for: $0) } ?? 0
-
-        // Run off the main thread (blocks on semaphore).
-        let (result, didTimeout): (ISHShellExecutionResult?, Bool) = await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                if stdinScript {
-                    // Mirror agent path: sh with no argv, script via stdin.
-                    let ctx = ISHShellExecutionContextBox()
-                    let data = command.data(using: .utf8) ?? Data()
-                    let pid = ISHShellExecutor.executeExecutable(
-                        "/bin/sh",
-                        arguments: nil,
-                        environment: env,
-                        stdinData: data,
-                        fsContext: fsContext,
-                        lineCallback: nil,
-                        completion: { res in
-                            ctx.result = res
-                            ctx.sem.signal()
-                        }
-                    )
-                    if pid < 0 {
-                        continuation.resume(returning: (nil, false))
-                        return
-                    }
-                    let waitResult = ctx.sem.wait(timeout: .now() + timeout)
-                    if waitResult == .timedOut {
-                        ISHShellExecutor.killProcess(pid, withSignal: 9)
-                        // [T-ish-shell-timeout-leak] Same self-heal as the
-                        // agent path: don't leave teardown to an exit
-                        // notification that a zombie-reaped task never sends,
-                        // or this context and its reader threads leak for the
-                        // life of the process.
-                        ISHShellExecutor.finalizeTimedOutPid(pid)
-                        continuation.resume(returning: (ctx.result, true))
-                        return
-                    }
-                    continuation.resume(returning: (ctx.result, false))
-                } else {
-                    let res = ISHShellExecutor.executeCommandSync(
-                        command,
-                        timeout: timeout,
-                        lineCallback: nil
-                    )
-                    continuation.resume(returning: (res, res.error == .timeout))
-                }
-            }
-        }
-
-        guard let result else {
-            return [
-                "exitCode": -1,
-                "pid": 0,
-                "error": "processCreationFailed",
-                "stdout": "",
-                "stderr": "",
-                "duration": 0,
-                "timedOut": false,
-            ] as [String: Any]
-        }
-
-        let errorName: String
-        if didTimeout {
-            errorName = "timeout"
-        } else {
-            switch result.error {
-            case .none: errorName = "none"
-            case .processCreationFailed: errorName = "processCreationFailed"
-            case .execFailed: errorName = "execFailed"
-            case .timeout: errorName = "timeout"
-            case .cancelled: errorName = "cancelled"
-            @unknown default: errorName = "unknown"
-            }
-        }
-
-        // [T-ios-debugrpc-json-nsexception-abort] Cap stdout/stderr at the
-        // SOURCE. Unbounded shell output flowed straight into the JSON writer;
-        // a large-enough payload failed CFString reallocation inside
-        // _convertJSONString (NSException → abort). 4 MB per stream is far
-        // beyond any diagnostic need; callers get the tail truncated with an
-        // explicit marker + the original byte counts so nothing fails silently.
-        let stdoutCapped = Self.capRPCOutput(result.output)
-        let stderrCapped = Self.capRPCOutput(result.errorOutput)
-        var resp: [String: Any] = [
-            "exitCode": Int(result.exitCode),
-            "pid": Int(result.pid),
-            "error": errorName,
-            "stdout": stdoutCapped.text,
-            "stderr": stderrCapped.text,
-            "duration": result.duration,
-            "timedOut": didTimeout || result.error == .timeout,
-        ]
-        if stdoutCapped.truncated { resp["stdoutTruncatedFrom"] = stdoutCapped.originalCount }
-        if stderrCapped.truncated { resp["stderrTruncatedFrom"] = stderrCapped.originalCount }
-        return resp
-    }
-
-    /// Truncate an RPC output string to a serialization-safe size (UTF-16
-    /// unit cap ≈ 4 MB of UTF-8 for ASCII-ish shell output), keeping the HEAD
-    /// (build logs / command output lead with the useful part) and appending
-    /// an explicit truncation marker. [T-ios-debugrpc-json-nsexception-abort]
-    private static func capRPCOutput(_ s: String, limit: Int = 4_000_000) -> (text: String, truncated: Bool, originalCount: Int) {
-        let count = s.utf16.count
-        guard count > limit else { return (s, false, count) }
-        let head = String(s.prefix(limit))
-        return (head + "\n…[truncated \(count - limit) of \(count) UTF-16 units by debug server]", true, count)
-    }
-
-    /// Holds state for the stdin-script path's async-to-sync bridge.
-    private final class ISHShellExecutionContextBox {
-        let sem = DispatchSemaphore(value: 0)
-        var result: ISHShellExecutionResult?
+    /// Keep the legacy RPC route discoverable while failing closed without iSH execution.
+    private func handleShellExecute(params _: [String: Any]) async throws -> Any {
+        throw RPCError(code: -32000, message: MordeLocalExecutionPolicy.disabledMessage)
     }
 
     private func handleAppInfo(params: [String: Any] = [:]) -> Any {
@@ -2232,11 +2094,6 @@ final class DebugJSONRPC: @unchecked Sendable {
             "dataPath": dataPath.path,
             "rootfsPath": docs.appendingPathComponent("alpine-rootfs").path,
             "bundlePath": bundlePath,
-            // [T-ish-shell-timeout-leak] Reader-thread accounting. `liveReaders`
-            // should sit at 0 between commands; a value that only grows is the
-            // shell timeout leak recurring, and it ends with the app unable to
-            // run any command until the device restarts.
-            "shellLeakGuard": ISHShellExecutor.leakGuardStatus(),
             "buildDate": buildDate,
         ]
 
@@ -2947,6 +2804,10 @@ final class DebugJSONRPC: @unchecked Sendable {
     // MARK: - Quick Test handler
 
     private func handleProvidersQuickTest(params: [String: Any]) async throws -> Any {
+        guard MordeLocalExecutionPolicy.isEnabled else {
+            throw RPCError(code: -32000, message: MordeLocalExecutionPolicy.disabledMessage)
+        }
+
         guard let entryId = params["entryId"] as? String else {
             throw RPCError(code: -32602, message: "Missing required 'entryId' (string).")
         }

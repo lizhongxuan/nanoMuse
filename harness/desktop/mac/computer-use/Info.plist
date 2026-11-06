@@ -8,7 +8,7 @@
   <key>CFBundleDevelopmentRegion</key>
   <string>en</string>
   <key>CFBundleDisplayName</key>
-  <string>nanoMuse Computer Use</string>
+  <string>Morde Computer Use</string>
   <key>CFBundleExecutable</key>
   <string>nanoMuse Computer Use</string>
   <key>CFBundleIconFile</key>
@@ -18,7 +18,7 @@
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
-  <string>nanoMuse Computer Use</string>
+  <string>Morde Computer Use</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>

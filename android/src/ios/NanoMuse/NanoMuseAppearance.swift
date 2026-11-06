@@ -4,7 +4,7 @@
 //
 //  The Appearance settings: how big the face is in the header (or hidden),
 //  whether the model shows under the name, whether the agent's steps show
-//  in the chat, the theme, and the two shell switches. Android:
+//  in the chat, the theme, and the chat header. Android:
 //  ui/settings/AppearanceScreen.kt + AvatarSize.
 //
 
@@ -80,7 +80,6 @@ struct NanoMuseAppearanceView: View {
     @ObservedObject private var appearance = NanoMuseAppearance.shared
     @AppStorage(NanoMuseSteps.key) private var showSteps = NanoMuseSteps.defaultValue
     @AppStorage("appearanceMode") private var appearanceMode = 0
-    @AppStorage("nanomuse.shell.enabled") private var shellEnabled = true
     @AppStorage("nanomuse.header.enabled") private var museHeader = true
     @State private var confirmWelcome = false
 
@@ -138,17 +137,15 @@ struct NanoMuseAppearanceView: View {
                 .padding(.vertical, 14)
             }
 
-            // The shell.
+            // The chat header.
             VStack(alignment: .leading, spacing: 0) {
                 NanoMuseCard {
-                    NanoMuseToggleRow(title: AppLocalized("Muse home"), isOn: $shellEnabled)
-                    NanoMuseRowDivider()
                     NanoMuseToggleRow(title: AppLocalized("Face and name in the chat header"), isOn: $museHeader)
                     NanoMuseRowDivider()
                     // Where the chat put its composer, for a report from a device without a Mac.
                     NanoMuseLinkRow(title: AppLocalized("Composer check")) { NanoMuseComposerCheckView() }
                 }
-                NanoMuseCaption(text: AppLocalized("Muse home is the chat with the feed, ideas, goals and library as tabs. Off, the app opens on the classic OpenMinis chat list. The second switch puts the face and the name in the title of side chats; off, they show the model."))
+                NanoMuseCaption(text: AppLocalized("The switch puts the face and the name in the title of side chats; off, they show the model."))
             }
 
             // The welcome, once more.

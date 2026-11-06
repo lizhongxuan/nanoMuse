@@ -106,18 +106,14 @@ final class MCPStore: ObservableObject {
 
     // MARK: - Paths
 
-    /// Host path of the guest's /var/minis/mcp-servers/servers.json. Lives in
-    /// the MinisConfig persistent dir (same mechanism as skills/shared/memory:
-    /// the guest path is a bind mount / symlink onto this dir — see the static
-    /// mount tables in ISHExecutionCoordinator.performMount and
-    /// ensureMinisSymlinks). NOT minisAppGroupRoot: servers.json carries
-    /// credentials and must never surface in iOS Files.
+    /// Persistent host path of `servers.json`. NOT minisAppGroupRoot:
+    /// servers.json carries credentials and must never surface in iOS Files.
     private var serversFileURL: URL { Self.syncFileURL }
 
     /// Host path of the guest's servers.json, as a static for the sync layer
     /// (P4) which runs off the MainActor. Same file as `serversFileURL`.
     nonisolated static var syncFileURL: URL {
-        AIChatViewModel.minisMcpServersPersistentDir.appendingPathComponent("servers.json")
+        MinisStoragePaths.minisMcpServersPersistentDir.appendingPathComponent("servers.json")
     }
 
     /// Pre-mount-mechanism location: a real file inside the rootfs data tree
@@ -606,42 +602,13 @@ final class MCPStore: ObservableObject {
     /// name as tiebreak. Note is truncated to the same cap as Skill descriptions
     /// (200 chars). [T-mcp-review-fixes-ios] Unified with Android on createdAt-desc.
     func systemPromptSnippet(for sessionId: String) -> String? {
-        let enabled = servers.filter { isEnabledForSession($0.id, sessionId: sessionId) }
-        guard !enabled.isEmpty else { return nil }
-
-        // Sort by createdAt desc, name asc as tiebreak, then take Top-N. Missing
-        // createdAt sorts oldest (0) — but readServersFromDisk stable-assigns one
-        // on first sight, so this is only a transient fallback.
-        let selected = enabled.sorted { a, b in
-            let ca = a.createdAt ?? 0, cb = b.createdAt ?? 0
-            if ca != cb { return ca > cb }
-            return a.id.localizedCaseInsensitiveCompare(b.id) == .orderedAscending
-        }.prefix(Self.maxMetadataCount)
-        let maxNoteLength = 200   // same cap as SkillStore.skillPromptFragment
-
-        var lines = "Available MCP Servers (use minis-mcp-cli to discover and call):\n"
-        for s in selected {
-            var note = s.note ?? ""
-            if note.count > maxNoteLength {
-                note = String(note.prefix(maxNoteLength)) + "…"
-            }
-            if note.isEmpty {
-                lines += "- \(s.id)\n"
-            } else {
-                lines += "- \(s.id): \(note)\n"
-            }
-        }
-        lines += "\nTo use: run `minis-mcp-cli tools <server>` to see available tools,\n"
-        lines += "then `minis-mcp-cli call <server> <tool> [args]` to invoke."
-        // Agent-facing guidance on the runtime env placeholder; English-only,
-        // not localized (this is prompt text, never shown in the UI).
-        lines += "\nWhen adding or modifying an MCP server config (via minis-mcp-cli add / the UI), use $$VARNAME in env/headers/url values as a placeholder resolved at runtime from the system/App environment variables — do not hardcode secrets; reference an existing App environment variable as $$NAME."
-        return lines
+        // nanoMuse: Keep MCP configuration for backup and sync without advertising its retired local shell CLI.
+        return nil
     }
 
-    // MARK: - Tools refresh (native → in-guest CLI) [T-mcp-tools-refresh]
+    // MARK: - Tools refresh
 
-    /// One tool row from `minis-mcp-cli tools --refresh`.
+    /// One tool row shown in MCP settings.
     struct MCPToolInfo: Identifiable, Hashable {
         var id: String { name }
         let name: String
@@ -649,53 +616,19 @@ final class MCPStore: ObservableObject {
     }
 
     enum ToolsRefreshError: LocalizedError {
-        case kernelNotBooted
-        case cliFailed(String)
+        case localCLIUnavailable
 
         var errorDescription: String? {
-            switch self {
-            case .kernelNotBooted:
-                return AppLocalized("The terminal engine isn't running yet. Open a chat or the terminal once, then retry.")
-            case .cliFailed(let msg):
-                return msg
-            }
+            AppLocalized("MCP tool refresh requires the local terminal engine.")
         }
     }
 
-    /// Force-reconnect + re-list a server's tools via the in-guest CLI
-    /// (`minis-mcp-cli refresh <name>`), so tools the remote added after the
-    /// last connect show up without restarting anything. The synthetic
-    /// sessionId gives the coordinator a mount context; the static mount layer
-    /// it initializes includes /var/minis/mcp-servers.
-    func refreshTools(server: String) async throws -> [MCPToolInfo] {
-        guard ISHKernel.shared.isBooted else { throw ToolsRefreshError.kernelNotBooted }
-        // Shell-quote the name defensively (names are also file keys, but a
-        // space or quote must not break the command line).
-        let quoted = "'" + server.replacingOccurrences(of: "'", with: "'\\''") + "'"
-        let result = try await ISHExecutionCoordinator.shared.execute(
-            sessionId: "mcp-settings",
-            command: "minis-mcp-cli refresh \(quoted)",
-            timeout: 120,
-            lineCallback: { _ in },
-            pidCallback: { _ in }
-        )
-        // stdout is one JSON envelope line; tolerate stray non-JSON lines
-        // (wrapper noise) by scanning for the first parseable object.
-        for line in result.output.split(separator: "\n") {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            guard trimmed.hasPrefix("{"), let data = trimmed.data(using: .utf8),
-                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
-            if let err = obj["error"] as? String {
-                throw ToolsRefreshError.cliFailed(err)
-            }
-            let root = (obj["result"] as? [String: Any]) ?? obj
-            guard let tools = root["tools"] as? [[String: Any]] else { continue }
-            return tools.compactMap { t in
-                guard let name = t["name"] as? String else { return nil }
-                return MCPToolInfo(name: name, description: (t["description"] as? String) ?? "")
-            }
-        }
-        throw ToolsRefreshError.cliFailed(AppLocalized("Unexpected CLI output (no JSON result). Check the server's connectivity."))
+    /// MCP server configuration remains stored and synced independently of
+    /// the local terminal; live tool discovery still requires that runtime.
+    func refreshTools(server _: String) async throws -> [MCPToolInfo] {
+        // nanoMuse: MCP tool refresh must not start minis-mcp-cli in the local shell.
+        try MordeLocalExecutionPolicy.requireEnabled()
+        throw ToolsRefreshError.localCLIUnavailable
     }
 
     // MARK: - iCloud sync (per-server MCPServerItem records) [T-mcp-per-server-sync]

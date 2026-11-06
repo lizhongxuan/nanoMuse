@@ -29,7 +29,7 @@ private let logger = AppLogger(category: "VoicePromptIntent")
 struct VoicePromptIntent: AppIntent {
     static var title: LocalizedStringResource = "Voice Prompt"
     static var description = IntentDescription(
-        "Opens nanoMuse and starts listening. What you say lands in the composer; you send it with a tap."
+        "Opens morde and starts listening. What you say lands in the composer; you send it with a tap."
     )
 
     /// Listening needs the panel on screen (see the file header).
@@ -42,7 +42,7 @@ struct VoicePromptIntent: AppIntent {
     var session: SessionEntity?
 
     static var parameterSummary: some ParameterSummary {
-        Summary("Voice prompt to nanoMuse") {
+        Summary("Voice prompt to morde") {
             \.$session
         }
     }

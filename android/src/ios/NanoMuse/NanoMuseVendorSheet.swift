@@ -92,7 +92,7 @@ enum NanoMuseVendorSetup {
         if models.isEmpty {
             await store.refreshModels(for: inst)
         } else {
-            store.replaceEntries(for: inst.id, models: models, caller: "NanoMuseVendorSetup.install")
+            store.replaceEntries(for: inst.id, models: models, caller: "mordeVendorSetup.install")
         }
         adoptDefaults(inst, vendor: vendor)
         return inst

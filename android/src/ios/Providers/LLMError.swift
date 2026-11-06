@@ -17,7 +17,7 @@ enum LLMError: LocalizedError {
         case .invalidAPIKey(let detail):
             return detail.isEmpty ? "Invalid API key" : "Invalid API key: \(detail)"
         case .networkError(let error):
-            return "Network error: \(error.localizedDescription)" + NanoMuseProviderReach.hostTag(error) // nanoMuse: the host, for the chat's reach card
+            return "Network error: \(error.localizedDescription)" + Self.hostTag(error) // nanoMuse: the host, for the chat's reach card
         case .providerError(let message):
             return "Provider error: \(message)"
         case .transientError(let message):
@@ -71,5 +71,15 @@ enum LLMError: LocalizedError {
         case .transientError, .networkError, .decodingError, .cancelled, .unknown:
             return false
         }
+    }
+
+    // nanoMuse: shared by provider error text and the reach classifier without making this upstream provider type depend on NanoMuse UI sources.
+    static func hostTag(_ error: Error) -> String {
+        let ns = error as NSError
+        var host: String?
+        if let url = ns.userInfo[NSURLErrorFailingURLErrorKey] as? URL { host = url.host }
+        else if let value = ns.userInfo[NSURLErrorFailingURLStringErrorKey] as? String { host = URL(string: value)?.host }
+        guard let host = host?.lowercased(), !host.isEmpty else { return "" }
+        return " [host: \(host)]"
     }
 }

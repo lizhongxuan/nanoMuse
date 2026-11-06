@@ -150,6 +150,25 @@ scripts/gen-ios-icons.py         App 图标和四款备选图标，来自 assets
   Cursor / Codex / Claude Code 会话，可以给任何一个发消息）、**定时任务**、**系统文件**
   （SOUL、GLOBAL、日记、动态的指令、例程的时间表、从别的助手 *导入记忆*）、连接器、数据控制、
   外壳的两个开关、*重新显示欢迎页*。
+- **一次性服务商 key 清理提示**（`MordeCredentialExpiry.swift`、`ProviderConfigStore.swift`、
+  `NanoMuseShell.swift`）：Morde 迁移会删除已知自有 key 服务商配置中的 key，以及三个固定旧服务中的 key。
+  清理开始时，应用根界面的提示会说明：如果 iCloud 钥匙串条目已同步，删除也可能传播到使用同一 Apple
+  账户的其他设备。点 *知道了* 只会关闭提示，不会决定是否删除。OAuth 登录、Morde 凭证和其他应用数据会保留；
+  删除失败的目标会留在 ledger 中，并在下次启动重试。
+- **资源库中的 Morde 资源**（`MordeApp.swift`、`NanoMuseShell.swift`）：子页可查看当前账号的自有或共享 Host，
+  只读显示可访问的 Workspace，并说明文件下载、检查点校验和预览尚未接入，不展示示例文件。选择运行中的电脑后，
+  通过短期 Gateway 票据在 WKWebView 中打开，导航限制在该 Host 的 HTTPS 来源内，不注入本机 JavaScript 桥。
+  模拟器交互与会话过期恢复仍待设备验收。
+- **设置中的 Morde 账户**（`MordeApp.swift`、`NanoMuseSettings.swift`）：显示已登录账号名称、账号 ID 和服务来源；
+  退出前会确认，操作只退出此设备当前的 Morde 客户端会话。*客户端安装*页面会列出当前账号登记的设备，撤销其他设备前需要确认；
+  当前设备会特别标记，并通过账户页的退出操作注销。原生页面暂不提供模型连接和 API Key 管理。
+- **Morde Task 操作结果未核对时沿用原请求**（`MordeApp.swift`）：操作已被接受、但后续 Task 状态刷新失败时，重试会复用原幂等键；状态刷新前不会用另一项操作替换它。服务端明确拒绝的客户端错误会清除这次尝试。
+- **日记同步需要用户明确选择副本**（`NanoMuseSystemFiles.swift`）：日记同步页按当前登录账号分页读取 Morde 快照，并校验日期、正文和 revision。用户选择草稿后才写入本机文件并通过现有 personal-data outbox 排队；本机或云端副本不会被静默覆盖，冲突保留给现有对账流程处理。
+- **导入的云端例程在手机上只读**（`NanoMuseScheduler.swift`、`NanoMuseGoals.swift`、`NanoMuseSettings.swift`）：导入后保留本机源作为已关闭归档，不再生成重复提醒或本地运行。手机不显示编辑、启用和删除控制；在 Cloud schedules 管理云端任务。
+- **本机 Agent 和直接模型调用保持关闭**（`MordeCredentialExpiry.swift`、`Agent/Intents/`、
+  `CloudSyncSettingsV2View.swift`）：5 个会启动、继续或重试本机 Agent 的快捷指令会在创建会话、读取附件、启动后台工作或发通知前报错，并提示改用 Morde 云端任务。设置中的旧版 iCloud 同步页说明业务同步已暂停，并隐藏旧上传控制；本机记录不会因此删除。
+- **Morde 不提供个人模型服务商设置**（`NanoMuseAccountView.swift`、`NanoMuseAllowanceCard.swift`、
+  `NanoMuseAvatarStudio.swift`）：Cloud 账户、额度、邀请链接和头像页面仍保留，但旧版 key、订阅登录和头像图片模型设置入口已移除。本机执行关闭时，直接图片模型路由也会失败关闭。
 - **模型（0.1.34）**（`NanoMuseModels.swift`）：中继的菜单打开时停在标为 *聊天* 推荐的模型；
   项目托管中继目前给聊天和操作屏幕都推荐同一个多模态 `Qwen/Qwen3.6-27B-FP8`。在聊天的选择器里
   选了哪个，哪个就挪到 Cloud 组的最前面，新聊天跟着它走，和 Android 的 `followPick` 一样。
@@ -488,14 +507,14 @@ scripts/gen-ios-icons.py         App 图标和四款备选图标，来自 assets
   默认分组重新解析，什么都不剩时说*未配置模型。请在设置中添加服务商。*
 - **底栏是一个悬浮的胶囊**（`NanoMuseShell.swift` → `NanoMuseBottomBar`，`NanoMuseFaces.swift`
   里的 `NanoMuseTones.tabIndicator` / `tabIndicatorGlyph`；对应 Android 的 `MuseBottomBar`，
-  @Ichiro786 的 #329）：五个标签放在一个 `Capsule` 里，离底部安全区 12 pt，和上方的输入框
+  @Ichiro786 的 #329）：四个 iOS 主标签放在一个 `Capsule` 里，离底部安全区 12 pt，和上方的输入框
   一样宽（同样的 16 pt 边距；compact 宽度下最宽 420 pt，没有哪部手机碰得到；regular 宽度，也就是
-  iPad 上，它和输入框一样是聊天列减去边距的 728 pt，见下面关于列的那条），只有图标，
-  五个标签图形与 Android 的 `MuseBottomBar` 对齐（`bubble.left`、`doc.text`、`lightbulb`、
-  `checkmark.square`，以及资料库的三几何图形 `Category`），无障碍标签和选中特征都和以前一样。胶囊是 `.ultraThinMaterial`，上面盖一层 55%
+  iPad 上，它和输入框一样是聊天列减去边距的 728 pt，见下面关于列的那条），只显示聊天、动态、
+  点子和资源库四个图标。长期目标从点子页打开。每个按钮仍向读屏提供本地化标签名和选中状态；图形
+  分别是 `bubble.left`、`doc.text`、`lightbulb` 和资料库的三几何图形 `Category`。胶囊是 `.ultraThinMaterial`，上面盖一层 55%
   不透明度的外壳 surface 色（对比度靠这层色，模糊靠材质，和 Android 在背景模糊上盖 55% surface
   一样），边上一道 1 pt 的 `NanoMuseTones.hairline`；原来那条通栏的条和它顶上的细线没有了。
-  五个标签平分胶囊的宽度，每一格整格可点；当前这个用 `tabIndicatorGlyph` 色显示实心符号，底下一个
+  四个标签平分胶囊的宽度，每一格整格可点；当前这个用 `tabIndicatorGlyph` 色显示实心符号，底下一个
   60 × 46 pt 的 `tabIndicator` 色胶囊（聊天的墨色：浅色黑底白符号，深色白底黑符号，和 Android 的
   `MuseBottomBar` 一样），点下一个标签时它带着弹簧滑过去
   （`matchedGeometryEffect`；开了「减弱动态效果」就不带弹簧，直接过去）；其他标签用次要颜色显示线框符号。键盘弹起或聊天的语音面板打开时，

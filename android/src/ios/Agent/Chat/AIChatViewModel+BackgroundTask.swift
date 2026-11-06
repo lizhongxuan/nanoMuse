@@ -639,26 +639,8 @@ extension AIChatViewModel {
             let n = browserTabPool.stopAllLoading()
             logger.info("⏹️ stopCurrentCommand — stopped \(n) loading browser tab(s)")
         }
-        // Stop ALL currently running shells — concurrent tool execution
-        // can have many in flight at once and a stop tap should cancel
-        // the entire batch. [T-concurrent-tools 2026-05-25]
-        if !runningCommandPids.isEmpty {
-            // [T-shell-stop-blocked-by-actor] SYNCHRONOUS and nonisolated —
-            // deliberately not `Task { await …stopCurrentCommand() }`.
-            //
-            // That form has to queue on the coordinator actor, and the case
-            // Stop exists for is exactly when the coordinator is stuck: a
-            // guest process wedged on iSH's global `pids_lock` blocks the
-            // actor, so the kill request sat in the queue behind the very
-            // thing it was meant to kill. Field crash 2026-08-23 20:11 shows
-            // no `Coordinator stopping command` line at all — the user
-            // pressed Stop and the code never ran.
-            //
-            // Killing needs nothing from the actor but the pid, which is
-            // mirrored under a lock, so this runs right here on the caller.
-            let killed = ISHExecutionCoordinator.stopAllNonisolated()
-            logger.info("⏹️ stopCurrentCommand — signalled \(killed) shell pid(s)")
-        }
+        // Local shell execution has been removed. Clear any stale PID bookkeeping
+        // while preserving browser cancellation and the existing UI lifecycle.
         runningCommandPids.removeAll()
         commandStartTime = nil
     }
@@ -672,7 +654,6 @@ extension AIChatViewModel {
         toolLoopDetector.reset()
 
         if let sessionId {
-            Task { await ISHExecutionCoordinator.shared.sessionDidTerminate(sessionId: sessionId) }
             BrowserTabPool.deletePersistedData(for: sessionId)
             BrowserUseOffloadBridge.releasePool(forSession: sessionId)
             Task {

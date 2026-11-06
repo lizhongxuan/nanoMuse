@@ -69,12 +69,7 @@ enum NanoMuseProviderReach {
     /// The `[host: …]` tag LLMError appends to a network error's description, from the
     /// failing URL in the NSError; empty when there is none.
     static func hostTag(_ error: Error) -> String {
-        let ns = error as NSError
-        var host: String?
-        if let url = ns.userInfo[NSURLErrorFailingURLErrorKey] as? URL { host = url.host }
-        else if let s = ns.userInfo[NSURLErrorFailingURLStringErrorKey] as? String { host = URL(string: s)?.host }
-        guard let h = host?.lowercased(), !h.isEmpty else { return "" }
-        return " [host: \(h)]"
+        LLMError.hostTag(error)
     }
 
     /// The failure behind `text`, or nil when it is not one this card is for. `hintHost` is

@@ -441,14 +441,14 @@ final class FileMentionIndex: ObservableObject {
         return [
             ScanRoot(
                 scope: .workspace,
-                hostURL: AIChatViewModel.minisWorkspacePersistentDir(for: sid),
-                linuxPrefix: AIChatViewModel.minisWorkspaceLinuxDir,
+                hostURL: MinisStoragePaths.minisWorkspacePersistentDir(for: sid),
+                linuxPrefix: MinisStoragePaths.minisWorkspaceLinuxDir,
                 mountName: nil
             ),
             ScanRoot(
                 scope: .attachments,
-                hostURL: AIChatViewModel.minisAttachmentsPersistentDir(for: sid),
-                linuxPrefix: AIChatViewModel.minisAttachmentsLinuxDir,
+                hostURL: MinisStoragePaths.minisAttachmentsPersistentDir(for: sid),
+                linuxPrefix: MinisStoragePaths.minisAttachmentsLinuxDir,
                 mountName: nil
             ),
         ]
@@ -458,20 +458,20 @@ final class FileMentionIndex: ObservableObject {
         [
             ScanRoot(
                 scope: .shared,
-                hostURL: AIChatViewModel.minisSharedPersistentDir,
-                linuxPrefix: AIChatViewModel.minisSharedLinuxDir,
+                hostURL: MinisStoragePaths.minisSharedPersistentDir,
+                linuxPrefix: MinisStoragePaths.minisSharedLinuxDir,
                 mountName: nil
             ),
             ScanRoot(
                 scope: .skills,
-                hostURL: AIChatViewModel.minisSkillsPersistentDir,
-                linuxPrefix: AIChatViewModel.minisSkillsLinuxDir,
+                hostURL: MinisStoragePaths.minisSkillsPersistentDir,
+                linuxPrefix: MinisStoragePaths.minisSkillsLinuxDir,
                 mountName: nil
             ),
             ScanRoot(
                 scope: .memory,
-                hostURL: AIChatViewModel.minisMemoryPersistentDir,
-                linuxPrefix: AIChatViewModel.minisMemoryLinuxDir,
+                hostURL: MinisStoragePaths.minisMemoryPersistentDir,
+                linuxPrefix: MinisStoragePaths.minisMemoryLinuxDir,
                 mountName: nil
             ),
         ]
@@ -481,7 +481,7 @@ final class FileMentionIndex: ObservableObject {
         let mgr = MountedFoldersManager.shared
         return mgr.entries.compactMap { entry -> ScanRoot? in
             guard let url = mgr.resolvedURL(for: entry.id) else { return nil }
-            let linuxPrefix = "\(AIChatViewModel.minisMountsLinuxDir)/\(entry.name)"
+            let linuxPrefix = "\(MinisStoragePaths.minisMountsLinuxDir)/\(entry.name)"
             return ScanRoot(scope: .mount, hostURL: url, linuxPrefix: linuxPrefix, mountName: entry.name)
         }
     }

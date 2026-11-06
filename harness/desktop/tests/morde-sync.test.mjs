@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { chmod, mkdtemp, mkdir, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, parse } from 'node:path';
 import { checkedDirectory, MordeSync, verifyMapping } from '../out/morde-sync.js';
@@ -41,6 +41,70 @@ process.stdin.once('data', chunk => { const req = JSON.parse(String(chunk).trim(
     assert.ok(Number.isSafeInteger(childPid) && childPid > 0);
     assert.equal(sync.snapshot(), 'idle');
     assert.throws(() => process.kill(childPid, 0), { code: 'ESRCH' });
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('a JSON-RPC success without an object result is not a confirmed sync', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'morde-sync-invalid-result-'));
+  try {
+    const binary = join(root, 'empty-result-sync');
+    await writeFile(binary, `#!/usr/bin/env node
+process.stdin.once('data', chunk => { const req = JSON.parse(String(chunk).trim()); process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:req.id})+'\\n'); });
+`);
+    await chmod(binary, 0o700);
+    const mapping = { ...await checkedDirectory(root, []), workspaceId: 'w1234567' };
+    const sync = new MordeSync(() => binary, () => {});
+    await assert.rejects(() => sync.run({ origin: 'https://portal.example', installationId: 'inst', clientCredential: 'client-secret', clientExpiresAt: '2099-01-01T00:00:00Z', syncCredential: 'sync-secret', syncExpiresAt: '2099-01-01T00:00:00Z' }, mapping, 'upload'), /Invalid sync response/);
+    assert.equal(sync.snapshot(), 'idle');
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('local safety-copy RPC lists, restores and deletes using only the selected mapping', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'morde-preserved-rpc-'));
+  try {
+    const directory = join(root, 'project'), binary = join(root, 'fake-sync'), log = join(root, 'calls.jsonl');
+    await mkdir(directory);
+    await writeFile(binary, `#!/usr/bin/env node
+process.stdin.once('data', chunk => {
+  const req = JSON.parse(String(chunk).trim());
+  require('node:fs').appendFileSync(${JSON.stringify(log)}, JSON.stringify(req)+'\\n');
+  if (req.method === 'list_preserved') process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:req.id,result:[{id:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',workspace_id:'w1234567',path:'notes.txt',created_at:'2026-10-31T10:00:00Z',size:19}]})+'\\n');
+  else if (req.method === 'restore_preserved') process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:req.id,result:{restored:true}})+'\\n');
+  else if (req.method === 'delete_preserved') process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:req.id,result:{deleted:true}})+'\\n');
+  else process.exit(4);
+});
+`);
+    await chmod(binary, 0o700);
+    const mapping = { ...await checkedDirectory(directory, []), workspaceId: 'w1234567' };
+    const sync = new MordeSync(() => binary, () => {});
+    const files = await sync.listPreserved(mapping);
+    assert.deepEqual(files.map(({ path, size }) => ({ path, size })), [{ path: 'notes.txt', size: 19 }]);
+    await sync.restorePreserved(mapping, files[0].id);
+    await sync.deletePreserved(mapping, files[0].id);
+    const folderID = 'morde-0123456789abcdef0123456789abcdef';
+    await sync.listPreserved(mapping, folderID);
+    await sync.restorePreserved(mapping, files[0].id, folderID);
+    await sync.deletePreserved(mapping, files[0].id, folderID);
+    const requests = (await readFile(log, 'utf8')).trim().split('\n').map((line) => JSON.parse(line));
+    assert.equal(requests.slice(0, 3).some((request) => request.params.folder_id !== undefined), false);
+    assert.deepEqual(requests.slice(3).map((request) => request.params.folder_id), [folderID, folderID, folderID]);
+    assert.equal(sync.snapshot(), 'idle');
+    await assert.rejects(() => sync.restorePreserved(mapping, '../notes.txt'), /Invalid safety-copy ID/);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('safety-copy RPC rejects malformed paths, timestamps, sizes and mismatched Workspace IDs', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'morde-preserved-invalid-'));
+  try {
+    const directory = join(root, 'project'), binary = join(root, 'fake-sync');
+    await mkdir(directory);
+    await writeFile(binary, `#!/usr/bin/env node
+process.stdin.once('data', chunk => { const req = JSON.parse(String(chunk).trim()); process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:req.id,result:[{id:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',workspace_id:'w7654321',path:'../secret',created_at:'invalid',size:-1}]})+'\\n'); });
+`);
+    await chmod(binary, 0o700);
+    const mapping = { ...await checkedDirectory(directory, []), workspaceId: 'w1234567' };
+    const sync = new MordeSync(() => binary, () => {});
+    await assert.rejects(() => sync.listPreserved(mapping), /Invalid safety-copy response/);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 

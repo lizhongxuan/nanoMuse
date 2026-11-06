@@ -71,4 +71,169 @@ final class NanoMuseAccountsTests: XCTestCase {
         XCTAssertFalse(NanoMuseAccountData.keepOnRefusedKey(code: NanoMuseAccountData.accountDeleted))
         XCTAssertEqual(NanoMuseAccountData.accountDeleted, "account_deleted", "the relay's code, as documented")
     }
+
+    func testMordePersonalProfileOutboxIsScopedAndNeverReplacesPendingData() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let scope = String(repeating: "a", count: 64)
+        let otherScope = String(repeating: "b", count: 64)
+        let body = MordePersonalProfileBody(name: "Muse", avatar: "dragon", emoji: nil, color: nil,
+                                            description: "", style: "")
+        let pending = NanoMuseMordeProfileMutation(scopeKey: scope, mutationID: UUID().uuidString,
+                                                   baseRevision: 0, body: body)
+        try NanoMuseMordeProfileOutbox.save(pending, root: root)
+        XCTAssertEqual(try NanoMuseMordeProfileOutbox.load(scopeKey: scope, root: root), pending)
+        XCTAssertNil(try NanoMuseMordeProfileOutbox.load(scopeKey: otherScope, root: root))
+
+        let replacement = NanoMuseMordeProfileMutation(scopeKey: scope, mutationID: UUID().uuidString,
+                                                       baseRevision: 1, body: body)
+        XCTAssertThrowsError(try NanoMuseMordeProfileOutbox.save(replacement, root: root))
+        try NanoMuseMordeProfileOutbox.clear(scopeKey: scope, mutationID: replacement.mutationID, root: root)
+        XCTAssertEqual(try NanoMuseMordeProfileOutbox.load(scopeKey: scope, root: root), pending)
+        try NanoMuseMordeProfileOutbox.clear(scopeKey: scope, mutationID: pending.mutationID, root: root)
+        XCTAssertNil(try NanoMuseMordeProfileOutbox.load(scopeKey: scope, root: root))
+    }
+
+    func testMordePersonalProfileOutboxRebasesLiveConflictAndKeepsTombstonePending() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let scope = String(repeating: "c", count: 64)
+        let body = MordePersonalProfileBody(name: "Muse", avatar: "dragon", emoji: nil, color: nil,
+                                            description: "local change", style: "")
+        let original = NanoMuseMordeProfileMutation(scopeKey: scope, mutationID: "profile-mutation-001",
+                                                    baseRevision: 1, body: body)
+        try NanoMuseMordeProfileOutbox.save(original, root: root)
+
+        let liveConflict = MordePersonalRevisionConflict(baseRevision: 1, currentRevision: 3,
+                                                          deleted: false, message: "conflict")
+        let rebased = try XCTUnwrap(NanoMuseMordeProfileOutbox.rebase(scopeKey: scope,
+            mutationID: original.mutationID, conflict: liveConflict, root: root))
+        XCTAssertNotEqual(rebased.mutationID, original.mutationID)
+        XCTAssertEqual(rebased.baseRevision, 3)
+        XCTAssertEqual(rebased.body, original.body)
+        XCTAssertEqual(try NanoMuseMordeProfileOutbox.load(scopeKey: scope, root: root), rebased)
+
+        let tombstone = MordePersonalRevisionConflict(baseRevision: 3, currentRevision: 4,
+                                                       deleted: true, message: "conflict")
+        XCTAssertNil(try NanoMuseMordeProfileOutbox.rebase(scopeKey: scope,
+            mutationID: rebased.mutationID, conflict: tombstone, root: root))
+        XCTAssertEqual(try NanoMuseMordeProfileOutbox.load(scopeKey: scope, root: root), rebased)
+        XCTAssertFalse(try NanoMuseMordeProfileOutbox.discard(scopeKey: scope,
+            mutationID: "wrong-profile-mutation", root: root))
+        XCTAssertTrue(try NanoMuseMordeProfileOutbox.discard(scopeKey: scope,
+            mutationID: rebased.mutationID, root: root))
+        XCTAssertNil(try NanoMuseMordeProfileOutbox.load(scopeKey: scope, root: root))
+    }
+
+    func testPausingProfileSyncKeepsItsPendingMutationAndIsScopedPerAccount() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let suite = "NanoMuseAccountsTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let accountA = String(repeating: "a", count: 64)
+        let accountB = String(repeating: "b", count: 64)
+        let body = MordePersonalProfileBody(name: "Muse", avatar: "dragon", emoji: nil, color: nil,
+                                            description: "", style: "")
+        let pending = NanoMuseMordeProfileMutation(scopeKey: accountA, mutationID: UUID().uuidString,
+                                                   baseRevision: 0, body: body)
+        try NanoMuseMordeProfileOutbox.save(pending, root: root)
+
+        XCTAssertTrue(NanoMuseMordeProfileSyncPreference.isEnabled(scopeKey: accountA, defaults: defaults))
+        NanoMuseMordeProfileSyncPreference.setEnabled(false, scopeKey: accountA, defaults: defaults)
+        XCTAssertFalse(NanoMuseMordeProfileSyncPreference.isEnabled(scopeKey: accountA, defaults: defaults))
+        XCTAssertTrue(NanoMuseMordeProfileSyncPreference.isEnabled(scopeKey: accountB, defaults: defaults))
+        XCTAssertFalse(NanoMuseMordeProfileSyncPreference.canFlush(syncEnabled: false, scopeKey: accountA))
+        XCTAssertFalse(NanoMuseMordeProfileSyncPreference.canFlush(syncEnabled: true, scopeKey: nil))
+        XCTAssertEqual(try NanoMuseMordeProfileOutbox.load(scopeKey: accountA, root: root), pending)
+        XCTAssertNil(try NanoMuseMordeProfileOutbox.load(scopeKey: accountB, root: root))
+
+        NanoMuseMordeProfileSyncPreference.setEnabled(true, scopeKey: accountA, defaults: defaults)
+        XCTAssertTrue(NanoMuseMordeProfileSyncPreference.isEnabled(scopeKey: accountA, defaults: defaults))
+        XCTAssertEqual(try NanoMuseMordeProfileOutbox.load(scopeKey: accountA, root: root), pending)
+    }
+
+    func testPausingGenericPersonalDataSyncKeepsItsPendingMutationAndIsScopedPerAccount() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let suite = "NanoMuseAccountsTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let accountA = String(repeating: "a", count: 64)
+        let accountB = String(repeating: "b", count: 64)
+        let pending = MordePersonalDataMutation(
+            scopeKey: accountA, mutationID: UUID().uuidString.replacingOccurrences(of: "-", with: ""),
+            objectType: "memory", objectID: "global", baseRevision: 3,
+            body: .object(["content": .string("keep this local while paused")]), isDelete: false)
+        try NanoMuseMordePersonalDataOutbox.enqueue(pending, scopeKey: accountA, root: root)
+        let replacement = MordePersonalDataMutation(
+            scopeKey: accountA, mutationID: UUID().uuidString.replacingOccurrences(of: "-", with: ""),
+            objectType: "memory", objectID: "global", baseRevision: 4,
+            body: .object(["content": .string("must not replace pending data")]), isDelete: false)
+        XCTAssertThrowsError(try NanoMuseMordePersonalDataOutbox.enqueue(replacement, scopeKey: accountA, root: root))
+
+        NanoMuseMordeProfileSyncPreference.setEnabled(false, scopeKey: accountA, defaults: defaults)
+        XCTAssertFalse(NanoMuseMordeProfileSyncPreference.canFlush(
+            syncEnabled: NanoMuseMordeProfileSyncPreference.isEnabled(scopeKey: accountA, defaults: defaults),
+            scopeKey: accountA))
+        XCTAssertTrue(NanoMuseMordeProfileSyncPreference.isEnabled(scopeKey: accountB, defaults: defaults))
+        XCTAssertEqual(try NanoMuseMordePersonalDataOutbox.load(scopeKey: accountA, root: root), pending)
+        XCTAssertNil(try NanoMuseMordePersonalDataOutbox.load(scopeKey: accountB, root: root))
+
+        NanoMuseMordeProfileSyncPreference.setEnabled(true, scopeKey: accountA, defaults: defaults)
+        XCTAssertTrue(NanoMuseMordeProfileSyncPreference.canFlush(
+            syncEnabled: NanoMuseMordeProfileSyncPreference.isEnabled(scopeKey: accountA, defaults: defaults),
+            scopeKey: accountA))
+        XCTAssertEqual(try NanoMuseMordePersonalDataOutbox.load(scopeKey: accountA, root: root), pending)
+    }
+
+    func testSystemFilesMapOnlySoulAndMemoryToPersonalDataObjects() throws {
+        let soul = try XCTUnwrap(NanoMuseSystemFile.soul.personalDataChange(
+            for: "---\nname: Muse\nemoji: 🐱\nstyle: calm\nlang: en\nicon: local-only\n---\nHelpful and direct."))
+        XCTAssertEqual(soul.objectType, "soul")
+        XCTAssertEqual(soul.objectID, "default")
+        guard case .object(let soulBody)? = soul.body else { return XCTFail("SOUL must map to an object body") }
+        XCTAssertEqual(soulBody["name"], .string("Muse"))
+        XCTAssertEqual(soulBody["emoji"], .string("🐱"))
+        XCTAssertEqual(soulBody["style"], .string("calm"))
+        XCTAssertEqual(soulBody["lang"], .string("en"))
+        XCTAssertEqual(soulBody["content"], .string("Helpful and direct."))
+        XCTAssertNil(soulBody["icon"], "the local-only icon field is not sent to the personal-data API")
+
+        let user = try XCTUnwrap(NanoMuseSystemFile.user.personalDataChange(for: "About this person"))
+        XCTAssertEqual(user.objectType, "memory")
+        XCTAssertEqual(user.objectID, "user")
+        XCTAssertEqual(user.body, .object(["content": .string("About this person")]))
+
+        let global = try XCTUnwrap(NanoMuseSystemFile.memory.personalDataChange(for: "Durable notes"))
+        XCTAssertEqual(global.objectType, "memory")
+        XCTAssertEqual(global.objectID, "global")
+        XCTAssertFalse(global.isDelete)
+
+        let empty = try XCTUnwrap(NanoMuseSystemFile.memory.personalDataChange(for: ""))
+        XCTAssertTrue(empty.isDelete)
+        XCTAssertNil(empty.body)
+        XCTAssertNil(try NanoMuseSystemFile.feed.personalDataChange(for: "feed preferences"))
+        XCTAssertNil(try NanoMuseSystemFile.heartbeat.personalDataChange(for: "read-only"))
+    }
+
+    func testPersonalDataQuotaDecodesTheServerFieldsAndRejectsInvalidCounts() throws {
+        let response = Data(#"{"owner_id":"owner-1","used_bytes":12,"reserved_bytes":3,"quota_bytes":100,"max_attachment_bytes":25,"remaining_bytes":85,"version":4}"#.utf8)
+        let quota = try JSONDecoder().decode(MordePersonalDataQuota.self, from: response)
+        XCTAssertTrue(quota.isValid)
+        XCTAssertEqual(quota.used_bytes, 12)
+        XCTAssertEqual(quota.remaining_bytes, 85)
+        XCTAssertEqual(quota.version, 4)
+
+        let invalid = MordePersonalDataQuota(owner_id: "owner-1", used_bytes: 12,
+                                             reserved_bytes: -1, quota_bytes: 100,
+                                             max_attachment_bytes: 25, remaining_bytes: 85,
+                                             version: 4)
+        XCTAssertFalse(invalid.isValid)
+        let inconsistent = MordePersonalDataQuota(owner_id: "owner-1", used_bytes: 12,
+                                                   reserved_bytes: 3, quota_bytes: 100,
+                                                   max_attachment_bytes: 25, remaining_bytes: 84,
+                                                   version: 4)
+        XCTAssertFalse(inconsistent.isValid, "remaining_bytes must match quota minus used and reserved")
+    }
 }

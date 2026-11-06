@@ -15,7 +15,7 @@ files:
 extraResources:
   - from: bin
     to: bin
-    filter: ["morde-sync", "morde-sync.exe", "morde-sync.sha256"]
+    filter: ["morde-sync", "morde-sync.exe", "morde-sync.sha256", "morde-syncthing", "morde-syncthing.exe", "morde-syncthing.sha256"]
   - from: ../../LICENSE
     to: legal/LICENSE.nanoMuse
   - from: ../../NOTICE
@@ -24,6 +24,10 @@ extraResources:
     to: legal/THIRD_PARTY_NOTICES.nanoMuse.md
   - from: ../../../morde-sync/LICENSE
     to: legal/LICENSE.morde-sync
+  - from: resources/LICENSE.syncthing.txt
+    to: legal/LICENSE.syncthing.txt
+  - from: resources/THIRD_PARTY_NOTICES.syncthing.md
+    to: legal/THIRD_PARTY_NOTICES.syncthing.md
   - from: resources/THIRD_PARTY_NOTICES.morde-sync.md
     to: legal/THIRD_PARTY_NOTICES.morde-sync.md
   - from: resources/MORDE_NOTICE.txt

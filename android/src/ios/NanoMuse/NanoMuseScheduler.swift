@@ -18,6 +18,117 @@ import Foundation
 import BackgroundTasks
 import UserNotifications
 import UIKit
+import CryptoKit
+
+// MARK: - Cloud schedule wire models
+
+/// Codable values shared with MordeShellAuthorization's typed API bridge. The
+/// bridge owns credentials and only exposes these fixed request/response DTOs.
+typealias NanoMuseScheduleTimingDTO = MordeScheduleTimingDTO
+typealias NanoMuseScheduleBudgetDTO = MordeScheduleBudgetDTO
+typealias NanoMuseScheduleObservationDTO = MordeScheduleObservationDTO
+typealias NanoMuseScheduleRunDTO = MordeScheduleRunDTO
+typealias NanoMuseScheduleDTO = MordeScheduleDTO
+typealias NanoMuseScheduleListPage = MordeScheduleListPage
+typealias NanoMuseScheduleRunListPage = MordeScheduleRunListPage
+typealias NanoMuseScheduleCreateRequest = MordeScheduleCreateRequest
+typealias NanoMuseScheduleUpdateRequest = MordeScheduleUpdateRequest
+typealias NanoMuseScheduleActionRequest = MordeScheduleActionRequest
+typealias NanoMuseScheduleActionResponse = MordeScheduleActionResponse
+
+struct NanoMuseScheduleImportPreview: Equatable {
+    let request: NanoMuseScheduleCreateRequest?
+    let idempotencyKey: String?
+    let unavailableReason: String?
+
+    var isAvailable: Bool { request != nil && idempotencyKey != nil }
+}
+
+/// Converts a selected, preserved local routine into the cloud Schedule
+/// contract. Unsupported cadence is reported to the preview instead of being
+/// approximated, so importing can never silently change its timing.
+@MainActor
+enum NanoMuseScheduleImportMapper {
+    static func preview(_ routine: NanoMuseRoutine, hostID: String, modelID: String,
+                        now: Date = Date(), timeZone: TimeZone = .current) -> NanoMuseScheduleImportPreview {
+        guard !hostID.isEmpty, !modelID.isEmpty else {
+            return unavailable("Choose an available Host and model.")
+        }
+        if let hours = routine.intervalHours, hours > 0 {
+            return unavailable("Every-\(hours)-hour plans are not supported by cloud schedules yet. The local plan is unchanged.")
+        }
+        let objective = objective(for: routine)
+        guard !objective.isEmpty, objective.utf8.count <= 32_768 else {
+            return unavailable(objective.isEmpty ? "This plan has no task instructions." : "Task instructions exceed the cloud schedule limit.")
+        }
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let timeParts = NanoMuseDay.clock(hour: routine.hour, minute: routine.minute)
+        let timeZoneName = timeZone.identifier
+        let timing: NanoMuseScheduleTimingDTO
+        switch routine.repeatMode {
+        case .once:
+            guard let next = routine.nextDue(after: now, calendar: calendar), next > now else {
+                return unavailable("This one-time plan has already run or has no future run.")
+            }
+            let formatter = ISO8601DateFormatter()
+            formatter.timeZone = TimeZone(secondsFromGMT: 0)
+            timing = NanoMuseScheduleTimingDTO(kind: "once", run_at: formatter.string(from: next),
+                                                time_zone: timeZoneName)
+        case .daily:
+            timing = NanoMuseScheduleTimingDTO(kind: "daily", starts_on: dateOnly(now, calendar: calendar),
+                                                local_time: timeParts, time_zone: timeZoneName)
+        case .weekdays:
+            timing = NanoMuseScheduleTimingDTO(kind: "weekly", starts_on: dateOnly(now, calendar: calendar),
+                                                local_time: timeParts, time_zone: timeZoneName,
+                                                weekdays: [1, 2, 3, 4, 5])
+        }
+        let request = NanoMuseScheduleCreateRequest(
+            host_id: hostID,
+            model_id: modelID,
+            objective: objective,
+            timing: timing,
+            budget: NanoMuseScheduleBudgetDTO(active_seconds: 300, tool_calls: 10, model_tokens: 8_000),
+            misfire_policy: "skip",
+            notification_events: ["completed", "failed", "waiting_user"],
+            observation: nil
+        )
+        return NanoMuseScheduleImportPreview(request: request, idempotencyKey: idempotencyKey(routine),
+                                             unavailableReason: nil)
+    }
+
+    private static func unavailable(_ reason: String) -> NanoMuseScheduleImportPreview {
+        NanoMuseScheduleImportPreview(request: nil, idempotencyKey: nil, unavailableReason: reason)
+    }
+
+    private static func dateOnly(_ date: Date, calendar: Calendar) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: date)
+    }
+
+    private static func objective(for routine: NanoMuseRoutine) -> String {
+        if !routine.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return routine.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard let goalID = routine.goalId, let goal = NanoMuseGoalStore.shared.goal(id: goalID) else { return "" }
+        var lines = ["Check in on the goal: \(goal.title)"]
+        if !goal.why.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { lines.append("Why: \(goal.why)") }
+        if !goal.steps.isEmpty { lines.append("Steps:\n" + goal.steps.map { "- \($0.text)" }.joined(separator: "\n")) }
+        return lines.joined(separator: "\n")
+    }
+
+    private static func idempotencyKey(_ routine: NanoMuseRoutine) -> String {
+        // One key per preserved local source prevents duplicate cloud schedules
+        // when a create response is lost and the user changes the destination.
+        let digest = SHA256.hash(data: Data(routine.id.utf8)).map { String(format: "%02x", $0) }.joined()
+        return "ios-schedule-import-" + String(digest.prefix(32))
+    }
+}
 
 // MARK: - Model
 
@@ -42,6 +153,10 @@ struct NanoMuseRoutine: Codable, Identifiable, Equatable {
     /// Hidden routines (goal check-ins, the feed) do not show under Routines.
     var hidden: Bool = false
     var goalId: String? = nil
+    /// The cloud schedule created from this preserved local source, if imported.
+    var cloudScheduleID: String? = nil
+    var cloudScheduleVersion: Int64? = nil
+    var isCloudArchive: Bool { cloudScheduleID != nil }
     /// The conversation the runs land in; nil = a fresh side chat per run.
     var sessionId: String? = nil
     var createdAt: Date = Date()
@@ -115,6 +230,49 @@ struct NanoMuseRoutine: Codable, Identifiable, Equatable {
     }
 }
 
+/// Pure local mutation rules for routines. Imported schedules keep a local
+/// source copy for recovery, but local routine controls must not change it.
+enum NanoMuseRoutineLocalMutationPolicy {
+    static func disablingCloudArchives(in routines: [NanoMuseRoutine]) -> [NanoMuseRoutine] {
+        routines.map { routine in
+            guard routine.isCloudArchive, routine.enabled else { return routine }
+            var disabled = routine
+            disabled.enabled = false
+            return disabled
+        }
+    }
+
+    static func adding(_ routine: NanoMuseRoutine, to routines: [NanoMuseRoutine]) -> [NanoMuseRoutine]? {
+        guard !routine.isCloudArchive, !routines.contains(where: { $0.id == routine.id }) else { return nil }
+        return routines + [routine]
+    }
+
+    static func replacing(_ routine: NanoMuseRoutine, in routines: [NanoMuseRoutine]) -> [NanoMuseRoutine]? {
+        guard let index = routines.firstIndex(where: { $0.id == routine.id }),
+              !routines[index].isCloudArchive, !routine.isCloudArchive else { return nil }
+        var updated = routines
+        updated[index] = routine
+        return updated
+    }
+
+    static func settingEnabled(_ id: String, to enabled: Bool,
+                               in routines: [NanoMuseRoutine]) -> [NanoMuseRoutine]? {
+        guard let index = routines.firstIndex(where: { $0.id == id }),
+              !routines[index].isCloudArchive else { return nil }
+        var updated = routines
+        updated[index].enabled = enabled
+        return updated
+    }
+
+    static func deleting(_ id: String, from routines: [NanoMuseRoutine]) -> [NanoMuseRoutine]? {
+        guard let index = routines.firstIndex(where: { $0.id == id }),
+              !routines[index].isCloudArchive else { return nil }
+        var updated = routines
+        updated.remove(at: index)
+        return updated
+    }
+}
+
 // MARK: - Store + runner
 
 @MainActor
@@ -145,7 +303,10 @@ final class NanoMuseScheduler: ObservableObject {
         guard let data = try? Data(contentsOf: file) else { return }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        routines = (try? decoder.decode([NanoMuseRoutine].self, from: data)) ?? []
+        let loaded = (try? decoder.decode([NanoMuseRoutine].self, from: data)) ?? []
+        let normalized = NanoMuseRoutineLocalMutationPolicy.disablingCloudArchives(in: loaded)
+        routines = normalized
+        if loaded != normalized { _ = persist(normalized) }
     }
 
     /// C12: the file changed under the store — another account's routines are in place (or
@@ -160,14 +321,16 @@ final class NanoMuseScheduler: ObservableObject {
         refreshNotifications()
     }
 
-    private func save() {
+    @discardableResult
+    private func persist(_ updatedRoutines: [NanoMuseRoutine]) -> Bool {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        if let data = try? encoder.encode(routines) {
-            try? data.write(to: file, options: .atomic)
-        }
+        guard let data = try? encoder.encode(updatedRoutines),
+              (try? data.write(to: file, options: .atomic)) != nil else { return false }
+        routines = updatedRoutines
         refreshNotifications()
+        return true
     }
 
     // MARK: CRUD
@@ -179,27 +342,71 @@ final class NanoMuseScheduler: ObservableObject {
     func routine(id: String) -> NanoMuseRoutine? { routines.first { $0.id == id } }
 
     @discardableResult
-    func create(_ routine: NanoMuseRoutine) -> NanoMuseRoutine {
-        routines.append(routine)
-        save()
+    func create(_ routine: NanoMuseRoutine) -> NanoMuseRoutine? {
+        guard let updated = NanoMuseRoutineLocalMutationPolicy.adding(routine, to: routines),
+              persist(updated) else { return nil }
         return routine
     }
 
-    func update(_ routine: NanoMuseRoutine) {
-        guard let i = routines.firstIndex(where: { $0.id == routine.id }) else { return }
-        routines[i] = routine
-        save()
+    @discardableResult
+    func update(_ routine: NanoMuseRoutine) -> Bool {
+        guard let updated = NanoMuseRoutineLocalMutationPolicy.replacing(routine, in: routines) else { return false }
+        return persist(updated)
     }
 
-    func setEnabled(_ id: String, _ enabled: Bool) {
-        guard var r = routine(id: id) else { return }
-        r.enabled = enabled
-        update(r)
+    /// Only the cloud-import flow may attach or refresh the remote receipt.
+    /// All local CRUD entry points reject linked sources.
+    private func recordCloudScheduleReceipt(id: String, scheduleID: String, version: Int64) -> Bool {
+        guard !scheduleID.isEmpty, version > 0,
+              let index = routines.firstIndex(where: { $0.id == id }),
+              routines[index].cloudScheduleID == nil || routines[index].cloudScheduleID == scheduleID else { return false }
+        var imported = routines[index]
+        imported.cloudScheduleID = scheduleID
+        imported.cloudScheduleVersion = version
+        imported.enabled = false
+        var updated = routines
+        updated[index] = imported
+        return persist(updated)
     }
 
-    func delete(_ id: String) {
-        routines.removeAll { $0.id == id }
-        save()
+    /// Creates the Schedule first. The local plan is only disabled after the
+    /// server returns its confirmed ID and version; its original instructions
+    /// and cadence remain in routines.json for recovery.
+    func importRoutineToCloud(_ id: String, hostID: String, modelID: String) async throws -> NanoMuseScheduleDTO {
+        guard let original = routine(id: id) else { throw NanoMuseScheduleImportError.sourceMissing }
+        if let cloudID = original.cloudScheduleID {
+            let confirmed = try await MordeShellAuthorization.shared.schedule(id: cloudID)
+            guard confirmed.id == cloudID else { throw NanoMuseScheduleImportError.invalidServerReceipt }
+            // A previous create may have reached the server while the local
+            // receipt write failed. Recheck the cloud copy, then retry the
+            // local receipt and disable operation before returning success.
+            guard recordCloudScheduleReceipt(id: id, scheduleID: confirmed.id, version: confirmed.version) else {
+                throw NanoMuseScheduleImportError.localSourceSaveFailed
+            }
+            return confirmed
+        }
+        let preview = NanoMuseScheduleImportMapper.preview(original, hostID: hostID, modelID: modelID)
+        guard let request = preview.request, let idempotencyKey = preview.idempotencyKey else {
+            throw NanoMuseScheduleImportError.unavailable(preview.unavailableReason ?? "This plan cannot be imported.")
+        }
+        let created = try await MordeShellAuthorization.shared.createSchedule(request, idempotencyKey: idempotencyKey)
+        guard !created.id.isEmpty, created.version > 0 else { throw NanoMuseScheduleImportError.invalidServerReceipt }
+        guard recordCloudScheduleReceipt(id: id, scheduleID: created.id, version: created.version) else {
+            throw NanoMuseScheduleImportError.localSourceSaveFailed
+        }
+        return created
+    }
+
+    @discardableResult
+    func setEnabled(_ id: String, _ enabled: Bool) -> Bool {
+        guard let updated = NanoMuseRoutineLocalMutationPolicy.settingEnabled(id, to: enabled, in: routines) else { return false }
+        return persist(updated)
+    }
+
+    @discardableResult
+    func delete(_ id: String) -> Bool {
+        guard let updated = NanoMuseRoutineLocalMutationPolicy.deleting(id, from: routines) else { return false }
+        return persist(updated)
     }
 
     /// Routines that belong to a goal.
@@ -219,6 +426,13 @@ final class NanoMuseScheduler: ObservableObject {
 
     /// The app is on screen: run what is due, and keep checking every minute while it stays up.
     func appBecameActive() {
+        guard MordeLocalExecutionPolicy.isEnabled else {
+            tickTimer?.invalidate()
+            tickTimer = nil
+            catchUpTask?.cancel()
+            catchUpTask = nil
+            return
+        }
         catchUp(reason: "active")
         tickTimer?.invalidate()
         tickTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
@@ -231,13 +445,21 @@ final class NanoMuseScheduler: ObservableObject {
     func appWentBackground() {
         tickTimer?.invalidate()
         tickTimer = nil
+        guard MordeLocalExecutionPolicy.isEnabled else {
+            catchUpTask?.cancel()
+            catchUpTask = nil
+            return
+        }
         scheduleBackgroundRefresh()
         refreshNotifications()
     }
 
     /// The next due moment across all routines.
     func nextDue(after: Date = Date()) -> (routine: NanoMuseRoutine, at: Date)? {
-        routines.compactMap { r in r.nextDue(after: after).map { (r, $0) } }.min { $0.1 < $1.1 }
+        routines.compactMap { r in
+            guard !r.isCloudArchive else { return nil }
+            return r.nextDue(after: after).map { (r, $0) }
+        }.min { $0.1 < $1.1 }
     }
 
     func scheduleBackgroundRefresh() {
@@ -250,9 +472,13 @@ final class NanoMuseScheduler: ObservableObject {
     /// iOS woke us for a moment: there is no time for a model turn, so the
     /// routines that came due get a notification each, and the next refresh is asked for.
     private func handleBackgroundRefresh(_ task: BGAppRefreshTask) {
+        guard MordeLocalExecutionPolicy.isEnabled else {
+            task.setTaskCompleted(success: true)
+            return
+        }
         task.expirationHandler = { }
         let now = Date()
-        for r in routines where r.isDue(at: now) {
+        for r in routines where !r.isCloudArchive && r.isDue(at: now) {
             postDueNotification(r, at: now)
         }
         scheduleBackgroundRefresh()
@@ -263,9 +489,9 @@ final class NanoMuseScheduler: ObservableObject {
 
     /// Run every routine that is due, one after the other.
     func catchUp(reason: String) {
-        guard catchUpTask == nil else { return }
+        guard MordeLocalExecutionPolicy.isEnabled, catchUpTask == nil else { return }
         let now = Date()
-        let due = routines.filter { $0.isDue(at: now) && !running.contains($0.id) }
+        let due = routines.filter { !$0.isCloudArchive && $0.isDue(at: now) && !running.contains($0.id) }
         guard !due.isEmpty else { return }
         let task = Task { @MainActor [self] in
             for r in due {
@@ -283,7 +509,8 @@ final class NanoMuseScheduler: ObservableObject {
     /// Run one routine now (from the UI or the catch-up). Returns whether the turn finished without an error.
     @discardableResult
     func run(_ id: String, trigger: String = "manual") async -> Bool {
-        guard var r = routine(id: id), !running.contains(id) else { return false }
+        guard MordeLocalExecutionPolicy.isEnabled, var r = routine(id: id), !r.isCloudArchive,
+              !running.contains(id) else { return false }
         running.insert(id)
         defer { running.remove(id) }
         // Mark the slot as taken first, so a crash mid-run does not re-run it on the next open.
@@ -323,7 +550,7 @@ final class NanoMuseScheduler: ObservableObject {
             let now = Date()
             // iOS keeps 64 pending requests per app; the soonest routines get the slots.
             let soon = self.routines
-                .compactMap { r in r.enabled ? r.nextDue(after: now).map { (r, $0) } : nil }
+                .compactMap { r in !r.isCloudArchive && r.enabled ? r.nextDue(after: now).map { (r, $0) } : nil }
                 .filter { $0.1 > now.addingTimeInterval(30) }
                 .sorted { $0.1 < $1.1 }
                 .prefix(20)
@@ -349,7 +576,7 @@ final class NanoMuseScheduler: ObservableObject {
         } else {
             content.title = r.label.isEmpty ? AppLocalized("Routine") : r.label
         }
-        content.body = AppLocalized("Open nanoMuse to run it. The phone cannot run the agent while the app is asleep.")
+        content.body = AppLocalized("Open morde to run it. The phone cannot run the agent while the app is asleep.")
         content.sound = .default
         content.categoryIdentifier = Self.notificationCategory
         var info: [String: Any] = ["nanomuse.routine": r.id]
@@ -365,6 +592,22 @@ final class NanoMuseScheduler: ObservableObject {
             let settings = await center.notificationSettings()
             guard settings.authorizationStatus == .notDetermined else { return }
             _ = try? await center.requestAuthorization(options: [.alert, .sound, .badge])
+        }
+    }
+}
+
+enum NanoMuseScheduleImportError: LocalizedError {
+    case sourceMissing
+    case unavailable(String)
+    case invalidServerReceipt
+    case localSourceSaveFailed
+
+    var errorDescription: String? {
+        switch self {
+        case .sourceMissing: return "The local plan no longer exists."
+        case .unavailable(let reason): return reason
+        case .invalidServerReceipt: return "The server did not confirm the created schedule."
+        case .localSourceSaveFailed: return "The cloud schedule was created, but the local import receipt could not be saved. Refresh schedules before retrying."
         }
     }
 }
@@ -394,8 +637,7 @@ final class NanoMuseSignal<Value> {
 
 // MARK: - Headless runs
 
-/// Runs one prompt in a session with the app's own chat pipeline and waits
-/// for the turn to end — what the Shortcuts intents do (`QuickTaskIntent`).
+// nanoMuse: The routine store remains available, but Morde does not run local headless sessions.
 enum NanoMuseHeadless {
     struct Outcome {
         var ok: Bool
@@ -404,61 +646,8 @@ enum NanoMuseHeadless {
         var note: String?
     }
 
-    /// Creates the session when `sessionId` is nil or gone; the turn's last assistant text comes back.
-    /// With `routine` (the routine's label) the turn is marked as the routine's, not the person's:
-    /// its row is a quiet line in the chat and the model is told so for this one turn
-    /// (`NanoMuseRoutineWakes`).
     @MainActor
     static func run(prompt: String, sessionId: String?, title: String?, source: String, routine: String? = nil, timeout: TimeInterval = 10 * 60) async -> Outcome {
-        guard ProviderConfigStore.shared.defaultPrimaryGroupId != nil || !ProviderConfigStore.shared.modelEntries.isEmpty else {
-            return Outcome(ok: false, sessionId: sessionId, text: "", note: AppLocalized("Add a model first; routines are run by your agent."))
-        }
-        let vm: AIChatViewModel
-        var sid = sessionId
-        if let sid, await ChatStore.shared.sessionExists(id: sid) {
-            let cached = ViewModelCache.shared.getOrCreate(for: sid)
-            vm = cached.vm
-            if cached.isNew { await vm.loadSession() }
-        } else {
-            vm = ViewModelCache.shared.createDraft()
-            vm.sessionSource = source
-            vm.suppressGeneralCompletionNotification = true
-            let created = await vm.ensureSessionReturningId()
-            if let title, !title.isEmpty {
-                await ChatStore.shared.updateSessionTitle(created, title: String(title.prefix(60)))
-            }
-            ViewModelCache.shared.cacheDraft(vm, sessionId: created)
-            sid = created
-        }
-        if vm.isProcessing {
-            for await processing in vm.$isProcessing.values where !processing { break }
-        }
-        let wake = routine.map { NanoMuseRoutineWakes.Wake(label: String($0.trimmingCharacters(in: .whitespaces).prefix(60)), at: Date()) }
-        if let wake, let session = sid {
-            NanoMuseSessionAddenda.add(session: session, tag: NanoMuseRoutineWakes.addendumTag, text: NanoMuseRoutineWakes.framing(label: wake.label, at: wake.at), turns: 1)
-        }
-        vm.inputText = prompt
-        vm.send()
-        // `send` appends the user row before it suspends: mark it now, so it is drawn as the
-        // routine's line from its first frame and remembered under its row id once persisted.
-        // A send that did not start (the guard in `send`) leaves no mark and no framing.
-        if let wake, let session = sid {
-            let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-            if vm.isProcessing, let row = vm.messages.last(where: { $0.role == .user }), row.nmRoutine == nil, row.content == trimmed {
-                row.nmRoutine = wake
-            } else if !vm.isProcessing {
-                NanoMuseSessionAddenda.remove(session: session, tag: NanoMuseRoutineWakes.addendumTag)
-            }
-        }
-        // Wait for the loop to end, with a ceiling.
-        let deadline = Date().addingTimeInterval(timeout)
-        var finished = !vm.isProcessing
-        while !finished && Date() < deadline {
-            try? await Task.sleep(nanoseconds: 500_000_000)
-            finished = !vm.isProcessing
-        }
-        let text = SendPromptIntent.extractResponseText(from: vm)
-        let failed = vm.errorMessage != nil || vm.messages.last?.error != nil || !finished
-        return Outcome(ok: !failed, sessionId: sid ?? vm.sessionId, text: text, note: failed ? (vm.errorMessage ?? (finished ? nil : AppLocalized("Took too long"))) : nil)
+        Outcome(ok: false, sessionId: sessionId, text: "", note: MordeLocalExecutionPolicy.disabledMessage)
     }
 }

@@ -123,16 +123,16 @@ function fakeHelper(mode = "ok") {
         }
         if (req.method === "POST" && req.url === "/request") return send(200, status);
         if (req.method === "POST" && req.url === "/screenshot") {
-          if (mode === "denied") return send(403, { error: "screen_denied", message: "Screen Recording is off for nanoMuse Computer Use" });
+          if (mode === "denied") return send(403, { error: "screen_denied", message: "Screen Recording is off for Morde Computer Use" });
           if (mode === "fails") return send(500, { error: "screenshot_failed", message: SCK_FAILURE });
           return send(200, { base64: Buffer.from("png").toString("base64"), mime: json.format === "png" ? "image/png" : "image/jpeg", width: json.width ?? 1440, height: json.height ?? 900, screen: { width: 1440, height: 900 }, scale: 2, capture: "ScreenCaptureKit" });
         }
         if (req.method === "GET" && req.url === "/windows") {
-          if (mode === "denied") return send(403, { error: "screen_denied", message: "Screen Recording is off for nanoMuse Computer Use" });
+          if (mode === "denied") return send(403, { error: "screen_denied", message: "Screen Recording is off for Morde Computer Use" });
           return send(200, { windows, capture: "ScreenCaptureKit" });
         }
         if (req.method === "POST" && req.url === "/window") {
-          if (mode === "denied") return send(403, { error: "screen_denied", message: "Screen Recording is off for nanoMuse Computer Use" });
+          if (mode === "denied") return send(403, { error: "screen_denied", message: "Screen Recording is off for Morde Computer Use" });
           const found = windows.find((w) => w.id === json.id);
           if (!found) return send(404, { error: "no_window", message: `no window with id ${json.id} is on screen` });
           const [x, y, w, h] = found.bounds;
@@ -204,7 +204,7 @@ test("start: token file 0600 before the launch, open's arguments, port discovery
   assert.equal(status.pid, 4242);
   assert.equal(status.version, "0.1.38");
   assert.deepEqual(status.display, { width: 1440, height: 900, scale: 2 });
-  assert.ok(lines.some((l) => l.includes("nanoMuse Computer Use 0.1.38") && l.includes("screen granted")));
+  assert.ok(lines.some((l) => l.includes("Morde Computer Use 0.1.38") && l.includes("screen granted")));
   // a second ready() is a no-op
   assert.equal(await helper.ready(), true);
   assert.equal(fake.servers.length, 1);
@@ -266,7 +266,7 @@ test("denied: /screenshot's 403 comes through with its code; status says denied"
   assert.equal(await helper.ready(), true);
   assert.equal(helper.cachedStatus().screen, "denied");
   assert.equal(helper.cachedStatus().accessibility, false);
-  await assert.rejects(helper.screenshot(), (exc) => exc instanceof MacHelperError && exc.status === 403 && exc.code === "screen_denied" && /nanoMuse Computer Use/.test(exc.message));
+  await assert.rejects(helper.screenshot(), (exc) => exc instanceof MacHelperError && exc.status === 403 && exc.code === "screen_denied" && /Morde Computer Use/.test(exc.message));
   await helper.stop();
 });
 
@@ -361,7 +361,7 @@ test("operator: a helper whose capture fails is reported with its own words — 
     await assert.rejects(operator.screenshot({ width: 640, height: 400 }), (exc) => {
       assert.ok(exc instanceof OperatorError);
       assert.equal(exc.status, 500);
-      assert.match(exc.message, /^no screenshot: nanoMuse Computer Use could not take the picture: /);
+      assert.match(exc.message, /^no screenshot: Morde Computer Use could not take the picture: /);
       assert.ok(exc.message.includes("picture: ScreenCaptureKit userDeclined (-3801)"), exc.message);
       assert.equal(exc.message.split("no screenshot:").length, 2, "the prefix is said once");
       return true;
@@ -382,7 +382,7 @@ test("operator: without the helper's Screen Recording grant the refusal names th
     await assert.rejects(operator.screenshot(), (exc) => exc instanceof OperatorError && exc.status === 403 && exc.message === `no screenshot: ${HELPER_SCREEN_PERMISSION_TEXT}`);
     assert.equal(electronFake.captures, 0);
     assert.equal(operator.info().available, false);
-    assert.match(operator.info().reason, /nanoMuse Computer Use/);
+    assert.match(operator.info().reason, /Morde Computer Use/);
   });
 });
 
@@ -392,12 +392,12 @@ test("operator: a helper bundle that did not start is the reason — for the pic
   const { operator, helper } = macOperator(dir, fake, { startTimeoutMs: 200, retryAfterMs: 60_000 });
   await onDarwin(async () => {
     electronFake.captures = 0;
-    await assert.rejects(operator.screenshot(), (exc) => exc instanceof OperatorError && exc.status === 503 && /^no screenshot: nanoMuse Computer Use did not start \(no port after/.test(exc.message));
+    await assert.rejects(operator.screenshot(), (exc) => exc instanceof OperatorError && exc.status === 503 && /^no screenshot: Morde Computer Use did not start \(no port after/.test(exc.message));
     await assert.rejects(operator.execute({ action: "click", x: 10, y: 10 }), (exc) => exc instanceof OperatorError && exc.status === 503 && /did not start/.test(exc.message));
     assert.equal(electronFake.captures, 0);
     const info = operator.info();
     assert.equal(info.available, false);
-    assert.match(info.reason, /^nanoMuse Computer Use did not start \(no port after/);
+    assert.match(info.reason, /^Morde Computer Use did not start \(no port after/);
     assert.equal(info.helper.running, false);
   });
   assert.equal(helper.running(), false);
@@ -417,7 +417,7 @@ test("operator: with no helper bundle at all the Electron path takes the picture
     assert.equal(operator.info().helper.reason, "no helper bundle");
     assert.equal(operator.info().helper.present, false);
     // window mode needs the helper
-    await assert.rejects(operator.windows(), (exc) => exc instanceof OperatorError && exc.status === 503 && /window mode needs nanoMuse Computer Use/.test(exc.message));
+    await assert.rejects(operator.windows(), (exc) => exc instanceof OperatorError && exc.status === 503 && /window mode needs Morde Computer Use/.test(exc.message));
   });
 });
 

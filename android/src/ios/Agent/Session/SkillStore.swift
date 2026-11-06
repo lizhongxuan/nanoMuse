@@ -76,7 +76,7 @@ final class SkillStore: ObservableObject {
     private var db: OpaquePointer?
 
     private var skillsDir: URL {
-        AIChatViewModel.minisSkillsPersistentDir
+        MinisStoragePaths.minisSkillsPersistentDir
     }
 
     func skillDirectoryURL(for skillId: String) -> URL {

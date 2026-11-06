@@ -1,5 +1,6 @@
 import AVFoundation
 import Combine
+import os
 import Speech
 
 @MainActor
@@ -9,6 +10,15 @@ final class SpeechRecognitionManager: ObservableObject {
     enum State: Equatable {
         case idle
         case recording
+    }
+
+    // nanoMuse: Morde Task dictation must explain when device-only recognition cannot proceed.
+    enum RecordingError: LocalizedError {
+        case onDeviceUnavailable
+
+        var errorDescription: String? {
+            String(localized: "On-device speech recognition is unavailable for the selected language.")
+        }
     }
 
     enum SpeechProvider: String, CaseIterable, Identifiable {
@@ -47,6 +57,11 @@ final class SpeechRecognitionManager: ObservableObject {
         speechRecognizer?.isAvailable ?? false
     }
 
+    // nanoMuse: Morde Task checks local recognition support before asking for microphone access.
+    var supportsOnDeviceRecognition: Bool {
+        speechRecognizer?.supportsOnDeviceRecognition ?? false
+    }
+
     // MARK: - Composer input-mode preference
     // [T-voice-input-mode-preference-ios] Remembers whether the user last
     // composed by voice or by typing. "voice" makes new chats / the cold-launch
@@ -63,7 +78,7 @@ final class SpeechRecognitionManager: ObservableObject {
     static func saveInputModePreference(_ mode: String) {
         guard UserDefaults.standard.string(forKey: inputModePreferenceKey) != mode else { return }
         UserDefaults.standard.set(mode, forKey: inputModePreferenceKey)
-        AppLogger(category: "Speech").info("[InputModePref] preference -> \(mode)")
+        Logger(subsystem: "io.morde.app", category: "Speech").info("[InputModePref] preference -> \(mode)")
     }
 
     /// Non-prompting permission probe for the preference-driven auto-entry:
@@ -104,9 +119,10 @@ final class SpeechRecognitionManager: ObservableObject {
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private let audioEngine = AVAudioEngine()
-    private let logger = AppLogger(category: "Speech")
+    private let logger = Logger(subsystem: "io.morde.app", category: "Speech")
 
-    private init() {
+    // nanoMuse: Morde Task owns a separate recorder from the legacy chat singleton.
+    init() {
         let allSupported = SFSpeechRecognizer.supportedLocales()
 
         // Restore previously selected locale, or fall back to system language
@@ -209,8 +225,19 @@ final class SpeechRecognitionManager: ObservableObject {
 
     // MARK: - Recording
 
-    func startRecording() throws {
+    // nanoMuse: Task dictation fails closed when on-device recognition is unavailable.
+    func startRecording(requiringOnDeviceRecognition: Bool = false) throws {
         guard state == .idle else { return }
+
+        guard let onDevice = MordeTaskSpeechInputPolicy.onDeviceRequirement(
+            forced: requiringOnDeviceRecognition,
+            supported: speechRecognizer?.supportsOnDeviceRecognition == true
+        ) else {
+            throw RecordingError.onDeviceUnavailable
+        }
+        if requiringOnDeviceRecognition, !isAvailable {
+            throw RecordingError.onDeviceUnavailable
+        }
 
         recognitionTask?.cancel()
         recognitionTask = nil
@@ -223,9 +250,7 @@ final class SpeechRecognitionManager: ObservableObject {
 
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
-        if speechRecognizer?.supportsOnDeviceRecognition == true {
-            request.requiresOnDeviceRecognition = true
-        }
+        request.requiresOnDeviceRecognition = onDevice
         recognitionRequest = request
 
         let inputNode = audioEngine.inputNode
@@ -245,11 +270,10 @@ final class SpeechRecognitionManager: ObservableObject {
         // rejected. That NSException blows straight through this `throws`
         // function and the caller's `try?`, landing in `abort()` (SIGABRT) via
         // AVAudioEngineImpl::InstallTapOnNode. `audioEngine.start()` can do the
-        // same. Wrap both in noff_try_objc so the NSException is caught, we tear
-        // the tap/engine back down, and we surface a normal Swift error the
-        // caller's `try?` can swallow.
+        // Catch both NSExceptions so rollback completes and failure reaches the caller.
         var startError: Error?
-        let installOk = noff_try_objc {
+        var exceptionReason: NSString?
+        let installOk = MinisCatchObjCException({
             inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
                 request.append(buffer)
                 let rms = self?.computeRMS(buffer: buffer) ?? 0
@@ -264,7 +288,7 @@ final class SpeechRecognitionManager: ObservableObject {
             } catch {
                 startError = error
             }
-        }
+        }, &exceptionReason)
 
         guard installOk, startError == nil else {
             // Roll back anything that partially succeeded so the next attempt
@@ -275,7 +299,7 @@ final class SpeechRecognitionManager: ObservableObject {
             state = .idle
             let reason = installOk
                 ? (startError?.localizedDescription ?? "audio engine failed to start")
-                : "installTap raised an exception (audio session unavailable?)"
+                : (exceptionReason as String? ?? "installTap raised an exception (audio session unavailable?)")
             logger.error("startRecording failed: \(reason)")
             throw NSError(domain: "SpeechRecognition", code: -2,
                           userInfo: [NSLocalizedDescriptionKey: reason])

@@ -804,22 +804,20 @@ final class SyncCore {
 
     // MARK: - SessionFile change tracker drain
 
-    /// Drain pending file changes from `SessionFileChangeTracker` (events
-    /// emitted by the iSH fakefs realfs hooks for any shell-tool write,
-    /// truncate, unlink, rename inside `/var/minis/<workspace|attachments|browser|offloads>/...`)
-    /// and turn them into SessionFile v2 dirty rows.
+    /// Drain pending file changes that already have an explicit session
+    /// owner from `SessionFileChangeTracker` and turn them into SessionFile
+    /// v2 dirty rows. Legacy iSH events without an owner are not assigned
+    /// from mounted or active-session state.
     ///
     /// Called from `sendNow` immediately before reading dirty rows so the
     /// freshly-marked SessionFile rows are picked up in this same push.
     /// Tracker is cleared atomically; events recorded between drain and
     /// next sendNow stay in the next snapshot — never lost.
     private func drainSessionFileChangesIntoDirty() async {
-        // Filter on host mtime: a recorded open(W) only converts to a
+        // Filter on host mtime: an attributed upsert only converts to a
         // dirty row if the file actually changed since (or just before)
-        // we observed the open. Suppresses false positives where a
-        // process opens write-mode but never writes. Entries whose
-        // mtime hasn't caught up yet stay in the tracker for the next
-        // push cycle — the actual write may still be in flight.
+        // it was recorded. Entries whose mtime has not caught up yet stay
+        // in the tracker for the next push cycle.
         let baseURL = await ChatStore.shared.minisBaseURL
         let snapshot = await SessionFileChangeTracker.shared.drainAllWithMtimeFilter(
             minisBaseURL: baseURL)

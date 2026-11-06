@@ -27,15 +27,18 @@ set -e
 # ============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ISH_DIR="$SCRIPT_DIR/ish"
-OUTPUT_LIBS="$SCRIPT_DIR/libs"
-OUTPUT_INCLUDE="$SCRIPT_DIR/include"
-OUTPUT_RESOURCES="$SCRIPT_DIR/resources"
+ISH_DIR="${ISH_SOURCE_DIR:-$SCRIPT_DIR/ish}"
+OUTPUT_LIBS="${ISH_OUTPUT_LIBS:-$SCRIPT_DIR/libs}"
+OUTPUT_INCLUDE="${ISH_OUTPUT_INCLUDE:-$SCRIPT_DIR/include}"
+OUTPUT_RESOURCES="${ISH_OUTPUT_RESOURCES:-$SCRIPT_DIR/resources}"
 
 # Build configuration
 BUILD_TYPE="${1:-release}"
 ARCHS="arm64"
-IOS_DEPLOYMENT_TARGET="14.0"
+IOS_DEPLOYMENT_TARGET="${IOS_DEPLOYMENT_TARGET:-14.0}"
+IOS_SDK_NAME="${IOS_SDK_NAME:-iphoneos}"
+IOS_MIN_FLAG="${IOS_MIN_FLAG:--miphoneos-version-min=$IOS_DEPLOYMENT_TARGET}"
+BUILD_DIR="${ISH_BUILD_DIR:-$ISH_DIR/build-ios}"
 
 # Colors for output
 RED='\033[0;31m'
@@ -112,6 +115,14 @@ check_prerequisites() {
 init_submodules() {
     log_info "Initializing iSH submodules..."
 
+    if [ "${ISH_SKIP_SUBMODULE_UPDATE:-0}" = "1" ]; then
+        if [ ! -d "$ISH_DIR/deps/libapps" ]; then
+            log_error "Local libapps submodule is missing; refusing to fetch dependencies"
+        fi
+        log_info "Using the existing local libapps submodule"
+        return
+    fi
+
     cd "$ISH_DIR"
 
     if [ ! -d "deps/libapps/.git" ] && [ ! -f "deps/libapps/.git" ]; then
@@ -130,7 +141,7 @@ init_submodules() {
 clean_build() {
     log_info "Cleaning build artifacts..."
 
-    rm -rf "$ISH_DIR/build-ios"
+    rm -rf "$BUILD_DIR"
     rm -rf "$OUTPUT_LIBS"
     rm -rf "$OUTPUT_INCLUDE"
     rm -rf "$OUTPUT_RESOURCES"
@@ -144,18 +155,17 @@ clean_build() {
 setup_cross_compile() {
     log_info "Setting up iOS cross-compilation..."
 
-    BUILD_DIR="$ISH_DIR/build-ios"
     mkdir -p "$BUILD_DIR"
 
     # Get iOS SDK path
-    IOS_SDK=$(xcrun --sdk iphoneos --show-sdk-path)
+    IOS_SDK=$(xcrun --sdk "$IOS_SDK_NAME" --show-sdk-path)
 
     # Create cross-compilation file for meson
     CROSS_FILE="$BUILD_DIR/ios-cross.txt"
 
     cat > "$CROSS_FILE" << EOF
 [binaries]
-c = ['clang', '-arch', 'arm64', '-isysroot', '$IOS_SDK', '-miphoneos-version-min=$IOS_DEPLOYMENT_TARGET']
+c = ['clang', '-arch', 'arm64', '-isysroot', '$IOS_SDK', '$IOS_MIN_FLAG']
 ar = 'ar'
 strip = 'strip'
 pkg-config = 'false'
@@ -185,7 +195,6 @@ EOF
 build_ish() {
     log_info "Building iSH libraries for iOS ($BUILD_TYPE)..."
 
-    BUILD_DIR="$ISH_DIR/build-ios"
     CROSS_FILE="$BUILD_DIR/ios-cross.txt"
 
     cd "$ISH_DIR"
@@ -244,8 +253,6 @@ build_ish() {
 # ============================================================================
 copy_outputs() {
     log_info "Copying output files..."
-
-    BUILD_DIR="$ISH_DIR/build-ios"
 
     # Create output directories
     mkdir -p "$OUTPUT_LIBS"

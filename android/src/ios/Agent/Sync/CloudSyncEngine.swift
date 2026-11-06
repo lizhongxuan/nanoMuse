@@ -322,7 +322,9 @@ final class CloudSyncEngine: ObservableObject {
             } else {
                 syncEngine = nil
                 syncStatus = .disabled
-                SyncDirtyScanner.shared.stop()
+                if MordeCloudKitSyncPolicy.isEnabled {
+                    SyncDirtyScanner.shared.stop()
+                }
                 stopForegroundSyncTimer()
                 pendingSendTask?.cancel()
                 pendingSendTask = nil
@@ -440,19 +442,23 @@ final class CloudSyncEngine: ObservableObject {
             self.stateSerialization = try? JSONDecoder().decode(CKSyncEngine.State.Serialization.self, from: data)
         }
 
-        // Migration: remove legacy disk cache (replaced by in-memory-only cache).
-        // The old cache could grow to tens of thousands of NSKeyedArchiver'd CKRecords,
-        // causing multi-second main-thread blocks on load and save.
-        let legacyCacheURL = library.appendingPathComponent("MinisChat/sync_record_cache.bin")
-        if FileManager.default.fileExists(atPath: legacyCacheURL.path) {
-            try? FileManager.default.removeItem(at: legacyCacheURL)
-            logger.info("[CloudSync] Removed legacy sync_record_cache.bin")
+        if MordeCloudKitSyncPolicy.shouldRemoveLegacyCache(userSyncEnabled: isEnabled) {
+            // Migrate only after the user and build policy both allow legacy CloudKit sync.
+            let legacyCacheURL = library.appendingPathComponent("MinisChat/sync_record_cache.bin")
+            if FileManager.default.fileExists(atPath: legacyCacheURL.path) {
+                try? FileManager.default.removeItem(at: legacyCacheURL)
+                logger.info("[CloudSync] Removed legacy sync_record_cache.bin")
+            }
         }
     }
 
     // MARK: - Start / Stop
 
     func start() async {
+        guard MordeCloudKitSyncPolicy.isEnabled else {
+            stopCloudKitSync()
+            return
+        }
         guard isEnabled else {
             syncStatus = .disabled
             return
@@ -527,6 +533,10 @@ final class CloudSyncEngine: ObservableObject {
         foregroundSyncTimer = Timer.scheduledTimer(withTimeInterval: 180, repeats: true) { [weak self] _ in
             guard let self else { return }
             Task { @MainActor in
+                guard MordeCloudKitSyncPolicy.isEnabled else {
+                    self.stopCloudKitSync()
+                    return
+                }
                 guard self.syncEngine != nil else { return }
                 let t0 = CFAbsoluteTimeGetCurrent()
                 logger.info("[CloudSync] Periodic foreground sync")
@@ -551,8 +561,19 @@ final class CloudSyncEngine: ObservableObject {
         foregroundSyncTimer = nil
     }
 
+    /// Stop only CloudKit activity. Dirty rows, change tokens, caches,
+    /// local files, and backup settings are left in place.
+    func stopCloudKitSync() {
+        syncEngine = nil
+        syncStatus = .disabled
+        stopForegroundSyncTimer()
+        pendingSendTask?.cancel()
+        pendingSendTask = nil
+    }
+
     /// Build CKRecords from dirty records. Must be called OUTSIDE delegate callbacks.
     func refreshPendingChanges() async {
+        guard MordeCloudKitSyncPolicy.isEnabled else { return }
         let refreshStart = CFAbsoluteTimeGetCurrent()
         let enabled = enabledRecordTypes
         let dirtyRecords = await ChatStore.shared.loadDirtyRecords()
@@ -638,6 +659,7 @@ final class CloudSyncEngine: ObservableObject {
     }
 
     func triggerFetch() async {
+        guard MordeCloudKitSyncPolicy.isEnabled else { return }
         guard let engine = syncEngine else { return }
         syncStatus = .syncing
         // Call engine.fetchChanges() in a detached task to avoid re-entering
@@ -655,6 +677,7 @@ final class CloudSyncEngine: ObservableObject {
     }
 
     func triggerSend() async {
+        guard MordeCloudKitSyncPolicy.isEnabled else { return }
         guard let engine = syncEngine else { return }
         guard !isSending else {
             logger.debug("[CloudSync] triggerSend skipped — already sending")
@@ -685,7 +708,7 @@ final class CloudSyncEngine: ObservableObject {
     /// Schedule a debounced send after a short delay (default 3s).
     /// Cancels any previously scheduled send, coalescing rapid markDirty calls.
     func scheduleSend(delay: TimeInterval = 3.0) {
-        guard isEnabled, syncEngine != nil else { return }
+        guard MordeCloudKitSyncPolicy.isEnabled, isEnabled, syncEngine != nil else { return }
         pendingSendTask?.cancel()
         pendingSendTask = Task { [weak self] in
             guard let self else { return }
@@ -702,6 +725,10 @@ final class CloudSyncEngine: ObservableObject {
     /// then re-fetch everything from iCloud and re-upload all local content.
     /// Local data (sessions, messages, skills, files) is never deleted.
     func forceFullSync() async {
+        guard MordeCloudKitSyncPolicy.isEnabled else {
+            logger.info("[CloudSync] forceFullSync skipped — CloudKit sync is disabled")
+            return
+        }
         let prior = await ChatStore.shared.countDirtyRecords()
         logger.info("[CloudSync] forceFullSync START priorDirty total=\(prior.total) byType=\(prior.byType)")
         // Start tallying uploads by type — the .sentRecordZoneChanges delegate
@@ -832,6 +859,9 @@ final class CloudSyncEngine: ObservableObject {
     ///
     /// Guarded by two UI confirmations — see CloudSyncSettingsView.
     func deleteAllCloudData() async throws {
+        guard MordeCloudKitSyncPolicy.isEnabled else {
+            throw MordeCloudKitSyncDisabledError()
+        }
         logger.warning("[CloudSync] Delete iCloud Data: STARTING destructive wipe")
         syncStatus = .syncing
 
@@ -967,6 +997,7 @@ final class CloudSyncEngine: ObservableObject {
     /// Queue zone creation and device record via CKSyncEngine's pending changes.
     /// Never call `modifyRecordZones` or `modifyRecords` directly — CKSyncEngine owns the database.
     private func queueZonesAndDeviceRecord() {
+        guard MordeCloudKitSyncPolicy.isEnabled else { return }
         guard let engine = syncEngine else { return }
 
         let deviceZoneID = CKRecordZone.ID(zoneName: DeviceIdentity.zoneName)
@@ -982,6 +1013,7 @@ final class CloudSyncEngine: ObservableObject {
 
     /// Queue the SyncDevice record as a pending change for the next send cycle.
     private func queueDeviceRecord() {
+        guard MordeCloudKitSyncPolicy.isEnabled else { return }
         guard let engine = syncEngine else { return }
 
         let devicesZoneID = CKRecordZone.ID(zoneName: devicesZoneName)
@@ -1278,6 +1310,7 @@ final class CloudSyncEngine: ObservableObject {
     // MARK: - Process Remote Records
 
     func processRemoteRecord(_ record: CKRecord) async {
+        guard MordeCloudKitSyncPolicy.isEnabled else { return }
         let deviceId = record.recordID.zoneID.zoneName.replacingOccurrences(of: "device-", with: "")
 
         // Skip records from our own device zone (we already have the data locally),
@@ -1521,6 +1554,7 @@ final class CloudSyncEngine: ObservableObject {
     ///   stays intact on other devices). When only individual messages are deleted (retry,
     ///   manual delete), the deletion propagates to keep message lists consistent.
     func processRemoteDeletion(_ recordID: CKRecord.ID, recordType: CKRecord.RecordType, deletedSessionIds: Set<String> = []) async {
+        guard MordeCloudKitSyncPolicy.isEnabled else { return }
         let deviceId = recordID.zoneID.zoneName.replacingOccurrences(of: "device-", with: "")
         let name = recordID.recordName
         // recordName format is "Type:id"
@@ -1569,6 +1603,7 @@ final class CloudSyncEngine: ObservableObject {
     /// Subscribe to remote device zones so CKSyncEngine fetches their changes.
     /// Called outside delegate callbacks (e.g. from start or on foreground).
     func discoverDeviceZones() async {
+        guard MordeCloudKitSyncPolicy.isEnabled else { return }
         do {
             // Run the network call off MainActor to avoid resume-hop CPU spike.
             let ownZoneName = DeviceIdentity.zoneName
@@ -1581,6 +1616,7 @@ final class CloudSyncEngine: ObservableObject {
                     return zone.zoneID
                 }
             }.value
+            guard MordeCloudKitSyncPolicy.isEnabled else { return }
             for zid in newZoneIDs {
                 logger.info("[CloudSync] Found remote zone: \(zid.zoneName)")
             }
@@ -2716,6 +2752,16 @@ final class CloudSyncEngine: ObservableObject {
 @available(iOS 17.0, *)
 extension CloudSyncEngine: CKSyncEngineDelegate {
     nonisolated func handleEvent(_ event: CKSyncEngine.Event, syncEngine: CKSyncEngine) {
+        guard MordeCloudKitSyncPolicy.isEnabled else {
+            // Preserve CKSyncEngine's latest local cursor, but do not merge
+            // fetched records or acknowledge sends while the gate is closed.
+            if case .stateUpdate(let stateUpdate) = event {
+                Task { @MainActor [weak self] in
+                    self?.saveState(stateUpdate.stateSerialization)
+                }
+            }
+            return
+        }
         // CKSyncEngine requires that delegate callbacks don't re-enter the engine.
         // Use Task.detached to avoid actor isolation issues, and fire-and-forget for
         // events that don't need to block the engine.
@@ -2728,6 +2774,7 @@ extension CloudSyncEngine: CKSyncEngineDelegate {
         case .accountChange(let accountChange):
             Task { @MainActor [weak self] in
                 guard let self else { return }
+                guard MordeCloudKitSyncPolicy.isEnabled else { return }
                 switch accountChange.changeType {
                 case .signIn:
                     logger.info("[CloudSync] Account signed in")
@@ -2755,6 +2802,7 @@ extension CloudSyncEngine: CKSyncEngineDelegate {
         case .fetchedRecordZoneChanges(let zoneChanges):
             Task.detached { [weak self] in
                 guard let self else { return }
+                guard MordeCloudKitSyncPolicy.isEnabled else { return }
                 let ownDeviceId = await MainActor.run { DeviceIdentity.deviceId }
                 // Only count changes from OTHER devices (not our own zone echoed back).
                 let hasRemoteModifications = zoneChanges.modifications.contains { mod in
@@ -2826,6 +2874,7 @@ extension CloudSyncEngine: CKSyncEngineDelegate {
             // Only hop to MainActor for state mutations (cacheServerRecord, etc.).
             Task { [weak self] in
                 guard let self else { return }
+                guard MordeCloudKitSyncPolicy.isEnabled else { return }
                 let batchStart = CFAbsoluteTimeGetCurrent()
                 let savedCount = sentChanges.savedRecords.count
                 let failedCount = sentChanges.failedRecordSaves.count
@@ -2961,6 +3010,7 @@ extension CloudSyncEngine: CKSyncEngineDelegate {
                 }
 
                 // Clear dirty records in DB (ChatStore is an actor, safe from any context)
+                guard MordeCloudKitSyncPolicy.isEnabled else { return }
                 for name in recordNamesToClean {
                     await ChatStore.shared.clearDirtyRecord(recordName: name)
                 }
@@ -3126,6 +3176,7 @@ extension CloudSyncEngine: CKSyncEngineDelegate {
         _ context: CKSyncEngine.SendChangesContext,
         syncEngine: CKSyncEngine
     ) async -> CKSyncEngine.RecordZoneChangeBatch? {
+        guard MordeCloudKitSyncPolicy.isEnabled else { return nil }
         // No await — reads from thread-safe PendingRecordChanges, no re-entry possible.
         let (allRecords, allDeleteIDs) = pendingChanges.takeAll()
 

@@ -3,9 +3,8 @@
 //  nanoMuse
 //
 //  The Muse shell on iPhone and iPad: one main chat pinned to the Chat tab,
-//  a bottom bar for Chat / Feed / Ideas / Goals / Library, and a side
-//  drawer with the other chats. The upstream split layout (ContentView)
-//  stays reachable from the drawer and from the Settings switch. The first
+//  a bottom bar for Chat / Tasks / Approvals / Resources, and a side
+//  drawer with read-only access to legacy chats. The first
 //  run (NanoMuseFirstRun) shows in front of it all until the account and a
 //  model are in. Android: ui/home/*.
 //
@@ -34,71 +33,93 @@ enum NanoMuseShellPrefs {
 
 // MARK: - Tabs
 
-enum NanoMuseTab: String, CaseIterable, Identifiable {
-    case chat, feed, ideas, goals, library
+enum NanoMuseTab: String, CaseIterable, Identifiable, Equatable {
+    // nanoMuse: Morde's four root destinations use the existing Muse shell and floating bar.
+    case chat, tasks, approvals, resources
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .chat: return AppLocalized("tab.chat") // its own key: 聊天 as on Android, not upstream's 闲聊
-        case .feed: return AppLocalized("Feed")
-        case .ideas: return AppLocalized("Ideas")
-        case .goals: return AppLocalized("Goals")
-        case .library: return AppLocalized("Library")
+        case .tasks: return AppLocalized("Tasks")
+        case .approvals: return AppLocalized("Approvals")
+        case .resources: return AppLocalized("Resources")
         }
     }
 
     var symbol: String {
         switch self {
         case .chat: return "bubble.left"
-        case .feed: return "doc.text"
-        case .ideas: return "lightbulb"
-        case .goals: return "checkmark.square"
-        case .library: return "square.grid.2x2"
+        case .tasks: return "checkmark.circle"
+        case .approvals: return "checkmark.shield"
+        case .resources: return "square.grid.2x2"
         }
     }
 
     var selectedSymbol: String {
         switch self {
         case .chat: return "bubble.left.fill"
-        case .feed: return "doc.text.fill"
-        case .ideas: return "lightbulb.fill"
-        case .goals: return "checkmark.square.fill"
-        case .library: return "square.grid.2x2.fill"
+        case .tasks: return "checkmark.circle.fill"
+        case .approvals: return "checkmark.shield.fill"
+        case .resources: return "square.grid.2x2.fill"
+        }
+    }
+}
+
+/// nanoMuse: Keep legacy Library routes landing in the Resources root after the four-tab merge.
+enum NanoMuseRoomDestination: Equatable {
+    case tab(NanoMuseTab)
+
+    var tab: NanoMuseTab {
+        if case .tab(let tab) = self { return tab }
+        return .chat
+    }
+
+    static func resolve(_ room: String?) -> NanoMuseRoomDestination? {
+        switch room {
+        case "chat": return .tab(.chat)
+        case "tasks": return .tab(.tasks)
+        case "approvals": return .tab(.approvals)
+        case "resources", "library": return .tab(.resources)
+        default: return nil
         }
     }
 }
 
 // MARK: - Root
 
-/// What MinisApp shows: the Muse shell on phones, the upstream split
-/// layout elsewhere. Also hosts the avatar studio sheet when the shell is
-/// not around to do it.
+/// What MinisApp shows after first-run setup.
 struct NanoMuseRoot: View {
-    @AppStorage("nanomuse.shell.enabled") private var shellEnabled = true
     @ObservedObject private var store = ProviderConfigStore.shared
+    // nanoMuse: Observe Morde authorization so a Morde-only account can leave the legacy first-run gate.
+    @ObservedObject private var mordeAuthorization = MordeShellAuthorization.shared
+    @ObservedObject private var personalConflict = NanoMuseMordePersonalConflictResolution.shared
     @Environment(\.scenePhase) private var scenePhase
     @State private var hasSessions: Bool?
     @State private var setupDone = NanoMuseFirstRun.isDone
     @State private var showSetupSettings = false
-    @State private var showClassicSettings = false
-
-    /// The Muse shell on iPhone and iPad alike; off → the upstream layout.
-    private var usesShell: Bool { shellEnabled }
 
     /// The setup in front of everything until the account or a model of one's own is in (see NanoMuseFirstRun.needed).
     /// `nil` while the answer still hangs on the session list, so a fresh install never shows the
     /// shell for a frame before the welcome page.
     private var needsSetup: Bool? {
+#if MINIS_CLOUD_ONLY
+        false
+#else
         let cloudId = NanoMuseCloud.instance?.id
         let providers = store.instances.contains { $0.isEnabled && $0.hasAnyCredential && $0.id != cloudId }
         if let hasSessions {
-            return NanoMuseFirstRun.needed(signedIn: NanoMuseCloud.isSignedIn, hasProviders: providers, hasSessions: hasSessions, done: setupDone)
+            return NanoMuseFirstRun.needed(signedIn: NanoMuseCloud.isSignedIn, hasProviders: providers,
+                                           hasSessions: hasSessions, done: setupDone,
+                                           mordeSignedIn: mordeAuthorization.signedIn)
         }
         // Without the sessions: an app with neither a sign-in nor a key of its own needs the setup
         // whatever the list says; a finished setup never does; the one case between waits.
+        // nanoMuse: A restored Morde credential is verified before deciding whether legacy setup is needed.
+        if mordeAuthorization.signedIn { return false }
         if !NanoMuseCloud.isSignedIn && !providers { return true }
         return setupDone ? false : nil
+#endif
     }
 
     var body: some View {
@@ -107,40 +128,46 @@ struct NanoMuseRoot: View {
                 Color.clear
             } else if needsSetup == true {
                 NanoMuseFirstRunView(
-                    onStart: { setupDone = true },
                     onSettings: { showSetupSettings = true }
                 )
-                // The gear opens Muse's settings page; the OpenMinis list is under "All settings".
                 .sheet(isPresented: $showSetupSettings) {
                     NavigationStack {
-                        NanoMuseSettingsHomeView(onAllSettings: {
-                            showSetupSettings = false
-                            showClassicSettings = true
-                        })
+                        NanoMuseSettingsHomeView()
                     }
                 }
-                .sheet(isPresented: $showClassicSettings) {
-                    NanoMuseClassicCover(wantsSettings: true)
-                }
-            } else if usesShell {
-                NanoMuseHomeView()
             } else {
-                ContentView()
-                    .nanoMuseStudioPresenter(enabled: true)
-                    .nanoMuseAgentPagePresenter(enabled: true, onOpenSession: { id in
-                        NotificationCenter.default.post(name: .openSessionFromIntent, object: nil, userInfo: ["sessionId": id])
-                    }, onPrefillChat: { text in
-                        NotificationCenter.default.post(name: .nanoMuseComposerPrefill, object: nil, userInfo: ["text": text])
-                    }, onOpenRoutines: nil)
+                NanoMuseHomeView()
             }
+        }
+        .confirmationDialog(conflictTitle, isPresented: Binding(
+            get: { personalConflict.isPromptPresented },
+            set: { if !$0 { personalConflict.dismissPrompt() } }
+        ), titleVisibility: .visible) {
+            if let pending = personalConflict.currentPending {
+                if !pending.conflict.deleted {
+                    Button(AppLocalized("Apply this iPhone change")) {
+                        Task { await personalConflict.applyLocalChange() }
+                    }
+                    .accessibilityIdentifier("morde.personal.conflict.apply")
+                }
+                Button(AppLocalized("Discard unsynced change"), role: .destructive) {
+                    Task { await personalConflict.discardLocalChange() }
+                }
+                .accessibilityIdentifier("morde.personal.conflict.discard")
+                Button(AppLocalized("Cancel"), role: .cancel) {}
+            }
+        } message: {
+            Text(conflictMessage)
         }
         // The card for a step another device's Muse asks about, over the shell and the upstream layout alike.
         .nanoMuseRemoteApprovalPresenter()
         .onAppear {
+            personalConflict.scopeChanged(to: mordeAuthorization.personalDataScopeKey)
+#if !MINIS_CLOUD_ONLY
             NanoMuseProfileSync.shared.start()
-            NanoMuseAccountData.shared.start() // C12: whose chat is whose; the reinstall sweep
+            NanoMuseAccountData.shared.start() // C12: assign session ownership and scope account data
             NanoMuseSync.shared.start() // C7: conversations between the account's devices
-            NanoMuseStarWatch.shared.start()
+#endif
             NanoMuseStar.shared.dayOpened()
         }
         .nmOnChange(of: scenePhase) { phase in
@@ -149,14 +176,49 @@ struct NanoMuseRoot: View {
             NanoMuseStar.shared.dayOpened()
             NanoMuseUpdateCheck.shared.checkIfStale()
         }
+        .nmOnChange(of: mordeAuthorization.personalDataScopeKey) { scope in
+            personalConflict.scopeChanged(to: scope)
+        }
         .task {
+            async let mordeRestore: Void = mordeAuthorization.restoreForFirstRun()
+#if MINIS_CLOUD_ONLY
+            hasSessions = !(await ChatStore.shared.listSessions()).isEmpty
+#else
             hasSessions = !NanoMuseSync.shared.visible(await ChatStore.shared.listSessions()).isEmpty // C12: another account's chats do not count
-            // The feed's daily routine exists from the start, as on Android (a no-op without a model).
-            if needsSetup == false { await NanoMuseFeedFlow.ensureRoutine() }
+#endif
+            await mordeRestore
         }
         .onReceive(NotificationCenter.default.publisher(for: .sessionDidCreate)) { _ in
             hasSessions = true
         }
+        // nanoMuse: show the one-time Keychain migration notice from the shared provider store at the app root.
+        .alert(AppLocalized("About older provider API keys"), isPresented: Binding(
+            get: { store.ownProviderAPIKeyCleanupNoticePending },
+            set: { if !$0 { store.acknowledgeOwnProviderAPIKeyCleanupNotice() } }
+        )) {
+            Button(AppLocalized("Got it"), role: .cancel) {
+                store.acknowledgeOwnProviderAPIKeyCleanupNotice()
+            }
+        } message: {
+            Text(AppLocalized("This update removes older API keys you entered for model providers. If a key was stored in iCloud Keychain, deleting it may also remove it from other devices signed in to the same Apple Account. OAuth sign-ins, Morde credentials and other app data are kept."))
+        }
+    }
+
+    private var conflictTitle: String {
+        AppLocalized(personalConflict.currentPending?.conflict.deleted == true ? "Cloud item deleted" : "Cloud data changed")
+    }
+
+    private var conflictMessage: String {
+        let message: String
+        if personalConflict.currentPending?.conflict.deleted == true {
+            message = AppLocalized("The cloud item was deleted. This ID cannot be restored. Discarding removes the unsynced change from this iPhone.")
+        } else if let revision = personalConflict.currentPending?.conflict.currentRevision {
+            message = String(format: AppLocalized("Applying this iPhone change will replace cloud revision %lld. Discard removes the unsynced change from this iPhone."), revision)
+        } else {
+            message = ""
+        }
+        if let error = personalConflict.actionError, !error.isEmpty { return "\(message)\n\(error)" }
+        return message
     }
 }
 
@@ -339,6 +401,8 @@ final class NanoMuseKeyboardWatcher: ObservableObject {
             .sink { [weak self] _ in self?.visible = false }
             .store(in: &cancellables)
     }
+
+    func reset() { visible = false }
 }
 
 // MARK: - Home
@@ -348,35 +412,33 @@ struct NanoMuseHomeView: View {
     @StateObject private var keyboard = NanoMuseKeyboardWatcher()
     @ObservedObject private var star = NanoMuseStar.shared
     @ObservedObject private var allowance = NanoMuseAllowance.shared
+    // nanoMuse: Clear a known approval badge when the Morde account or service scope changes.
+    @ObservedObject private var mordeAuthorization = MordeShellAuthorization.shared
+    @ObservedObject private var mordeTasks = MIFTaskPageStore.shared
     /// The composer's voice panel stands in for the keyboard: the bottom bar leaves the same way.
     @ObservedObject private var voiceMode = VoiceModePreference.shared
-    /// "Rename chat" from the main chat's ••• menu.
-    @StateObject private var rename = NanoMuseRenamePrompt()
-
     @State private var tab: NanoMuseTab = .chat
+    @State private var drawerDestination: MIFDrawerDestination = .chat
+    @State private var taskHomeDestination: MIFTaskHomeDestination = .tasks
+    @State private var resourceShowsLibrary = false
+    @State private var placeholderDestination: MIFDrawerDestination?
+    @State private var approvalCount: Int?
     @State private var drawerOpen = false
     @State private var chatPath: [String] = []
     /// The Muse header's measured height over the main chat (`nmTopOverlay`), without the status bar.
     @State private var chatHeaderHeight: CGFloat = 0
-    @State private var showClassic = false
-    @State private var classicWantsSettings = false
     @State private var showNanoMuseSettings = false
-    @State private var showCoding = false
-    @State private var showRoutines = false
-    /// The routine an idea just became, while its editor is up (the Ideas room has no sheet of its own).
-    @State private var editingRoutine: NanoMuseRoutine?
-    @State private var showSystemFiles = false
     @State private var showSharedFolders = false
-    @State private var showChatFiles = false
     @State private var showDevices = false
+    @State private var showWorkspaceNotConnected = false
     @State private var agentName = NanoMuseHomeView.currentAgentName()
     /// Reduce Motion on: the bottom bar fades out for the keyboard instead of sliding down.
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// The agent's name from SOUL.md, "nanoMuse" until it has one.
     static func currentAgentName() -> String {
-        let n = SoulStore.cachedMetadata.name
-        return n.isEmpty ? "nanoMuse" : n
+        let n = SoulStore.cachedMetadata.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return n.isEmpty || n.lowercased() == "nanomuse" ? "morde" : n
     }
 
     /// Hidden while the keyboard is up (Android's IME) and while the chat's voice panel is
@@ -384,6 +446,18 @@ struct NanoMuseHomeView: View {
     /// under the bar with no way back to typing.
     private var bottomBarHidden: Bool {
         keyboard.visible || (tab == .chat && voiceMode.isVoiceActive)
+    }
+
+    private var taskHeaderMood: NanoMuseMood { MIFTaskPresentation.headerMood(for: mordeTasks.currentTask) }
+    private var taskHeaderStatus: String? { mordeTasks.currentTask?.statusLabel }
+    private var taskHeaderStatusColor: Color {
+        switch mordeTasks.currentTask?.status {
+        case "waiting_user", "paused": .orange
+        case "completed": .green
+        case "failed": .red
+        case "queued", "running", "pausing", "cancelling": NanoMuseTones.actionText
+        default: .secondary
+        }
     }
 
     var body: some View {
@@ -423,11 +497,15 @@ struct NanoMuseHomeView: View {
                         .transition(.opacity)
                 }
             }
-            .animation(.easeInOut(duration: 0.15), value: tab)
+            // nanoMuse: honor Reduce Motion when switching root rooms.
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: tab)
             if !bottomBarHidden {
-                NanoMuseBottomBar(selected: $tab) { picked in
+                NanoMuseBottomBar(selected: $tab, approvalCount: approvalCount) { picked in
                     if picked == tab, picked != .chat { return }
                     tab = picked
+                    resourceShowsLibrary = false
+                    taskHomeDestination = .tasks
+                    drawerDestination = Self.drawerDestination(for: picked)
                 }
                 .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
             }
@@ -437,68 +515,42 @@ struct NanoMuseHomeView: View {
             NanoMuseDrawer(
                 isOpen: $drawerOpen,
                 agentName: agentName,
-                currentId: chatPath.last ?? main.chatId,
-                mainId: main.chatId,
-                onOpenMain: {
-                    chatPath.removeAll()
-                    tab = .chat
-                },
-                onOpenSession: { id in openSideChat(id) },
+                selectedDestination: drawerDestination,
+                onNavigate: openDrawerDestination,
+                onOpenSession: { id in openCloudConversation(id) },
                 onNewChat: { openSideChat(NanoMuseMainChat.draftPrefix + UUID().uuidString) },
-                onPinMain: { id in
-                    chatPath.removeAll()
-                    main.pin(id)
-                    tab = .chat
-                },
-                onDevices: { showDevices = true },
-                onCoding: { showCoding = true },
-                onSystemFiles: { showSystemFiles = true },
-                onAllChats: { showClassic = true },
                 onSettings: { showNanoMuseSettings = true }
             )
         }
-        .nanoMuseStudioPresenter(enabled: !showClassic)
+        .nanoMuseStudioPresenter(enabled: true)
         .nanoMuseAgentPagePresenter(
-            enabled: !showClassic,
+            enabled: true,
             onOpenSession: { id in openSideChat(id) },
             onPrefillChat: { text in prefillMainChat(text) },
-            onOpenRoutines: { showRoutines = true }
+            onOpenRoutines: nil
         )
-        .sheet(isPresented: $showClassic) {
-            NanoMuseClassicCover(wantsSettings: classicWantsSettings)
-                .onDisappear { classicWantsSettings = false }
-        }
-        .sheet(isPresented: $showCoding) {
-            NanoMusePageSheet(title: AppLocalized("Coding agents")) { NanoMuseCodingView() }
-        }
-        .sheet(isPresented: $showRoutines) {
-            NanoMusePageSheet(title: AppLocalized("All routines")) { NanoMuseRoutinesView() }
-        }
-        .sheet(item: $editingRoutine) { routine in
-            NanoMuseRoutineEditor(routine: routine)
-        }
-        .sheet(isPresented: $showSystemFiles) {
-            NanoMusePageSheet(title: AppLocalized("System files")) { NanoMuseSystemFilesView() }
-        }
         .sheet(isPresented: $showSharedFolders) {
             NanoMusePageSheet(title: AppLocalized("Shared Folders")) { SharedFoldersSettingsView() }
-        }
-        .sheet(isPresented: $showChatFiles) {
-            NanoMusePageSheet(title: AppLocalized("Chat files")) {
-                let base = RootfsManager.shared.dataPath
-                FileBrowserView(rootPath: base, initialPath: base.appendingPathComponent("var/minis"), rootLabel: "/")
-            }
         }
         .sheet(isPresented: $showDevices) {
             NanoMusePageSheet(title: AppLocalized("Computers")) { NanoMuseComputersView() }
         }
+        .alert(AppLocalized("Default"), isPresented: $showWorkspaceNotConnected) {
+            Button(AppLocalized("OK"), role: .cancel) {}
+        } message: {
+            Text(AppLocalized("Not set") + " · " + AppLocalized("Not Supported"))
+        }
         .sheet(isPresented: $showNanoMuseSettings) {
             NavigationStack {
-                NanoMuseSettingsHomeView(onAllSettings: {
+                NanoMuseSettingsHomeView(onOpenCloudTasks: {
+                    tab = .tasks
                     showNanoMuseSettings = false
-                    classicWantsSettings = true
-                    showClassic = true
                 })
+            }
+        }
+        .sheet(item: $placeholderDestination) { destination in
+            NanoMusePageSheet(title: destination.title) {
+                MIFPlaceholderPage(destination: destination)
             }
         }
         .onAppear {
@@ -513,11 +565,11 @@ struct NanoMuseHomeView: View {
             // The Muse header's ••• menu on the rooms, and the rooms' own shortcuts.
             switch note.object as? String {
             case "settings": showNanoMuseSettings = true
-            case "coding": showCoding = true
-            case "routines": showRoutines = true
-            case "systemFiles": showSystemFiles = true
+            case "newTask":
+                openSideChat(NanoMuseMainChat.draftPrefix + UUID().uuidString, focusComposer: true)
+            case "computers": showDevices = true
+            case "defaultWorkspace": showWorkspaceNotConnected = true
             case "sharedFolders": showSharedFolders = true
-            case "chatFiles": showChatFiles = true
             case "askDevice":
                 // C7: "Ask this device" in the Devices list — the main chat with "@<name> " in the composer.
                 guard let text = note.userInfo?["text"] as? String else { return }
@@ -537,17 +589,11 @@ struct NanoMuseHomeView: View {
             openSideChat(id)
         }
         .onReceive(NotificationCenter.default.publisher(for: .nanoMuseOpenRoom)) { note in
-            // A fence card's "See in Goals" / "Open the feed".
-            switch note.object as? String {
-            case "goals": tab = .goals
-            case "feed": tab = .feed
-            case "ideas": tab = .ideas
-            case "library": tab = .library
-            default: break
+            guard let destination = NanoMuseRoomDestination.resolve(note.object as? String) else {
+                tab = .chat
+                return
             }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .nanoMuseOpenRoutines)) { _ in
-            tab = .goals
+            tab = destination.tab
         }
         .onReceive(NotificationCenter.default.publisher(for: .openSessionFromIntent)) { note in
             // A notification tap ("Check-in: … — open to run it") or a Shortcut: show that conversation.
@@ -555,26 +601,52 @@ struct NanoMuseHomeView: View {
             openSideChat(id)
         }
         .onReceive(NotificationCenter.default.publisher(for: .newChatRequested)) { _ in
-            // *New Chat* in the ••• menu, ⌘N, the *Context Full* alert and the relay's refusal
-            // cards all post this; upstream's ContentView answers it, and in this layout that view
-            // is only on screen under the classic cover, so the tap did nothing (#392). A fresh
-            // draft side chat here, as the drawer's new chat button opens one; with the classic
-            // cover up, ContentView handles it inside the sheet.
-            guard !showClassic else { return }
+            // New Chat, ⌘N and context-limit actions all go through Morde.
             openSideChat(NanoMuseMainChat.draftPrefix + UUID().uuidString)
         }
-        .onReceive(NanoMuseVoicePrompt.shared.$pending) { request in
-            // The Action Button's voice prompt with no chat named (#296): the main chat, on
-            // screen, is the one to listen. Aimed at it by id, so a side chat pushed over it
-            // does not take the press; the id follows once the main chat has resolved.
-            guard let request, request.session == nil else { return }
-            drawerOpen = false
-            tab = .chat
-            chatPath.removeAll()
-            if let id = main.chatId { NanoMuseVoicePrompt.shared.aim(at: id) }
+        .nmOnChange(of: mordeAuthorization.personalDataScopeKey) { _ in
+            approvalCount = nil
         }
-        .onReceive(main.$chatId) { id in
-            if let id, NanoMuseVoicePrompt.shared.pending?.session == nil { NanoMuseVoicePrompt.shared.aim(at: id) }
+        .nmOnChange(of: mordeAuthorization.signedIn) { _ in
+            keyboard.reset()
+        }
+    }
+
+    private static func drawerDestination(for tab: NanoMuseTab) -> MIFDrawerDestination {
+        switch tab {
+        case .chat: .chat
+        case .tasks: .tasks
+        case .approvals: .approvals
+        case .resources: .resources
+        }
+    }
+
+    private func openDrawerDestination(_ destination: MIFDrawerDestination) {
+        drawerDestination = destination
+        switch destination {
+        case .chat:
+            chatPath.removeAll()
+            tab = .chat
+            Task { await MIFConversationDrawerStore.shared.followMain() }
+        case .tasks:
+            taskHomeDestination = .tasks
+            tab = .tasks
+        case .approvals:
+            tab = .approvals
+        case .eventChain:
+            taskHomeDestination = .eventChain
+            tab = .tasks
+        case .resources:
+            resourceShowsLibrary = false
+            tab = .resources
+        case .library:
+            resourceShowsLibrary = true
+            tab = .resources
+        case .workItems:
+            taskHomeDestination = .workItems
+            tab = .tasks
+        case .friends, .toolChats:
+            placeholderDestination = destination
         }
     }
 
@@ -582,27 +654,40 @@ struct NanoMuseHomeView: View {
     private func prefillMainChat(_ text: String) {
         chatPath.removeAll()
         tab = .chat
-        NotificationCenter.default.post(name: .nanoMuseComposerPrefill, object: main.chatId, userInfo: ["text": text])
+        drawerDestination = .chat
+        // nanoMuse: Prefill the service-backed Morde composer instead of the retired local chat pipeline.
+        NotificationCenter.default.post(name: .mordeShellPrompt, object: nil, userInfo: ["text": text])
     }
 
-    /// A message sent in the main chat on the person's behalf (a goal's opener, as Android's sendToMainChat).
-    private func sendToMainChat(_ text: String) {
-        chatPath.removeAll()
-        tab = .chat
-        if let id = main.chatId, !main.isDraft, let vm = ViewModelCache.shared.get(for: id) {
-            vm.nmSendNow(text)
-        } else {
-            NotificationCenter.default.post(name: .nanoMuseComposerPrefill, object: main.chatId, userInfo: ["text": text, "send": true])
-        }
-    }
-
-    private func openSideChat(_ id: String) {
+    private func openSideChat(_ id: String, focusComposer: Bool = false) {
         drawerOpen = false
         tab = .chat
-        if id == main.chatId {
+        drawerDestination = .chat
+        if id.hasPrefix(NanoMuseMainChat.draftPrefix) {
             chatPath.removeAll()
+            NotificationCenter.default.post(name: .mordeShellNewConversation, object: nil,
+                                            userInfo: focusComposer ? ["focusComposer": true] : nil)
             return
         }
+        if id.range(of: #"^c[a-z0-9]{7}$"#, options: .regularExpression) != nil {
+            openCloudConversation(id)
+            return
+        }
+        chatPath = [id]
+    }
+
+    private func openCloudConversation(_ id: String) {
+        drawerOpen = false
+        tab = .chat
+        drawerDestination = .chat
+        chatPath.removeAll()
+        Task { await MIFConversationDrawerStore.shared.choose(id) }
+    }
+
+    private func openLocalSession(_ id: String) {
+        drawerOpen = false
+        tab = .chat
+        drawerDestination = .chat
         chatPath = [id]
     }
 
@@ -610,15 +695,10 @@ struct NanoMuseHomeView: View {
 
     private var chatLayer: some View {
         NavigationStack(path: $chatPath) {
-            Group {
-                if let id = main.chatId {
-                    AIChatView(sessionId: main.isDraft ? nil : id, draftId: main.isDraft ? id : nil)
-                        .id(id)
-                } else {
-                    ProgressView()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-            }
+            MordeConversationRoom(
+                bottomOverlay: bottomBarHidden ? 0 : NanoMuseBottomBar.height
+            ) // nanoMuse: pass the shell inset without coupling Morde to nanoMuse environment keys.
+                .id("morde-main-chat")
             // Android: the header floats over the transcript, which scrolls under it. The header
             // is a safe-area inset with its measured height handed to the chat as `nmTopOverlay`:
             // the chat lets its message list extend under the header and gives the list that
@@ -632,11 +712,40 @@ struct NanoMuseHomeView: View {
                 VStack(spacing: 0) {
                     // MuseHeader over the main chat — the face, the name pill, the drawer and ••• discs.
                     NanoMuseChatHeaderHost(
-                        liveId: main.liveId,
                         name: agentName,
                         onFace: { NotificationCenter.default.post(name: .nanoMuseOpenAgentPage, object: main.liveId ?? main.chatId) },
+                        mood: taskHeaderMood,
+                        status: taskHeaderStatus,
+                        statusColor: taskHeaderStatusColor,
                         leading: { drawerDisc },
-                        trailing: { chatMenu }
+                        trailing: {
+                            Color.clear
+                                .frame(width: 38, height: 38)
+                                .contentShape(Rectangle())
+                                .contextMenu {
+                                    Button {
+                                        NotificationCenter.default.post(name: .mordeShellTaskOptions, object: nil)
+                                    } label: {
+                                        Label(AppLocalized("Task options"), systemImage: "slider.horizontal.3")
+                                    }
+                                    .accessibilityIdentifier("morde.shell.taskOptions")
+                                    Button {
+                                        NotificationCenter.default.post(name: .mordeShellVoiceInput, object: nil)
+                                    } label: {
+                                        Label(AppLocalized("Voice input"), systemImage: "mic")
+                                    }
+                                    Button {
+                                        NotificationCenter.default.post(name: .mordeShellAttachmentOptions, object: nil)
+                                    } label: {
+                                        Label(AppLocalized("Add attachment"), systemImage: "paperclip")
+                                    }
+                                    .accessibilityIdentifier("morde.shell.attachments")
+                                }
+                                .accessibilityElement()
+                                .accessibilityLabel(AppLocalized("Chat actions"))
+                                .accessibilityHint(AppLocalized("Long press to open chat actions"))
+                                .accessibilityIdentifier("morde.shell.chatActions")
+                        }
                     )
                     // C1: the ask for a star, when NanoMuseStar's gate raises one; under the header, over the chat.
                     if let ask = star.pending {
@@ -648,14 +757,14 @@ struct NanoMuseHomeView: View {
                         .background(NanoMuseTones.fill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                         .padding(.horizontal, 12)
                         .padding(.bottom, 6)
-                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
                     }
                     // C11 / parity #33: a turn refused for the free allowance — the ways on, pinned like the star card.
                     if let refused = allowance.pending {
                         ScrollView(showsIndicators: false) {
+                            // nanoMuse: Keep relay guidance and invite actions without retrying a legacy local VM.
                             NanoMuseAllowanceCard(
                                 refused: refused,
-                                onTryAgain: { allowance.retry(session: main.liveId ?? main.chatId) },
                                 onDismiss: { allowance.dismiss() }
                             )
                             .padding(.horizontal, 14)
@@ -665,7 +774,7 @@ struct NanoMuseHomeView: View {
                         .background(NanoMuseTones.fill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                         .padding(.horizontal, 12)
                         .padding(.bottom, 6)
-                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
                     }
                 }
                 .onGeometryChange(for: CGFloat.self) { proxy in
@@ -674,7 +783,7 @@ struct NanoMuseHomeView: View {
                     if abs(height - chatHeaderHeight) > 0.5 { chatHeaderHeight = height }
                 }
                 .background {
-                    NanoMuseChatScrimHost(liveId: main.liveId)
+                    NanoMuseHeaderScrim(scrolledUp: false)
                         .ignoresSafeArea(edges: .top)
                 }
             }
@@ -682,17 +791,14 @@ struct NanoMuseHomeView: View {
             // Android: a swipe in from the leading edge opens the drawer on the Chat tab; here too,
             // on the main chat (a pushed side chat keeps the system's back swipe).
             .background(NanoMuseEdgeSwipe(enabled: tab == .chat && chatPath.isEmpty && !drawerOpen) { drawerOpen = true })
-            .nmRenameAlert(rename)
             // The system bar stays out of the main chat; side chats pushed from here keep theirs.
             .toolbar(.hidden, for: .navigationBar)
-            .animation(.easeInOut(duration: 0.25), value: star.pending)
-            .animation(.easeInOut(duration: 0.25), value: allowance.pending)
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: star.pending)
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: allowance.pending)
             .navigationDestination(for: String.self) { id in
-                let draft = id.hasPrefix(NanoMuseMainChat.draftPrefix)
-                AIChatView(sessionId: draft ? nil : id, draftId: draft ? id : nil)
+                NanoMuseLegacySessionArchive(sessionId: id)
                     .id(id)
-                    // The side chat keeps the system bar, with the main chat's scrim behind it,
-                    // and no Muse header over its list.
+                    // Historical sessions are read-only; new work goes through Morde.
                     .environment(\.nmSystemBarScrim, true)
                     .environment(\.nmTopOverlay, 0)
             }
@@ -704,41 +810,7 @@ struct NanoMuseHomeView: View {
         NanoMuseRoundButton(symbol: "line.3.horizontal", label: AppLocalized("Chats and settings")) {
             drawerOpen = true
         }
-    }
-
-    /// Android: the Chat room's ••• menu — this chat's own entries, then the shared rows.
-    private var chatMenu: some View {
-        Menu {
-            Button { chatAction(.newChat) } label: { Label(AppLocalized("New Chat"), systemImage: "square.and.pencil") }
-            // Android: rename from the room's menu; a chat that has not been sent yet has no row to name.
-            if let id = main.chatId, !main.isDraft {
-                Button { rename.open(id) } label: { Label(AppLocalized("Rename chat"), systemImage: "pencil") }
-            }
-            if !NanoMuseAppearance.shared.headerModel {
-                Button { chatAction(.model) } label: { Label(AppLocalized("Model"), systemImage: "cpu") }
-            }
-            Button(role: .destructive) { chatAction(.clearChat) } label: { Label(AppLocalized("Clear Chat"), systemImage: "trash") }
-            Divider()
-            Button { chatAction(.terminal) } label: { Label(AppLocalized("Open Terminal"), systemImage: "terminal") }
-            Button { chatAction(.browser) } label: { Label(AppLocalized("Open Browser"), systemImage: "safari") }
-            Button { chatAction(.files) } label: { Label(AppLocalized("Browse Chat Files"), systemImage: "folder") }
-            Button { chatAction(.tokenUsage) } label: { Label(AppLocalized("Token Usage"), systemImage: "chart.bar") }
-            Divider()
-            Button { showCoding = true } label: { Label(AppLocalized("Coding agents"), systemImage: "chevron.left.forwardslash.chevron.right") }
-            Button { showRoutines = true } label: { Label(AppLocalized("All routines"), systemImage: "clock") }
-            Button { showSystemFiles = true } label: { Label(AppLocalized("System files"), systemImage: "doc.text") }
-            Divider()
-            Button { showNanoMuseSettings = true } label: { Label(AppLocalized("Settings"), systemImage: "gearshape") }
-        } label: {
-            NanoMuseRoundDisc(symbol: "ellipsis")
-        }
-        .accessibilityLabel(Text(AppLocalized("More")))
-    }
-
-    /// One of this chat's own menu entries: AIChatView acts on it (see its `// nanoMuse:` hook).
-    private func chatAction(_ action: NanoMuseChatAction) {
-        guard let id = main.chatId else { return }
-        NanoMuseChatAction.post(action, session: main.liveId ?? id)
+        .accessibilityIdentifier("morde.shell.drawer")
     }
 
     // MARK: Rooms
@@ -748,98 +820,102 @@ struct NanoMuseHomeView: View {
         switch tab {
         case .chat:
             EmptyView()
-        case .feed:
-            NanoMuseFeedRoom(
-                chrome: chrome,
-                onDiscuss: { post in discussPost(post) },
-                onOpenSession: { id in openSideChat(id) }
-            )
-        case .ideas:
-            NanoMuseIdeasRoom(
-                chrome: chrome,
-                onSend: { prompt in startChat(with: prompt) },
-                onCreateRoutine: { idea in createRoutine(from: idea) },
-                onStartGoal: { category, seed in startGoal(category, seed: seed) }
-            )
-        case .goals:
-            NanoMuseGoalsRoom(
-                chrome: chrome,
-                onStartGoal: { category in startGoal(category) },
-                onOpenSession: { id in openSideChat(id) }
-            )
-        case .library:
-            NanoMuseLibraryRoom(chrome: chrome, sessionId: main.isDraft ? nil : main.chatId)
+        case .tasks:
+            // nanoMuse: Keep task and work-item pages on this room's stack while the shell owns root navigation.
+            NavigationStack {
+                MIFTaskWorkItemHome(chrome: chrome, destination: $taskHomeDestination)
+            }
+            .toolbar(.hidden, for: .navigationBar)
+        case .approvals:
+            NavigationStack {
+                MIFApprovalRoom(onConfirmedCount: { approvalCount = $0 }, chrome: chrome)
+            }
+            .toolbar(.hidden, for: .navigationBar)
+        case .resources:
+            if resourceShowsLibrary {
+                MIFLibraryRoot(chrome: chrome, personalDataRoot: NanoMuseDirs.root)
+            } else {
+                MIFResourcesRoot(chrome: chrome)
+            }
         }
     }
 
     /// What the rooms need for their Muse header.
     private var chrome: NanoMuseRoomChrome {
-        NanoMuseRoomChrome(liveId: main.liveId, name: agentName, hasMainSession: !main.isDraft && main.chatId != nil, onMenu: { drawerOpen = true })
-    }
-
-    /// "Create a goal › Health": the opener goes to the main chat; the model takes it from there (GoalFlow).
-    private func startGoal(_ category: NanoMuseGoalCategory, seed: String? = nil) {
-        guard let id = main.chatId else { return }
-        let opener = NanoMuseGoalFlow.startCreation(session: id, category: category)
-        let trimmed = (seed ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        sendToMainChat(trimmed.isEmpty ? opener : opener + " " + trimmed)
-    }
-
-    /// A routine from an idea: created at the idea's time (9:00 when it has none), then the editor,
-    /// as a sheet of this view. Up to 1.0.4 the Goals room was asked to open it, and that room is
-    /// not on screen while the Ideas room is, so the routine was made and nothing opened.
-    private func createRoutine(from idea: NanoMuseIdea) {
-        let at = NanoMuseDay.parseClock(idea.time) ?? (hour: 9, minute: 0)
-        let routine = NanoMuseScheduler.shared.create(NanoMuseRoutine(
-            label: String(idea.title.prefix(40)),
-            prompt: idea.promptText,
-            hour: at.hour,
-            minute: at.minute,
-            repeatMode: .daily
-        ))
-        editingRoutine = routine
-    }
-
-    /// "Discuss" on a feed card: a side chat that opens on the post.
-    private func discussPost(_ post: NanoMusePost) {
-        Task { @MainActor in
-            let vm = ViewModelCache.shared.createDraft()
-            let id = await vm.ensureSessionReturningId()
-            await ChatStore.shared.updateSessionTitle(id, title: String(post.title.prefix(40)))
-            ViewModelCache.shared.cacheDraft(vm, sessionId: id)
-            openSideChat(id)
-            vm.nmSendNow(NanoMuseFeedFlow.discussOpener(post))
-        }
-    }
-
-    /// A new side chat with the text already in the composer.
-    private func startChat(with prompt: String) {
-        let draftId = NanoMuseMainChat.draftPrefix + UUID().uuidString
-        ViewModelCache.pendingTransfer = ViewModelCache.PendingTransfer(targetId: draftId, inputText: prompt, attachments: [])
-        openSideChat(draftId)
+        NanoMuseRoomChrome(
+            liveId: main.liveId,
+            name: agentName,
+            hasMainSession: !main.isDraft && main.chatId != nil,
+            onMenu: { drawerOpen = true },
+            showsLibraryShortcuts: false
+        )
     }
 }
 
 extension Notification.Name {
     /// `object` is a session id (or a `__new__…` draft id): the shell shows it.
     static let nanoMuseOpenChat = Notification.Name("nanoMuse.openChat")
+    static let mordeShellPrompt = Notification.Name("morde.shellPrompt")
+    static let mordeShellNewConversation = Notification.Name("morde.shellNewConversation")
+    static let mordeShellTaskOptions = Notification.Name("morde.shellTaskOptions")
+    static let mordeShellVoiceInput = Notification.Name("morde.shellVoiceInput")
+    static let mordeShellAttachmentOptions = Notification.Name("morde.shellAttachmentOptions")
 }
 
-/// The upstream layout, presented from the drawer as a sheet (swipe down
-/// to come back). Opening Settings goes through the deep-link coordinator
-/// once the view is on screen.
-private struct NanoMuseClassicCover: View {
-    var wantsSettings: Bool
+/// Legacy sessions remain readable without opening the local execution UI.
+struct NanoMuseLegacySessionsList: View {
+    var onOpenSession: (String) -> Void
+    @State private var sessions: [ChatSession] = []
+    @State private var isLoading = true
 
     var body: some View {
-        ContentView()
-            .nanoMuseStudioPresenter(enabled: true)
-            .onAppear {
-                guard wantsSettings else { return }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-                    DeepLinkCoordinator.shared.pendingSettingsTarget = .home
+        List {
+            if isLoading {
+                ProgressView().frame(maxWidth: .infinity)
+            } else if sessions.isEmpty {
+                Text(AppLocalized("No saved conversations"))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+            } else {
+                ForEach(sessions) { session in
+                    Button { onOpenSession(session.id) } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text((session.title?.isEmpty == false ? session.title : nil) ?? AppLocalized("Conversation"))
+                                    .foregroundStyle(.primary)
+                                    .lineLimit(1)
+                                Spacer()
+                                Text(session.updatedAt, style: .relative)
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
+                            }
+                            if let preview = session.lastMessage, !preview.isEmpty {
+                                Text(preview)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(2)
+                            }
+                            if session.isRemote, let device = session.remoteDeviceName, !device.isEmpty {
+                                Text("From \(device)")
+                                    .font(.caption)
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                 }
             }
+        }
+        .listStyle(.plain)
+        .task { await loadSessions() }
+    }
+
+    @MainActor
+    private func loadSessions() async {
+        let stored = await ChatStore.shared.listSessions()
+        sessions = NanoMuseSync.shared.visible(stored).sorted { $0.updatedAt > $1.updatedAt }
+        isLoading = false
     }
 }
 
@@ -880,14 +956,16 @@ enum NanoMuseColumn {
 
 // MARK: - Bottom bar
 
-/// Android's MuseBottomBar: a floating frosted-glass pill a little above the bottom edge, five
-/// glyphs and no labels. The pill is `.ultraThinMaterial` under the shell's surface tone at 55
+// nanoMuse: the restored iOS shell has four root destinations.
+/// Android's MuseBottomBar: a floating frosted-glass pill a little above the bottom edge, four
+/// glyphs and no visible labels. The pill is `.ultraThinMaterial` under the shell's surface tone at 55
 /// percent, with a 1 pt hairline; the current tab shows its filled glyph on a soft indicator
 /// capsule that springs across to the tab tapped next, the others stay outlined and muted. The
 /// pill is as wide as the composer above it (the same 16 pt margins): capped at 420 pt on a
 /// compact width, the column's width on a regular one (NanoMuseColumn).
 struct NanoMuseBottomBar: View {
     @Binding var selected: NanoMuseTab
+    var approvalCount: Int? = nil
     var onPick: (NanoMuseTab) -> Void
     @Namespace private var indicator
     /// Reduce Motion on: the indicator moves to the tapped tab without the spring.
@@ -895,7 +973,7 @@ struct NanoMuseBottomBar: View {
     /// Regular on an iPad: the pill takes the column's width, the composer's.
     @Environment(\.horizontalSizeClass) private var sizeClass
 
-    /// The indicator capsule behind the selected glyph, centred in its slot; the five slots share
+    /// The indicator capsule behind the selected glyph, centred in its slot; the two slots share
     /// the pill's width equally.
     static let tabSize = CGSize(width: 60, height: 46)
     /// The pill's padding above and below the slots.
@@ -921,13 +999,25 @@ struct NanoMuseBottomBar: View {
                     onPick(tab)
                 } label: {
                     Group {
-                        if tab == .library {
+                        if tab == .resources {
                             NanoMuseCategoryShape(filled: isSelected)
                                 .fill(style: FillStyle(eoFill: true))
                                 .frame(width: 24, height: 24)
                         } else {
                             Image(systemName: isSelected ? tab.selectedSymbol : tab.symbol)
                                 .font(.system(size: 22, weight: isSelected ? .semibold : .regular))
+                        }
+                    }
+                    .overlay(alignment: .topTrailing) {
+                        if tab == .approvals, let approvalCount, approvalCount > 0 {
+                            Text(approvalCount > 99 ? "99+" : "\(approvalCount)")
+                                .font(.footnote.weight(.bold))
+                                .foregroundStyle(.white)
+                                .fixedSize()
+                                .padding(.horizontal, approvalCount > 9 ? 6 : 5)
+                                .padding(.vertical, 3)
+                                .background(Color(red: 0.70, green: 0.08, blue: 0.14), in: Capsule())
+                                .offset(x: 6, y: -5)
                         }
                     }
                     .foregroundStyle(isSelected ? NanoMuseTones.tabIndicatorGlyph : Color.secondary)
@@ -947,7 +1037,10 @@ struct NanoMuseBottomBar: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(Text(tab.title))
+                .accessibilityValue(Text(verbatim: tab == .approvals ? (approvalCount?.formatted() ?? "") : ""))
+                .accessibilityIdentifier("morde.shell.tab.\(tab.rawValue)")
                 .accessibilityAddTraits(isSelected ? .isSelected : [])
+                .accessibilityRemoveTraits(isSelected ? [] : .isSelected)
             }
         }
         .padding(.horizontal, 14)
@@ -1009,12 +1102,12 @@ private struct NanoMuseCategoryShape: Shape {
 // MARK: - Room header
 
 extension Notification.Name {
-    /// `object` is one of "settings", "coding", "routines", "systemFiles", "sharedFolders",
-    /// "chatFiles": the home opens that page over the current tab.
+    /// `object` is one of "settings", "routines", "computers", or "defaultWorkspace".
+    /// "systemFiles", "sharedFolders", or "chatFiles": the home opens that page over the current tab.
     static let nanoMuseHomeAction = Notification.Name("nanoMuse.homeAction")
 }
 
-/// What Feed / Ideas / Goals / Library need to draw the Muse header: the
+/// What the Library room needs to draw the Muse header: the
 /// main chat's live id (its mood and status stay on the face while the
 /// person is elsewhere), the agent's name, and the drawer.
 struct NanoMuseRoomChrome {
@@ -1023,6 +1116,8 @@ struct NanoMuseRoomChrome {
     /// The main chat is a real session (its files can be browsed).
     var hasMainSession: Bool
     var onMenu: () -> Void
+    var onBack: (() -> Void)? = nil
+    var showsLibraryShortcuts = false
 
     /// Ask the home to open one of its pages ("settings", "systemFiles", …).
     func open(_ page: String) {
@@ -1030,7 +1125,7 @@ struct NanoMuseRoomChrome {
     }
 }
 
-/// The big-face header on the four rooms: the drawer disc on the left, the
+/// The big-face header on the two rooms: the drawer disc on the left, the
 /// room's own trailing content on the right (Android: NanoMuseHome.TabHeader).
 struct NanoMuseRoomHeader<Trailing: View>: View {
     var chrome: NanoMuseRoomChrome
@@ -1043,11 +1138,28 @@ struct NanoMuseRoomHeader<Trailing: View>: View {
 
     var body: some View {
         NanoMuseChatHeaderHost(
-            liveId: chrome.liveId,
             name: chrome.name,
             onFace: { NotificationCenter.default.post(name: .nanoMuseOpenAgentPage, object: chrome.liveId) },
             leading: {
-                NanoMuseRoundButton(symbol: "line.3.horizontal", label: AppLocalized("Chats and settings"), action: chrome.onMenu)
+                HStack(spacing: 8) {
+                    if let onBack = chrome.onBack {
+                        NanoMuseRoundButton(symbol: "chevron.left", label: AppLocalized("Back"), action: onBack)
+                    }
+                    NanoMuseRoundButton(symbol: "line.3.horizontal", label: AppLocalized("Chats and settings"), action: chrome.onMenu)
+                    if chrome.showsLibraryShortcuts {
+                        Menu {
+                            Button { chrome.open("computers") } label: {
+                                Label(AppLocalized("Computers"), systemImage: "desktopcomputer")
+                            }
+                            Button { chrome.open("defaultWorkspace") } label: {
+                                Label(AppLocalized("Default"), systemImage: "folder")
+                            }
+                        } label: {
+                            NanoMuseRoundDisc(symbol: "square.stack.3d.up")
+                        }
+                        .accessibilityLabel(Text(AppLocalized("Library")))
+                    }
+                }
             },
             trailing: trailing
         )
@@ -1067,7 +1179,9 @@ struct NanoMuseRoomMenu<Items: View>: View {
     var body: some View {
         Menu {
             items()
+#if !MINIS_CLOUD_ONLY
             Button { chrome.open("systemFiles") } label: { Label(AppLocalized("System files"), systemImage: "doc.text") }
+#endif
             Button { chrome.open("settings") } label: { Label(AppLocalized("Settings"), systemImage: "gearshape") }
         } label: {
             NanoMuseRoundDisc(symbol: "ellipsis")
@@ -1076,34 +1190,19 @@ struct NanoMuseRoomMenu<Items: View>: View {
     }
 }
 
-/// The big-face header bound to the main chat's view model once it exists
-/// in the cache; until then (a draft that was never sent, the first frame
-/// after launch) the face sits idle.
+/// The big-face header for the Morde conversation; legacy local sessions stay read-only.
 struct NanoMuseChatHeaderHost<Leading: View, Trailing: View>: View {
-    /// The id the view model is cached under (nil for an unsent draft).
-    var liveId: String?
     var name: String
     var onFace: () -> Void
+    var mood: NanoMuseMood = .idle
+    var status: String? = nil
+    var statusColor: Color = .secondary
     @ViewBuilder var leading: () -> Leading
     @ViewBuilder var trailing: () -> Trailing
 
-    @State private var vm: AIChatViewModel?
-
     var body: some View {
-        Group {
-            if let vm {
-                NanoMuseLiveHeader(vm: vm, name: name, onFace: onFace, leading: leading, trailing: trailing)
-            } else {
-                NanoMuseStillHeader(name: name, onFace: onFace, leading: leading, trailing: trailing)
-            }
-        }
-        .task(id: liveId) { await bind() }
-    }
-
-    /// AIChatView puts the view model in the cache as it appears; look a few times, then give up quietly.
-    private func bind() async {
-        vm = nil
-        vm = await NanoMuseChatLookup.viewModel(for: liveId)
+        NanoMuseMuseHeader(mood: mood, name: name, status: status, statusColor: statusColor,
+                           onFace: onFace, leading: leading, trailing: trailing)
     }
 }
 
@@ -1126,40 +1225,289 @@ struct NanoMusePageSheet<Content: View>: View {
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button(AppLocalized("Done")) { dismiss() }
+                            .tint(NanoMuseTones.actionText)
+                        .accessibilityIdentifier("morde.sheet.done")
                     }
                 }
         }
     }
 }
 
+private struct NanoMuseLegacyChatFilesArchive: View {
+    @State private var report: LegacyRootfsArchive.CopyReport?
+    @State private var failure: String?
+    @State private var retryID = UUID()
+
+    private var documents: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+    }
+
+    private var archiveRoot: URL {
+        documents.appendingPathComponent(LegacyRootfsArchive.archiveDirectoryName, isDirectory: true)
+    }
+
+    var body: some View {
+        Group {
+            if let failure {
+                VStack(spacing: 12) {
+                    Text(AppLocalized("Could not preserve the old chat files."))
+                        .font(.headline)
+                    Text(failure)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                    Button(AppLocalized("Retry")) {
+                        self.failure = nil
+                        self.report = nil
+                        retryID = UUID()
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding()
+            } else if let report, report.sourceRootsFound > 0 {
+                VStack(spacing: 0) {
+                    if !report.sourceRootsMissing.isEmpty {
+                        Text(AppLocalized("One old folder was absent; only existing folders were copied. Original files remain in place."))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal)
+                            .padding(.vertical, 8)
+                    }
+                    NanoMuseReadOnlyFileBrowser(root: archiveRoot, directory: archiveRoot)
+                }
+            } else if report != nil {
+                VStack(spacing: 10) {
+                    Image(systemName: "folder")
+                        .font(.largeTitle)
+                        .foregroundStyle(.secondary)
+                    Text(AppLocalized("No old chat files found"))
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ProgressView(AppLocalized("Preserving old chat files…"))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .task(id: retryID) { await preserve() }
+    }
+
+    private func preserve() async {
+        let directory = documents
+        do {
+            let result = try await Task.detached(priority: .utility) {
+                try LegacyRootfsArchive.preserveUserData(in: directory)
+            }.value
+            report = result
+        } catch {
+            failure = error.localizedDescription
+        }
+    }
+}
+
+private struct NanoMuseReadOnlyFileBrowser: View {
+    private struct Entry: Identifiable {
+        let url: URL
+        let isDirectory: Bool
+        let size: Int
+        var id: String { url.path }
+    }
+
+    private struct Preview: Identifiable {
+        let url: URL
+        var id: String { url.path }
+    }
+
+    private static let textExtensions: Set<String> = ["md", "txt", "json", "csv", "log", "yaml", "yml", "toml", "xml", "html", "css", "js", "py", "sh", "conf", "ini"]
+    private static let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "gif", "heic", "webp"]
+    private static let maxTextBytes = 512 * 1024
+    private static let maxImageBytes = 12 * 1024 * 1024
+
+    let root: URL
+    let directory: URL
+    @State private var entries: [Entry] = []
+    @State private var preview: Preview?
+    @State private var previewText: String?
+    @State private var previewImage: UIImage?
+
+    var body: some View {
+        List {
+            if entries.isEmpty {
+                Text(AppLocalized("This folder is empty."))
+                    .foregroundStyle(.secondary)
+            }
+            ForEach(entries) { entry in
+                if entry.isDirectory {
+                    NavigationLink {
+                        NanoMuseReadOnlyFileBrowser(root: root, directory: entry.url)
+                    } label: {
+                        entryLabel(entry, symbol: "folder")
+                    }
+                } else {
+                    Button { showPreview(entry) } label: {
+                        entryLabel(entry, symbol: Self.imageExtensions.contains(entry.url.pathExtension.lowercased()) ? "photo" : "doc.text")
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!Self.canPreview(entry))
+                }
+            }
+        }
+        .navigationTitle(directory == root ? AppLocalized("Chat files") : directory.lastPathComponent)
+        .navigationBarTitleDisplayMode(.inline)
+        .task { reload() }
+        .sheet(item: $preview) { item in
+            NavigationStack {
+                Group {
+                    if let previewImage {
+                        ScrollView([.horizontal, .vertical]) {
+                            Image(uiImage: previewImage)
+                                .resizable()
+                                .scaledToFit()
+                                .padding()
+                        }
+                    } else if let previewText {
+                        ScrollView {
+                            Text(previewText)
+                                .font(.system(.body, design: .monospaced))
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding()
+                        }
+                    } else {
+                        VStack(spacing: 8) {
+                            Image(systemName: "doc.questionmark")
+                                .font(.largeTitle)
+                                .foregroundStyle(.secondary)
+                            Text(AppLocalized("Preview unavailable"))
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                }
+                .navigationTitle(item.url.lastPathComponent)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button(AppLocalized("Done")) { preview = nil }
+                    }
+                }
+            }
+        }
+    }
+
+    private func entryLabel(_ entry: Entry, symbol: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: symbol).foregroundStyle(.secondary)
+            Text(entry.url.lastPathComponent)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer(minLength: 8)
+            if !entry.isDirectory {
+                Text(ByteCountFormatter.string(fromByteCount: Int64(entry.size), countStyle: .file))
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .contentShape(Rectangle())
+    }
+
+    private func reload() {
+        guard LegacyRootfsArchive.isContainedAfterResolvingSymlinks(directory, under: root),
+              let children = try? FileManager.default.contentsOfDirectory(
+                at: directory,
+                includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey, .fileSizeKey],
+                options: [.skipsHiddenFiles]
+              ) else {
+            entries = []
+            return
+        }
+
+        entries = children.compactMap { url in
+            guard let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey, .fileSizeKey]),
+                  values.isSymbolicLink != true else { return nil }
+            guard LegacyRootfsArchive.isContainedAfterResolvingSymlinks(url, under: root) else { return nil }
+            return Entry(url: url, isDirectory: values.isDirectory == true, size: values.fileSize ?? 0)
+        }
+        .sorted {
+            if $0.isDirectory != $1.isDirectory { return $0.isDirectory }
+            return $0.url.lastPathComponent.localizedStandardCompare($1.url.lastPathComponent) == .orderedAscending
+        }
+    }
+
+    private func showPreview(_ entry: Entry) {
+        guard Self.canPreview(entry), LegacyRootfsArchive.isContainedAfterResolvingSymlinks(entry.url, under: root) else { return }
+        previewImage = nil
+        previewText = nil
+        let ext = entry.url.pathExtension.lowercased()
+        if Self.imageExtensions.contains(ext), entry.size <= Self.maxImageBytes {
+            previewImage = UIImage(contentsOfFile: entry.url.path)
+        } else if Self.textExtensions.contains(ext), entry.size <= Self.maxTextBytes {
+            previewText = try? String(contentsOf: entry.url, encoding: .utf8)
+        }
+        preview = Preview(url: entry.url)
+    }
+
+    private static func canPreview(_ entry: Entry) -> Bool {
+        let ext = entry.url.pathExtension.lowercased()
+        return (textExtensions.contains(ext) && entry.size <= maxTextBytes)
+            || (imageExtensions.contains(ext) && entry.size <= maxImageBytes)
+    }
+
+}
+
 // MARK: - Drawer
 
-/// The side drawer (Android: SideChatDrawer): the agent's name, the main
-/// chat, Devices and Coding agents, the side chats with the archive glyph
-/// to the full list, and a bottom strip — settings · system files · search
-/// · new side chat.
+enum MIFDrawerDestination: String, CaseIterable, Identifiable {
+    case chat, tasks, approvals, eventChain, resources, library, workItems, friends, toolChats
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .chat: AppLocalized("Main chat")
+        case .tasks: AppLocalized("Tasks")
+        case .approvals: AppLocalized("Approvals")
+        case .eventChain: AppLocalized("Event chain")
+        case .resources: AppLocalized("Resources")
+        case .library: AppLocalized("Library")
+        case .workItems: AppLocalized("Work items")
+        case .friends: AppLocalized("Friends")
+        case .toolChats: AppLocalized("AI tool conversations")
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .chat: "bubble.left"
+        case .tasks: "checklist"
+        case .approvals: "checkmark.shield"
+        case .eventChain: "point.3.connected.trianglepath.dotted"
+        case .resources: "square.grid.2x2"
+        case .library: "folder"
+        case .workItems: "list.bullet.rectangle"
+        case .friends: "person.2"
+        case .toolChats: "terminal"
+        }
+    }
+
+    static let tabItems: [Self] = [.chat, .tasks, .approvals, .eventChain, .resources, .library, .workItems, .friends]
+}
+
+/// The Morde drawer follows the approved design destinations and keeps cloud chats separate
+/// from legacy local history.
 struct NanoMuseDrawer: View {
     @Binding var isOpen: Bool
     var agentName: String
-    var currentId: String?
-    var mainId: String?
-    var onOpenMain: () -> Void
+    var selectedDestination: MIFDrawerDestination
+    var onNavigate: (MIFDrawerDestination) -> Void
     var onOpenSession: (String) -> Void
     var onNewChat: () -> Void
-    var onPinMain: (String) -> Void
-    var onDevices: () -> Void
-    var onCoding: () -> Void
-    var onSystemFiles: () -> Void
-    var onAllChats: () -> Void
     var onSettings: () -> Void
 
-    @ObservedObject private var hub = NanoMuseHub.shared
-    @ObservedObject private var sync = NanoMuseSync.shared
-    @StateObject private var rename = NanoMuseRenamePrompt()
-    @State private var sessions: [ChatSession] = []
+    @ObservedObject private var cloudChats = MIFConversationDrawerStore.shared
     @State private var query = ""
     @State private var dragOffset: CGFloat = 0
-    @State private var deleteCandidate: String?
     /// Reduce Motion on: the panel fades in instead of sliding in from the edge.
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The agent's name follows Dynamic Type, capped as the header's lines are (NanoMuseHeaderMetrics).
@@ -1196,166 +1544,119 @@ struct NanoMuseDrawer: View {
         }
         .allowsHitTesting(isOpen)
         .animation(.easeInOut(duration: 0.22), value: isOpen)
-        .nmOnChange(of: isOpen) { open in
-            if open { refresh() }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .sessionDidUpdate).throttle(for: .seconds(1), scheduler: RunLoop.main, latest: true)) { _ in
-            if isOpen { refresh() }
-        }
     }
 
-    /// The side chats: everything but the main chat, the search applied.
-    private var filtered: [ChatSession] {
+    /// Search only covers conversation titles currently loaded from Morde.
+    private var filtered: [MIFConversationDrawerItem] {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let own = sessions.filter { !$0.isRemote && $0.id != mainId }
-        guard !q.isEmpty else { return own }
-        return own.filter { ($0.title ?? "").lowercased().contains(q) || ($0.lastMessage ?? "").lowercased().contains(q) }
-    }
-
-    private var mainSelected: Bool { currentId == nil || currentId == mainId }
-
-    /// Android: "Off" when the hub is off, "Only this one" when no other device is online, else the count.
-    private var devicesLine: String {
-        if !hub.enabled { return AppLocalized("Off") }
-        let online = hub.others.filter(\.online).count
-        if online == 0 { return AppLocalized("Only this one") }
-        return String(format: AppLocalized("%d devices"), online)
-    }
-
-    /// Computers online whose runtime can show and steer coding agents (Cursor, Codex, Claude Code).
-    private var codingComputers: Int {
-        hub.others.filter { $0.online && $0.isComputer && ($0.actions.isEmpty || $0.actions.contains("coding.sessions")) }.count
+        let sideChats = cloudChats.conversations.filter { $0.id != cloudChats.mainID }
+        guard !q.isEmpty else { return sideChats }
+        return sideChats.filter { $0.title.lowercased().contains(q) }
     }
 
     private func panel(width: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(agentName)
-                .font(.system(size: NanoMuseHeaderMetrics.capped(nameSize, base: 24), weight: .bold))
-                .lineLimit(1)
-                .padding(.horizontal, 20)
-                .padding(.top, 18)
-                .padding(.bottom, 14)
-
-            fixedRow(AppLocalized("Main chat"), symbol: "house", selected: mainSelected) {
-                close()
-                onOpenMain()
-            }
-            fixedRow(AppLocalized("Devices"), symbol: "laptopcomputer.and.iphone", value: devicesLine) {
-                close()
-                onDevices()
-            }
-            // Android: the row shows once a computer that can list coding agents is online, with their count.
-            if codingComputers > 0 {
-                fixedRow(AppLocalized("Coding agents"), symbol: "terminal", value: "\(codingComputers)") {
-                    close()
-                    onCoding()
-                }
-            }
-
-            HStack {
-                Text(AppLocalized("Side chats"))
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Button {
-                    close()
-                    onAllChats()
-                } label: {
-                    Image(systemName: "archivebox")
-                        .font(.system(size: 16, weight: .medium))
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 4) {
+                    Text(agentName)
+                        .font(.system(size: NanoMuseHeaderMetrics.capped(nameSize, base: 24), weight: .bold))
+                        .lineLimit(1)
+                        .padding(.horizontal, 20)
+                        .padding(.top, 18)
+                        .padding(.bottom, 12)
+                    Text(AppLocalized("Tabs"))
+                        .font(.footnote.weight(.semibold))
                         .foregroundStyle(.secondary)
-                        .frame(width: 32, height: 32)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(Text(AppLocalized("All chats")))
-            }
-            .padding(.leading, 20)
-            .padding(.trailing, 10)
-            .padding(.top, 14)
+                        .padding(.horizontal, 20)
+                        .padding(.top, 2)
+                    Text(AppLocalized("Long press to reorder"))
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 4)
 
-            if filtered.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
-                    Image(systemName: "bubble.left.and.bubble.right")
-                        .font(.system(size: 22))
-                        .foregroundStyle(.secondary)
-                    Text(AppLocalized("Start a side chat"))
-                        .font(.body.weight(.medium))
-                    Text(AppLocalized("Side chats are an optional way to keep conversations organised by topic."))
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, 16)
-                Spacer(minLength: 0)
-            } else {
-                List {
-                    ForEach(filtered) { session in
-                        Button {
-                            close()
-                            onOpenSession(session.id)
-                        } label: {
-                            row(session)
-                        }
-                        .listRowBackground(session.id == currentId ? NanoMuseTones.fill : Color.clear)
-                        .contextMenu {
+                    ForEach(MIFDrawerDestination.tabItems) { destination in
+                        destinationRow(destination)
+                    }
+
+                    sectionLabel(AppLocalized("Side chats"))
+                        .padding(.top, 12)
+                    if cloudChats.isLoading && cloudChats.conversations.isEmpty {
+                        ProgressView().frame(maxWidth: .infinity).padding(.vertical, 18)
+                    } else if let error = cloudChats.error, cloudChats.conversations.isEmpty {
+                        Text(error)
+                            .font(.footnote)
+                            .foregroundStyle(.orange)
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 12)
+                    } else if filtered.isEmpty {
+                        Text(query.isEmpty ? AppLocalized("Start a side chat") : AppLocalized("No results"))
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 12)
+                            .accessibilityIdentifier(query.isEmpty
+                                ? "morde.shell.sideChats.empty" : "morde.shell.conversationSearch.empty")
+                    } else {
+                        ForEach(filtered) { session in
                             Button {
                                 close()
-                                onPinMain(session.id)
+                                onOpenSession(session.id)
                             } label: {
-                                Label(AppLocalized("Make this the main chat"), systemImage: "house")
+                                row(session)
                             }
-                            Button {
-                                rename.open(session.id)
-                            } label: {
-                                Label(AppLocalized("Rename chat"), systemImage: "pencil")
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("morde.shell.cloudConversation.\(session.id)")
+                            .onAppear {
+                                guard session.id == filtered.last?.id,
+                                      cloudChats.nextCursor != nil,
+                                      cloudChats.error == nil,
+                                      !cloudChats.loadingMore else { return }
+                                Task { await cloudChats.loadMore() }
                             }
-                            Divider()
-                            Button(role: .destructive) {
-                                deleteCandidate = session.id
-                            } label: {
-                                Label(AppLocalized("Delete chat"), systemImage: "trash")
-                            }
-                        } preview: {
-                            // The default preview lifts the List cell, which the system lays out
-                            // wider than the drawer; the drawer then clips it at its edge and the
-                            // chat shows through. An explicit preview does not: the system sets it
-                            // 16 pt in from the edge, so it is the panel's width less 16 pt each side.
-                            row(session)
-                                .padding(.horizontal, 20)
-                                .padding(.vertical, 12)
-                                .frame(width: width - 32, alignment: .leading)
-                                .background(NanoMuseTones.surface)
                         }
                     }
-                }
-                .listStyle(.plain)
-                .scrollContentBackground(.hidden)
-                .nmRenameAlert(rename)
-                .alert(AppLocalized("Delete chat"), isPresented: Binding(get: { deleteCandidate != nil }, set: { if !$0 { deleteCandidate = nil } })) {
-                    Button(AppLocalized("Cancel"), role: .cancel) {}
-                    Button(AppLocalized("Delete"), role: .destructive) {
-                        if let id = deleteCandidate {
-                            NanoMuseChatDelete.delete(id)
-                            sessions.removeAll { $0.id == id }
-                        }
-                        deleteCandidate = nil
+
+                    if cloudChats.loadingMore {
+                        ProgressView().frame(maxWidth: .infinity).padding(.vertical, 10)
                     }
-                } message: {
-                    Text(AppLocalized("The chat and its messages are removed from this device. With sync on, the other devices remove it too."))
+                    if let error = cloudChats.error, !cloudChats.conversations.isEmpty {
+                        Text(error)
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                            .padding(.horizontal, 20)
+                    }
+
+                    sectionLabel(AppLocalized("AI tool conversations"))
+                        .padding(.top, 12)
+                    Button {
+                        close()
+                        onNavigate(.toolChats)
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: MIFDrawerDestination.toolChats.symbol).frame(width: 24)
+                            Text(AppLocalized("Not implemented yet"))
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 10)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("morde.shell.toolChats")
                 }
+                .padding(.bottom, 12)
             }
 
             Divider()
-            HStack(spacing: 4) {
+            HStack(spacing: 6) {
                 stripButton(symbol: "gearshape", label: AppLocalized("Settings")) {
                     close()
                     onSettings()
                 }
-                stripButton(symbol: "doc.text", label: AppLocalized("System files")) {
-                    close()
-                    onSystemFiles()
-                }
+                .accessibilityIdentifier("morde.shell.settings")
                 HStack(spacing: 6) {
                     Image(systemName: "magnifyingglass")
                         .font(.system(size: 14))
@@ -1364,6 +1665,7 @@ struct NanoMuseDrawer: View {
                         .font(.subheadline)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
+                        .accessibilityIdentifier("morde.shell.search")
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 7)
@@ -1372,36 +1674,48 @@ struct NanoMuseDrawer: View {
                     close()
                     onNewChat()
                 }
+                .accessibilityIdentifier("morde.shell.newSideChat")
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 8)
         }
         .background(NanoMuseTones.surface.ignoresSafeArea())
+        .task(id: isOpen) {
+            guard isOpen, !cloudChats.isLoading,
+                  !cloudChats.hasLoaded || cloudChats.error != nil else { return }
+            await cloudChats.retry()
+        }
     }
 
-    private func fixedRow(_ title: String, symbol: String, value: String? = nil, selected: Bool = false, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+    private func sectionLabel(_ title: String) -> some View {
+        Text(title)
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 20)
+    }
+
+    private func destinationRow(_ destination: MIFDrawerDestination) -> some View {
+        Button {
+            close()
+            onNavigate(destination)
+        } label: {
             HStack(spacing: 12) {
-                Image(systemName: symbol)
+                Image(systemName: destination.symbol)
                     .font(.system(size: 17))
                     .frame(width: 24)
-                Text(title)
-                    .font(.body)
-                Spacer()
-                if let value {
-                    Text(value)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
+                Text(destination.title).font(.body)
+                Spacer(minLength: 0)
             }
             .foregroundStyle(.primary)
             .padding(.horizontal, 20)
-            .padding(.vertical, 11)
-            .background(selected ? NanoMuseTones.fill : Color.clear, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .padding(.vertical, 10)
+            .background(selectedDestination == destination ? NanoMuseTones.fill : Color.clear,
+                        in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .padding(.horizontal, 8)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier(destination == .chat ? "morde.shell.mainChat" : "morde.shell.drawer.\(destination.rawValue)")
     }
 
     private func stripButton(symbol: String, label: String, action: @escaping () -> Void) -> some View {
@@ -1416,26 +1730,20 @@ struct NanoMuseDrawer: View {
         .accessibilityLabel(Text(label))
     }
 
-    private func row(_ session: ChatSession) -> some View {
+    private func row(_ session: MIFConversationDrawerItem) -> some View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
-                Text((session.title?.isEmpty == false ? session.title : nil) ?? AppLocalized("New chat"))
+                Text(session.title.isEmpty ? AppLocalized("New chat") : session.title)
                     .font(.body)
                     .foregroundStyle(.primary)
                     .lineLimit(1)
-                // C8: a chat that arrived through sync is an ordinary chat in this list; the
-                // device shows under each of its bubbles ("From Pixel 8"), not here.
-                if let last = session.lastMessage, !last.isEmpty {
-                    Text(last)
+                if session.isMain {
+                    Text(AppLocalized("Main chat"))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
-                        .lineLimit(1)
                 }
             }
             Spacer(minLength: 0)
-            Text(Self.when(session.updatedAt))
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
         }
         .contentShape(Rectangle())
     }
@@ -1444,70 +1752,14 @@ struct NanoMuseDrawer: View {
         isOpen = false
     }
 
-    private func refresh() {
-        Task { @MainActor [self] in
-            // C10: the signed-in account's conversations and the unowned ones; another account's stay hidden
-            let list = NanoMuseSync.shared.visible(await ChatStore.shared.listSessions())
-            sessions = list.sorted { $0.updatedAt > $1.updatedAt }
-        }
-    }
-
     private static let relative: RelativeDateTimeFormatter = {
-        let f = RelativeDateTimeFormatter()
-        f.unitsStyle = .short
-        return f
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .short
+        return formatter
     }()
 
     static func when(_ date: Date) -> String {
         relative.localizedString(for: date, relativeTo: Date())
     }
-}
 
-// MARK: - Star moments
-
-/// Watches the activity tracker for turns that ran to their end and reports
-/// each one that counts as a task (C1) to `NanoMuseStar`, whose gate decides
-/// whether to ask for a star; the shell shows `NanoMuseStar.shared.pending`.
-@MainActor
-final class NanoMuseStarWatch {
-    static let shared = NanoMuseStarWatch()
-
-    private var active: Set<String> = []
-    private var cancellable: AnyCancellable?
-
-    private init() {}
-
-    func start() {
-        guard cancellable == nil else { return }
-        active = SessionActivityTracker.shared.activeSessions
-        cancellable = SessionActivityTracker.shared.$activeSessions
-            .receive(on: RunLoop.main)
-            .sink { [weak self] now in self?.activeChanged(now) }
-    }
-
-    private func activeChanged(_ now: Set<String>) {
-        let ended = active.subtracting(now)
-        active = now
-        guard !ended.isEmpty else { return }
-        for sid in ended where Self.countsAsTask(sid) {
-            NanoMuseStar.shared.taskFinished()
-        }
-    }
-
-    /// C1: a task is a turn the person started that ran to its end — not the
-    /// first conversation while it is still going, not the feed's writing,
-    /// not a routine's run, not a turn that failed.
-    static func countsAsTask(_ sid: String) -> Bool {
-        if NanoMuseFeedFlow.isFeedSession(sid) { return false }
-        if NanoMuseScheduler.shared.routines.contains(where: { $0.sessionId == sid }) { return false }
-        switch NanoMuseFirstConversation.shared.phase {
-        case .askUserName, .askAgentName, .named: return false
-        default: break
-        }
-        if let vm = ViewModelCache.shared.get(for: sid) {
-            if vm.errorMessage != nil || vm.messages.last?.error != nil { return false }
-            guard vm.messages.contains(where: { $0.role == .user }) else { return false }
-        }
-        return true
-    }
 }

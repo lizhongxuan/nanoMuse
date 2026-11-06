@@ -998,7 +998,7 @@ struct ContentView: View {
     /// Soul name shown as the sidebar title. Sourced from SOUL.md, falls
     /// back to "nanoMuse". Refreshed whenever SoulStore posts .soulMdChanged.
     @State private var soulName: String = SoulStore.cachedMetadata.name.isEmpty
-        ? "nanoMuse" : SoulStore.cachedMetadata.name
+        ? "morde" : SoulStore.cachedMetadata.name
     /// Subtitle state shown under the "nanoMuse" sidebar title. nil hides the
     /// row; otherwise it renders as small capsules per type or a single
     /// status string. Refreshed by a 5s timer.
@@ -2756,7 +2756,7 @@ struct ContentView: View {
         // and can't drop a .soulMdChanged notification arriving during reconstruction.
         .onReceive(NotificationCenter.default.publisher(for: .soulMdChanged)) { _ in
             let n = SoulStore.cachedMetadata.name
-            soulName = n.isEmpty ? "nanoMuse" : n
+            soulName = n.isEmpty ? "morde" : n
         }
     }
 
@@ -3934,7 +3934,7 @@ struct ContentView: View {
                 .padding(.bottom, 4)
 
             VStack(spacing: 8) {
-                Text("Welcome to nanoMuse")
+                Text("Welcome to morde")
                     .font(.title2.bold())
                 Text("Your first On-Device Agent is almost ready.")
                     .font(.subheadline)
@@ -5553,7 +5553,7 @@ struct ContentView: View {
                 done += 1
                 if msg.isToolResultOnly { continue }
 
-                let role = msg.role == .user ? "User" : "nanoMuse"
+                let role = msg.role == .user ? "User" : "morde"
                 let time = timeFmt.string(from: msg.createdAt)
                 var parts: [String] = []
                 for part in msg.parts {
@@ -7435,7 +7435,7 @@ private struct SettingsSheet: View {
                     NavigationLink {
                         NanoMuseSettingsHomeView()
                     } label: {
-                        Label("nanoMuse", systemImage: "sparkles")
+                        Label("morde", systemImage: "sparkles")
                     }
                 }
                 } // nanoMuse:
@@ -7592,6 +7592,7 @@ private struct SettingsSheet: View {
                                 .background(.orange, in: Circle())
                         }
                     }
+#if !MINIS_CLOUD_ONLY
                     if #available(iOS 17.0, *) {
                         NavigationLink {
                             // v2 is the default sync engine; legacy v1
@@ -7609,6 +7610,7 @@ private struct SettingsSheet: View {
                             }
                         }
                     }
+#endif
                     NavigationLink {
                         BackupAndRestoreView()
                     } label: {
@@ -7684,7 +7686,7 @@ private struct SettingsSheet: View {
                         AboutView()
                     } label: {
                         Label {
-                            Text("About nanoMuse")
+                            Text("About morde")
                         } icon: {
                             Image(systemName: "info")
                                 .font(.system(size: 9))
@@ -7915,7 +7917,7 @@ private struct SettingsSheet: View {
         components.scheme = "mailto"
         components.path = "dev@openminis.app"
         components.queryItems = [
-            URLQueryItem(name: "subject", value: "nanoMuse Feedback"),
+            URLQueryItem(name: "subject", value: "morde Feedback"),
             URLQueryItem(name: "body", value: body),
         ]
         return components.url
@@ -7943,7 +7945,7 @@ private struct SettingsSheet: View {
         |-------|-------|
         | Platform | iOS |
         | OS Version | iOS \(iosVersion) |
-        | nanoMuse Version | \(appVersion) (build \(build)) |
+        | morde Version | \(appVersion) (build \(build)) |
         | Device Model | \(device) |
 
         ## 🔁 Steps to Reproduce

@@ -30,7 +30,7 @@ struct NanoMuseSyncSection: View {
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     } else if sync.conversationCount > 0 || sync.messageCount > 0 {
-                        Text(String(format: AppLocalized("%d conversations, %d messages on nanoMuse Cloud."), sync.conversationCount, sync.messageCount))
+                        Text(String(format: AppLocalized("%d conversations, %d messages on morde Cloud."), sync.conversationCount, sync.messageCount))
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -68,7 +68,7 @@ struct NanoMuseSyncSection: View {
             }
         } footer: {
             VStack(alignment: .leading, spacing: 8) {
-                Text(AppLocalized("The text of your chats is kept on nanoMuse Cloud so every device shows the same conversations. Files and images stay on the device they were made on."))
+                Text(AppLocalized("The text of your chats is kept on morde Cloud so every device shows the same conversations. Files and images stay on the device they were made on."))
                 if let message, !message.isEmpty {
                     Text(message)
                 }
@@ -89,12 +89,12 @@ struct NanoMuseSyncSection: View {
                         Task { @MainActor in
                             defer { busy = false }
                             await sync.deleteSynced()
-                            message = sync.lastError ?? AppLocalized("The synced conversations are removed from nanoMuse Cloud. The chats on your devices stay.")
+                            message = sync.lastError ?? AppLocalized("The synced conversations are removed from morde Cloud. The chats on your devices stay.")
                         }
                     }
                     Button(AppLocalized("Cancel"), role: .cancel) {}
                 } message: {
-                    Text(AppLocalized("Removes what nanoMuse Cloud holds of your conversations. Every device keeps its own chats; the switch stays as it is."))
+                    Text(AppLocalized("Removes what morde Cloud holds of your conversations. Every device keeps its own chats; the switch stays as it is."))
                 }
             } footer: {
                 Text(AppLocalized("Deleting a chat on one device deletes it on all of them. The text is stored as it is: your devices and whoever runs the relay can read it, nobody else."))

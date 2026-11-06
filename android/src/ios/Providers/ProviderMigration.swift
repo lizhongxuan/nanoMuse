@@ -22,56 +22,103 @@ enum ProviderMigration {
         }
 
         if !UserDefaults.standard.bool(forKey: oauthMigrationKey) {
-            migrateOAuthTokens(store: store)
-            UserDefaults.standard.set(true, forKey: oauthMigrationKey)
+            if migrateOAuthTokens(store: store) {
+                UserDefaults.standard.set(true, forKey: oauthMigrationKey)
+            } else {
+                logger.error("OAuth token migration is incomplete; legacy credentials were retained for retry")
+            }
         }
+
+        // nanoMuse: Keep local provider API keys until the MI-05 deletion scope is approved.
     }
 
     // MARK: - V2: Migrate singleton OAuth tokens → per-instance storage
 
-    private static func migrateOAuthTokens(store: ProviderConfigStore) {
+    private static func migrateOAuthTokens(store: ProviderConfigStore) -> Bool {
         logger.info("Starting OAuth token migration to per-instance storage")
 
-        for instance in store.instances where instance.credentialType == .oauth {
+        let oauthInstances = store.instances.filter { $0.credentialType == .oauth }
+        var claudeToken = ClaudeOAuthManager.loadLegacyToken()
+        var geminiToken = GeminiOAuthManager.loadLegacyToken()
+        var codexToken = CodexOAuthManager.loadLegacyToken()
+        var geminiEmail = UserDefaults.standard.string(forKey: GeminiOAuthManager.legacyEmailKey)
+        var geminiProjectID = UserDefaults.standard.string(forKey: GeminiOAuthManager.legacyProjectIDKey)
+        var migrationSucceeded = true
+
+        // Keep legacy values and retry on a later launch if there is no destination
+        // instance yet. The V1 config migration normally creates these instances first.
+        if claudeToken != nil && !oauthInstances.contains(where: { $0.providerType == .anthropic }) {
+            migrationSucceeded = false
+        }
+        if (geminiToken != nil || geminiEmail != nil || geminiProjectID != nil)
+            && !oauthInstances.contains(where: { $0.providerType == .gemini }) {
+            migrationSucceeded = false
+        }
+        if codexToken != nil && !oauthInstances.contains(where: { $0.providerType == .openAI }) {
+            migrationSucceeded = false
+        }
+
+        for instance in oauthInstances {
             switch instance.providerType {
             case .anthropic:
-                // Skip if per-instance token already exists
-                if ProviderKeychainHelper.loadOAuthToken(instanceId: instance.id, as: ClaudeTokenStorage.self) != nil {
-                    continue
-                }
-                if let token = ClaudeOAuthManager.loadLegacyToken() {
-                    ProviderKeychainHelper.saveOAuthToken(token, instanceId: instance.id)
-                    ClaudeOAuthManager.deleteLegacyToken()
-                    logger.info("Migrated Claude OAuth token to instance \(instance.id)")
+                if ProviderKeychainHelper.loadOAuthToken(instanceId: instance.id, as: ClaudeTokenStorage.self) == nil,
+                   let token = claudeToken {
+                    if ProviderKeychainHelper.saveOAuthToken(token, instanceId: instance.id) {
+                        ClaudeOAuthManager.deleteLegacyToken()
+                        claudeToken = nil
+                        logger.info("Migrated Claude OAuth token to instance \(instance.id)")
+                    } else {
+                        migrationSucceeded = false
+                        logger.error("Could not save Claude OAuth token to instance \(instance.id); legacy token retained")
+                    }
                 }
 
             case .gemini:
-                if ProviderKeychainHelper.loadOAuthToken(instanceId: instance.id, as: GeminiTokenStorage.self) != nil {
-                    continue
+                if ProviderKeychainHelper.loadOAuthToken(instanceId: instance.id, as: GeminiTokenStorage.self) == nil,
+                   let token = geminiToken {
+                    if ProviderKeychainHelper.saveOAuthToken(token, instanceId: instance.id) {
+                        GeminiOAuthManager.deleteLegacyToken()
+                        geminiToken = nil
+                        logger.info("Migrated Gemini OAuth token to instance \(instance.id)")
+                    } else {
+                        migrationSucceeded = false
+                        logger.error("Could not save Gemini OAuth token to instance \(instance.id); legacy token retained")
+                    }
                 }
-                if let token = GeminiOAuthManager.loadLegacyToken() {
-                    ProviderKeychainHelper.saveOAuthToken(token, instanceId: instance.id)
-                    GeminiOAuthManager.deleteLegacyToken()
-                    logger.info("Migrated Gemini OAuth token to instance \(instance.id)")
+                // Migrate email and project ID independently of whether the token
+                // already exists, so a previous partial migration can be retried.
+                if let email = geminiEmail,
+                   ProviderKeychainHelper.loadOAuthString(instanceId: instance.id, account: "oauth-email") == nil {
+                    if ProviderKeychainHelper.saveOAuthString(email, instanceId: instance.id, account: "oauth-email") {
+                        UserDefaults.standard.removeObject(forKey: GeminiOAuthManager.legacyEmailKey)
+                        geminiEmail = nil
+                    } else {
+                        migrationSucceeded = false
+                        logger.error("Could not save Gemini OAuth email to instance \(instance.id); legacy value retained")
+                    }
                 }
-                // Migrate email and project ID from UserDefaults
-                if let email = UserDefaults.standard.string(forKey: GeminiOAuthManager.legacyEmailKey) {
-                    ProviderKeychainHelper.saveOAuthString(email, instanceId: instance.id, account: "oauth-email")
-                    UserDefaults.standard.removeObject(forKey: GeminiOAuthManager.legacyEmailKey)
-                }
-                if let projectID = UserDefaults.standard.string(forKey: GeminiOAuthManager.legacyProjectIDKey) {
-                    ProviderKeychainHelper.saveOAuthString(projectID, instanceId: instance.id, account: "oauth-gcp-project")
-                    UserDefaults.standard.removeObject(forKey: GeminiOAuthManager.legacyProjectIDKey)
+                if let projectID = geminiProjectID,
+                   ProviderKeychainHelper.loadOAuthString(instanceId: instance.id, account: "oauth-gcp-project") == nil {
+                    if ProviderKeychainHelper.saveOAuthString(projectID, instanceId: instance.id, account: "oauth-gcp-project") {
+                        UserDefaults.standard.removeObject(forKey: GeminiOAuthManager.legacyProjectIDKey)
+                        geminiProjectID = nil
+                    } else {
+                        migrationSucceeded = false
+                        logger.error("Could not save Gemini OAuth project ID to instance \(instance.id); legacy value retained")
+                    }
                 }
 
             case .openAI:
-                if ProviderKeychainHelper.loadOAuthToken(instanceId: instance.id, as: CodexTokenStorage.self) != nil {
-                    continue
-                }
-                if let token = CodexOAuthManager.loadLegacyToken() {
-                    ProviderKeychainHelper.saveOAuthToken(token, instanceId: instance.id)
-                    CodexOAuthManager.deleteLegacyToken()
-                    logger.info("Migrated Codex OAuth token to instance \(instance.id)")
+                if ProviderKeychainHelper.loadOAuthToken(instanceId: instance.id, as: CodexTokenStorage.self) == nil,
+                   let token = codexToken {
+                    if ProviderKeychainHelper.saveOAuthToken(token, instanceId: instance.id) {
+                        CodexOAuthManager.deleteLegacyToken()
+                        codexToken = nil
+                        logger.info("Migrated Codex OAuth token to instance \(instance.id)")
+                    } else {
+                        migrationSucceeded = false
+                        logger.error("Could not save Codex OAuth token to instance \(instance.id); legacy token retained")
+                    }
                 }
 
             case .antigravity:
@@ -93,7 +140,12 @@ enum ProviderMigration {
             }
         }
 
-        logger.info("OAuth token migration complete")
+        if migrationSucceeded {
+            logger.info("OAuth token migration complete")
+        } else {
+            logger.error("OAuth token migration remains incomplete; legacy values are retained")
+        }
+        return migrationSucceeded
     }
 
     // MARK: - V1: Legacy migration

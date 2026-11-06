@@ -118,6 +118,7 @@ enum SyncV2Bootstrap {
     /// — full v1 engine MUST stay quiet to avoid double-sends.
     @MainActor
     static func shouldPauseV1() -> Bool {
+        guard MordeCloudKitSyncPolicy.isEnabled else { return true }
         guard isEnabled else { return false }
         if #available(iOS 17.0, *) {
             switch MigrationEngine.shared.currentStatus() {
@@ -136,6 +137,13 @@ enum SyncV2Bootstrap {
     /// Idempotent — running twice is harmless.
     @MainActor
     static func startIfEnabled() async {
+        guard MordeCloudKitSyncPolicy.isEnabled else {
+            logger.info("[SyncCore] CloudKit sync policy is disabled — stopping v2 transport")
+            if #available(iOS 17.0, *) {
+                await SyncCore.shared.stop()
+            }
+            return
+        }
         guard isEnabled else {
             logger.debug("[SyncCore] v2 disabled (flag off) — staying on v1")
             return
@@ -208,6 +216,11 @@ enum SyncV2Bootstrap {
             //      anything `runGuarded` re-throws (currently nothing).
             do {
                 try? await Task.sleep(nanoseconds: UInt64(bootDelay * 1_000_000_000))
+                guard MordeCloudKitSyncPolicy.isEnabled else {
+                    SyncCore.shared.bootDelayUntil = nil
+                    await SyncCore.shared.stop()
+                    return
+                }
                 logger.info("[SyncCore] v2 startup STEP=coreStart begin (post-delay)")
                 await runGuarded("coreStart") {
                     await SyncCore.shared.start()
@@ -229,11 +242,19 @@ enum SyncV2Bootstrap {
                     )
                 }
                 logger.info("[SyncCore] v2 startup STEP=device registered (deviceId=\(DeviceIdentity.deviceId.prefix(8)))")
+                guard MordeCloudKitSyncPolicy.isEnabled else {
+                    await SyncCore.shared.stop()
+                    return
+                }
                 logger.info("[SyncCore] v2 startup STEP=migration begin")
                 await runGuarded("migration") {
                     await MigrationEngine.shared.runIfNeeded()
                 }
                 logger.info("[SyncCore] v2 startup STEP=migration done")
+                guard MordeCloudKitSyncPolicy.isEnabled else {
+                    await SyncCore.shared.stop()
+                    return
+                }
                 // Start the periodic dirty scanner. Under v1 this was kicked
                 // off by CloudSyncEngine.start(); but v2 paused v1, so the
                 // scanner was never running — and any record type that

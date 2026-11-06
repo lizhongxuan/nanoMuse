@@ -137,6 +137,8 @@ extension NanoMuseImageGen {
     /// person picked.
     @MainActor
     static func route() -> Route {
+        // nanoMuse: Morde's disabled local-execution policy also closes legacy direct image routes.
+        guard MordeLocalExecutionPolicy.isEnabled else { return .unavailable }
         let candidates = bailianInstances()
         guard let resolved = NanoMuseModelSlots.imageValue() else { return .unavailable }
         if resolved.providerId == NanoMuseCloud.instance?.id {
@@ -192,7 +194,7 @@ extension NanoMuseImageGen {
     @MainActor
     static func providerLine() -> String {
         switch route() {
-        case .relay: return String(format: AppLocalized("Drawn by %@"), NanoMuseCloud.label)
+        case .relay: return String(format: AppLocalized("Drawn by %@"), NanoMuseCloud.displayLabel)
         case .ownKey(let k): return String(format: AppLocalized("Drawn by %@ · %@"), k.label, k.model)
         case .unavailable: return AppLocalized("No image model found on this provider. Type one below, or check again once the key is in.")
         }
@@ -202,6 +204,7 @@ extension NanoMuseImageGen {
 
     @MainActor
     static func generate(prompt: String) async throws -> UIImage {
+        guard MordeLocalExecutionPolicy.isEnabled else { throw MordeLocalExecutionDisabledError() }
         switch route() {
         case .relay:
             let model = try await relayImageModel()
@@ -217,6 +220,7 @@ extension NanoMuseImageGen {
 
     @MainActor
     static func edit(_ image: UIImage, prompt: String) async throws -> UIImage {
+        guard MordeLocalExecutionPolicy.isEnabled else { throw MordeLocalExecutionDisabledError() }
         switch route() {
         case .relay:
             let model = try await relayImageModel()
@@ -244,6 +248,7 @@ extension NanoMuseImageGen {
 
     /// One call to `multimodal-generation/generation`; the first image of the reply.
     private static func callDashScope(_ k: OwnKey, model: String, content: [[String: Any]], parameters: [String: Any], what: String) async throws -> UIImage {
+        guard MordeLocalExecutionPolicy.isEnabled else { throw MordeLocalExecutionDisabledError() }
         let host = dashScopeHost(k.baseURL)
         guard let url = URL(string: host + "/api/v1/services/aigc/multimodal-generation/generation") else {
             throw Failure(message: AppLocalized("The provider's address is not valid."))

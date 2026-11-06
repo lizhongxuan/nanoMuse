@@ -446,15 +446,13 @@ private struct FilePreviewSheet: View {
     }
 }
 
-// MARK: - Markdown preview (reuses Chat's SelectableMarkdownView)
+// MARK: - Markdown source preview
 
 private struct MarkdownFilePreview: View {
     let url: URL
     let item: FileItem
     @State private var loadState: LoadState = .loading
-    @State private var renderMode: Mode = .rendered
 
-    enum Mode { case rendered, source }
     enum LoadState {
         case loading
         case loaded(String)
@@ -470,52 +468,14 @@ private struct MarkdownFilePreview: View {
             case .failed(let msg):
                 FileLoadErrorView(item: item, message: msg)
             case .loaded(let text):
-                ScrollView {
-                    Group {
-                        if renderMode == .rendered {
-                            SelectableMarkdownView(markdown: text)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 12)
-                        } else {
-                            Text(text)
-                                .font(.system(.footnote, design: .monospaced))
-                                .textSelection(.enabled)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(16)
-                        }
-                    }
-                }
-            }
-        }
-        .toolbar {
-            if case .loaded = loadState {
-                ToolbarItem(placement: .topBarLeading) {
-                    // Single toggle button, NOT a segmented Picker.
-                    //
-                    // A `.segmented` Picker asks for the width of all its
-                    // segments, but a toolbar item on iOS 26's Liquid Glass
-                    // bar is laid out as one round glass button. The control
-                    // got squeezed into that circular slot and drew both
-                    // segments on top of each other — the reported "two
-                    // overlapping, distorted icons" (screenshot
-                    // /tmp/md_preview_toggle_bug.jpg), not an animation stuck
-                    // mid-transition.
-                    //
-                    // A plain Button showing ONE icon is what a toolbar slot
-                    // is shaped for, and it matches the icon-swap toggles
-                    // used elsewhere in the app. The icon shows the mode you
-                    // will switch TO, which is the convention for a toggle
-                    // that has no separate label.
-                    Button {
-                        renderMode = (renderMode == .rendered) ? .source : .rendered
-                    } label: {
-                        Image(systemName: renderMode == .rendered
-                              ? "chevron.left.forwardslash.chevron.right"
-                              : "doc.richtext")
-                    }
-                    .accessibilityLabel(renderMode == .rendered
-                                        ? Text("Show Source")
-                                        : Text("Show Rendered"))
+                ScrollView(.vertical) {
+                    Text(text.isEmpty ? " " : text)
+                        .font(.system(.footnote, design: .monospaced))
+                        .textSelection(.enabled)
+                        .lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(16)
                 }
             }
         }
@@ -535,15 +495,6 @@ private struct MarkdownFilePreview: View {
                 return .failed(error.localizedDescription)
             }
         }.value
-        if case .loaded(let text) = result {
-            // Rough pre-render formula count so we can correlate the
-            // MathRenderScheduler burst log below with a specific file
-            // when triaging slow previews.
-            let inlineDollars = text.reduce(0) { $0 + ($1 == "$" ? 1 : 0) }
-            let blockMarkers = text.components(separatedBy: "$$").count / 2
-            let inlineApprox = max(0, inlineDollars - blockMarkers * 2) / 2
-            AppLogger(category: "MdFilePreview").info("[MdPreview] open file=\(url.lastPathComponent) bytes=\(text.utf8.count) ~inline=\(inlineApprox) ~block=\(blockMarkers)")
-        }
         await MainActor.run { self.loadState = result }
     }
 }
@@ -1178,9 +1129,9 @@ class FileBrowserViewModel: ObservableObject {
         let fm = FileManager.default
         let dest = destURL.resolvingSymlinksInPath().standardized.path
         let roots: [(String, URL)] = [
-            ("shared", AIChatViewModel.minisSharedPersistentDir),
-            ("skills", AIChatViewModel.minisSkillsPersistentDir),
-            ("memory", AIChatViewModel.minisMemoryPersistentDir),
+            ("shared", MinisStoragePaths.minisSharedPersistentDir),
+            ("skills", MinisStoragePaths.minisSkillsPersistentDir),
+            ("memory", MinisStoragePaths.minisMemoryPersistentDir),
         ]
         for (key, rootURL) in roots {
             let rootPath = rootURL.resolvingSymlinksInPath().standardized.path

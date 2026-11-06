@@ -25,14 +25,14 @@ struct NanoMuseDataControlsView: View {
             NanoMuseSyncSection()
             if !NanoMuseCloud.isSignedIn {
                 Section {
-                    Text(AppLocalized("Sign in to nanoMuse Cloud to use it."))
+                    Text(AppLocalized("Sign in to morde Cloud to use it."))
                         .foregroundStyle(.secondary)
                 }
             } else {
                 Section {
                     Toggle(isOn: $on) {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(AppLocalized("Help improve nanoMuse's AI models"))
+                            Text(AppLocalized("Help improve morde's AI models"))
                             if let info {
                                 Text(String(format: AppLocalized("%d turns kept so far."), info.samples))
                                     .font(.footnote)
@@ -49,7 +49,7 @@ struct NanoMuseDataControlsView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         if let record {
                             // the record first: the switch below decides only what joins the training set
-                            Text(AppLocalized("nanoMuse Cloud keeps every turn of your chats with its models in full as your account's record: what went to the model, what it answered, the tools and what they returned, the pictures as files. From the 1.0.7 app on, turns answered on your own key join it too. It is your data: only your devices and whoever runs the relay can read it."))
+                            Text(AppLocalized("morde Cloud keeps every turn of your chats with its models in full as your account's record: what went to the model, what it answered, the tools and what they returned, the pictures as files. From the 1.0.7 app on, turns answered on your own key join it too. It is your data: only your devices and whoever runs the relay can read it."))
                             Text(record.turns > 0
                                 ? String(format: AppLocalized("The record holds %1$d turns of this account (%2$d run on your own keys), with %3$d pictures."), record.turns, record.own, record.files)
                                 : AppLocalized("The record holds nothing of this account yet."))

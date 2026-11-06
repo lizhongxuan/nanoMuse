@@ -41,6 +41,22 @@ export interface CloudStatus {
   error?: { code: string; message: string }
 }
 
+/** The Morde Hub installation login, independent from the nanoMuse Cloud account. */
+export interface MordeHubStatus {
+  signedIn: boolean
+  connected: boolean
+  baseURL: string
+  deviceID?: string
+  devices: { id: string; name: string; platform: 'desktop' | 'android' | 'ios'; online: boolean; revoked: boolean; expiresAt: string }[]
+  accountName?: string
+  installationID?: string
+  expiresAt?: string
+  lastError?: string
+  targetGrantVersion: number
+  grants: { screenshot: boolean; files: boolean; command: boolean; fileRoot: string | null }
+  capabilities: { screenshot: boolean; files: boolean; command: boolean }
+}
+
 const API = 'nanomuse/cloud'
 
 /** GET when there is no body (`status`, `invite` — the read-only routes), POST with one; 204 resolves to undefined. */

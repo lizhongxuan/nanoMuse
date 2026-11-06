@@ -121,7 +121,7 @@ export function relink(link: string, target: string): boolean {
     } catch {
       const left = linkTarget(link);
       throw new Error(
-        `${String((exc as Error).message ?? exc)} (in the way: ${left ?? "nothing"}; remove ${link} by hand and start nanoMuse again)`,
+        `${String((exc as Error).message ?? exc)} (in the way: ${left ?? "nothing"}; remove ${link} by hand and start Morde again)`,
       );
     }
   }

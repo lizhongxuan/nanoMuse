@@ -24,7 +24,7 @@ enum WebAppPathClassifier {
 
         // 1. Session attachments / workspace under
         //    Library/MinisChat/minis/<sid>/{attachments,workspace}/...
-        let minisBase = AIChatViewModel.minisPersistentBase.standardizedFileURL.path
+        let minisBase = MinisStoragePaths.minisPersistentBase.standardizedFileURL.path
         if target.hasPrefix(minisBase + "/") {
             let rel = String(target.dropFirst(minisBase.count + 1))
             // <sid>/<subdir>/<rest>
@@ -50,7 +50,7 @@ enum WebAppPathClassifier {
         }
 
         // 2. Shared persistent dir.
-        let sharedBase = AIChatViewModel.minisSharedPersistentDir.standardizedFileURL.path
+        let sharedBase = MinisStoragePaths.minisSharedPersistentDir.standardizedFileURL.path
         if target.hasPrefix(sharedBase + "/") {
             let rel = String(target.dropFirst(sharedBase.count + 1))
             return Classified(scope: .shared, scopeContext: nil, htmlPath: rel)

@@ -1,9 +1,7 @@
 import SwiftUI
 
-/// The sections of the account page under the identity line, in the order of the Android
-/// account screen: the password, the devices holding a key, a star row (once, as the policy
-/// says), the pool in yuan with the ways on when it runs low (your own key, an invitation — and
-/// a star, once), the invite code, what was used by kind and by model, the account's timeline.
+/// The sections of the account page under the identity line: password, devices, a star row,
+/// allowance, invite code, usage and the account timeline.
 /// Lives inside `NanoMuseCloudView`'s `Form`, which adds the links and the ways out below.
 /// Everything comes from the relay each time the page opens; nothing of it is kept on the phone.
 struct NanoMuseAccountSections: View {
@@ -16,10 +14,7 @@ struct NanoMuseAccountSections: View {
     @State private var error: String?
     @State private var usageScope = 0
     @State private var starAsk = false
-    /// The allowance is used up and the policy says this is a moment to ask: the star row under the ways on.
     @State private var exhaustedAsk = false
-    /// The vendor (or plan) whose sheet is open, from the ways on.
-    @State private var pick: NanoMuseVendorPick?
 
     var body: some View {
         Group {
@@ -38,7 +33,6 @@ struct NanoMuseAccountSections: View {
             if !events.isEmpty { timelineSection }
         }
         .task { await load() }
-        .sheet(item: $pick) { p in NanoMuseVendorSheet(vendor: p.vendor, signIn: p.auth) }
     }
 
     // MARK: - Allowance
@@ -66,7 +60,27 @@ struct NanoMuseAccountSections: View {
                         }
                     }
                     .padding(.vertical, 4)
-                    if spend.low { waysOn(spend) }
+                    if spend.low {
+                        // nanoMuse: Morde keeps its provider-managed allowance and does not add a personal provider here.
+                        Text(AppLocalized("Your sign-in and your devices keep working either way."))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        // nanoMuse: Keep the exhaustion star prompt without the removed provider sign-in choices.
+                        if spend.exhausted && exhaustedAsk {
+                            Label {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(NanoMuseStar.words(for: .exhausted))
+                                        .font(.caption).foregroundStyle(.secondary)
+                                    HStack(spacing: 12) {
+                                        Button(AppLocalized("Star on GitHub")) { NanoMuseStar.open() }
+                                            .font(.caption.weight(.medium))
+                                        Button(AppLocalized("I already starred")) { NanoMuseStar.markStarred(); exhaustedAsk = false }
+                                            .font(.caption.weight(.medium))
+                                    }
+                                }
+                            } icon: { Image(systemName: "star") }
+                        }
+                    }
                 } else if let spend = sheet.spend {
                     Text(String(format: AppLocalized("Spent so far: %@. No allowance figure from this relay."), yuan(spend.total)))
                         .font(.subheadline)
@@ -87,45 +101,6 @@ struct NanoMuseAccountSections: View {
         } header: {
             Text(AppLocalized("Allowance"))
         }
-    }
-
-    /// When the pool is low or spent: the ways on as the relay lists them for the region
-    /// (`spend.guidance`, contract C11; the bundled catalogue when it sent none) — your own
-    /// key, a plan you already pay for, an invitation — and, once, a star.
-    @ViewBuilder
-    private func waysOn(_ spend: NanoMuseSheet.Spend) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(spend.exhausted
-                ? AppLocalized("The allowance is used up. Two ways to keep going, and a third if you like the project.")
-                : AppLocalized("Most of the allowance is spent. Good time to set up a way on."))
-                .font(.subheadline)
-            // Contract C5: mainland China hears about Alibaba Cloud Bailian first; everyone else about OpenRouter.
-            let ways = NanoMuseWays.resolve(guidance: spend.guidance ?? NanoMuseAllowance.storedGuidance(), catalogue: NanoMuseCatalogue.bundled, mainland: NanoMuseRegion.isMainland, chinese: NanoMuseCatalogue.chinese)
-            NanoMuseWaysList(
-                ways: ways,
-                inviteBonusCny: spend.inviteBonusCny ?? sheet?.invite?.bonusCny ?? 5,
-                inviteeBonusCny: spend.inviteeBonusCny,
-                inviteBelow: sheet?.invite != nil,
-                docs: spend.ownKeyDocs ?? (ways.docs.isEmpty ? NanoMuseLinks.ownKeyDocs : ways.docs),
-                compact: false
-            ) { pick = $0 }
-            // nanoMuse: the policy's gate (NanoMuseStar / contract C1), not a bare "starred" check
-            if spend.exhausted && exhaustedAsk {
-                Label {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(NanoMuseStar.words(for: .exhausted))
-                            .font(.caption).foregroundStyle(.secondary)
-                        HStack(spacing: 12) {
-                            Button(AppLocalized("Star on GitHub")) { NanoMuseStar.open() }
-                                .font(.caption.weight(.medium))
-                            Button(AppLocalized("I already starred")) { NanoMuseStar.markStarred(); exhaustedAsk = false }
-                                .font(.caption.weight(.medium))
-                        }
-                    }
-                } icon: { Image(systemName: "star") }
-            }
-        }
-        .padding(.vertical, 4)
     }
 
     // MARK: - Invite
@@ -392,5 +367,299 @@ struct NanoMuseStarCard: View {
             }
         }
         .padding(.vertical, 4)
+    }
+}
+
+// Kept as a source-compatible name for the existing Morde settings bridge.
+typealias NanoMuseMordePersonalDataQuota = MordePersonalDataQuota
+
+enum NanoMuseMordeQuotaLoadError: LocalizedError {
+    case invalidResponse
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidResponse: return "The Morde personal-data quota response is invalid."
+        }
+    }
+}
+
+/// Add this section to Morde account settings. The default loader uses the typed bridge for
+/// GET /api/personal-data/quota; injection remains available to keep the view unit-testable.
+struct NanoMuseMordePersonalSyncSection: View {
+    typealias QuotaLoader = @MainActor () async throws -> MordePersonalDataQuota
+
+    @ObservedObject private var authorization = MordeShellAuthorization.shared
+    @ObservedObject private var sync = NanoMuseMordeProfileSync.shared
+    @State private var quota: MordePersonalDataQuota?
+    @State private var quotaError: String?
+    @State private var quotaLoading = false
+    @State private var quotaGeneration = UUID()
+    private let quotaLoader: QuotaLoader
+
+    init(quotaLoader: @escaping QuotaLoader = {
+        try await MordeShellAuthorization.shared.personalDataQuota()
+    }) {
+        self.quotaLoader = quotaLoader
+    }
+
+    private var hasPersonalScope: Bool {
+        authorization.signedIn && authorization.personalDataScopeKey != nil
+    }
+
+    var body: some View {
+        Group {
+            Section {
+                if hasPersonalScope {
+                    Toggle("Sync Morde personal data", isOn: Binding(
+                        get: { sync.syncEnabled },
+                        set: { sync.setSyncEnabled($0) }
+                    ))
+                    if sync.isFlushing {
+                        Label("Syncing personal data…", systemImage: "arrow.triangle.2.circlepath")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
+                    if let pending = sync.pending {
+                        Label("Pending \(pending.objectType) change · \(pending.objectID)", systemImage: "clock")
+                            .font(.footnote)
+                        if !sync.syncEnabled {
+                            Text("Sync is paused. The pending change remains on this device.")
+                                .font(.footnote).foregroundStyle(.secondary)
+                        }
+                        Button("Retry personal-data sync") { Task { await sync.retry() } }
+                            .disabled(!sync.syncEnabled || sync.isFlushing || pending.scopeKey != authorization.personalDataScopeKey)
+                    } else if let pending = sync.legacyPending {
+                        Label("A legacy profile change is waiting to sync.", systemImage: "clock")
+                            .font(.footnote)
+                        if !sync.syncEnabled {
+                            Text("Sync is paused. The pending change remains on this device.")
+                                .font(.footnote).foregroundStyle(.secondary)
+                        }
+                        Button("Retry personal-data sync") { Task { await sync.retry() } }
+                            .disabled(!sync.syncEnabled || sync.isFlushing || pending.scopeKey != authorization.personalDataScopeKey)
+                    } else if let error = sync.outboxError {
+                        Label("The pending personal-data change could not be read: \(error)", systemImage: "exclamationmark.triangle")
+                            .font(.footnote).foregroundStyle(.red)
+                    } else if let error = sync.queueError {
+                        Label("The local file was saved, but could not be queued for sync: \(error)", systemImage: "exclamationmark.triangle")
+                            .font(.footnote).foregroundStyle(.red)
+                    } else if let error = sync.lastError {
+                        Label("Personal-data sync failed: \(error)", systemImage: "exclamationmark.triangle")
+                            .font(.footnote).foregroundStyle(.red)
+                    } else {
+                        Text(sync.syncEnabled ? "No pending personal-data changes." : "Sync is paused. New changes will stay on this device.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
+                    if let error = sync.queueError, (sync.pending != nil || sync.legacyPending != nil) {
+                        Label("The latest local file change could not be queued: \(error)", systemImage: "exclamationmark.triangle")
+                            .font(.footnote).foregroundStyle(.red)
+                        if sync.pending != nil {
+                            Text("The newest edit remains on this device. Save the file again after the pending change finishes syncing.")
+                                .font(.footnote).foregroundStyle(.secondary)
+                        }
+                    }
+                    if let error = sync.lastError, (sync.pending != nil || sync.legacyPending != nil) {
+                        Label("Personal-data sync failed: \(error)", systemImage: "exclamationmark.triangle")
+                            .font(.footnote).foregroundStyle(.red)
+                    }
+                } else {
+                    Text("Sign in to Morde to manage personal-data sync. Pending changes remain on this device.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+            } header: {
+                Text("Personal data sync")
+            } footer: {
+                Text("Pausing stops personal-data changes from syncing. It does not revoke schedules or tasks already accepted by Morde.")
+            }
+
+            Section {
+                if !hasPersonalScope {
+                    Text("Sign in to Morde to view this account’s quota.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                } else if let quota {
+                    let reserved = quota.reserved_bytes
+                    let used = quota.used_bytes
+                    let consumed = used + reserved
+                    VStack(alignment: .leading, spacing: 6) {
+                        ProgressView(value: quota.quota_bytes > 0
+                            ? min(Double(consumed) / Double(quota.quota_bytes), 1)
+                            : 0)
+                        Text("\(byteCount(used)) used, \(byteCount(reserved)) reserved of \(byteCount(quota.quota_bytes))")
+                            .font(.subheadline)
+                        Text("\(byteCount(quota.remaining_bytes)) remaining · max attachment \(byteCount(quota.max_attachment_bytes))")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 2)
+                    Button { Task { await refreshQuota() } } label: {
+                        Label("Refresh quota", systemImage: "arrow.clockwise")
+                    }
+                        .disabled(quotaLoading)
+                } else if quotaLoading {
+                    HStack { ProgressView(); Text("Loading personal-data quota…").foregroundStyle(.secondary) }
+                } else if let quotaError {
+                    Label("Could not load personal-data quota: \(quotaError)", systemImage: "exclamationmark.triangle")
+                        .font(.footnote).foregroundStyle(.red)
+                    Button { Task { await refreshQuota() } } label: {
+                        Label("Retry quota query", systemImage: "arrow.clockwise")
+                    }
+                        .disabled(quotaLoading)
+                } else {
+                    Text("Personal-data quota has not been checked.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                    Button { Task { await refreshQuota() } } label: {
+                        Label("Check quota", systemImage: "arrow.clockwise")
+                    }
+                        .disabled(quotaLoading)
+                }
+            } header: {
+                Text("Personal data quota")
+            } footer: {
+                if let quota { Text("Quota version \(quota.version).") }
+            }
+        }
+        .onAppear {
+            sync.refresh()
+            Task { await sync.retry() }
+        }
+        .nmOnChange(of: authorization.personalDataScopeKey) { _ in
+            sync.refresh()
+            Task { await sync.retry() }
+        }
+        .nmOnChange(of: authorization.signedIn) { _ in sync.refresh() }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+            Task { await sync.retry() }
+        }
+        .task(id: authorization.personalDataScopeKey) {
+            quota = nil
+            quotaError = nil
+            guard hasPersonalScope else { return }
+            await refreshQuota()
+        }
+    }
+
+    @MainActor
+    private func refreshQuota() async {
+        guard hasPersonalScope, let scope = authorization.personalDataScopeKey else { return }
+        let generation = UUID()
+        quotaGeneration = generation
+        quotaLoading = true
+        quotaError = nil
+        quota = nil
+        do {
+            let value = try await quotaLoader()
+            guard quotaGeneration == generation, authorization.personalDataScopeKey == scope else { return }
+            guard value.isValid else { throw NanoMuseMordeQuotaLoadError.invalidResponse }
+            quota = value
+        } catch {
+            guard quotaGeneration == generation, authorization.personalDataScopeKey == scope else { return }
+            quotaError = error.localizedDescription
+        }
+        if quotaGeneration == generation { quotaLoading = false }
+    }
+
+    private func byteCount(_ value: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: value, countStyle: .file)
+    }
+}
+
+struct NanoMuseMordeProfileView: View {
+    @ObservedObject private var authorization = MordeShellAuthorization.shared
+    @ObservedObject private var sync = NanoMuseMordeProfileSync.shared
+    @Environment(\.dismiss) private var dismiss
+    @State private var name = "Muse"
+    @State private var description = ""
+    @State private var style = "muse"
+    @State private var revision: Int64 = 0
+    @State private var isLoading = false
+    @State private var isSaving = false
+    @State private var error: String?
+    @State private var saved = false
+
+    var body: some View {
+        Form {
+            Section("Personal profile") {
+                TextField(AppLocalized("Display name"), text: $name)
+                    .textInputAutocapitalization(.words)
+                TextField(AppLocalized("Description"), text: $description, axis: .vertical)
+                    .lineLimit(2...4)
+                Picker(AppLocalized("Style"), selection: $style) {
+                    Text("Muse").tag("muse")
+                    Text("Flat").tag("flat")
+                    Text("Clay").tag("clay")
+                    Text("Watercolor").tag("watercolor")
+                    Text("Pixel").tag("pixel")
+                    Text("Line").tag("line")
+                    Text("Sticker").tag("sticker")
+                }
+            }
+            Section {
+                if isLoading { ProgressView(AppLocalized("Loading Morde profile…")) }
+                else { Button(AppLocalized("Reload cloud profile")) { Task { await load() } } }
+                if sync.pending != nil {
+                    Label(sync.syncEnabled ? AppLocalized("Profile change is waiting to sync.") : AppLocalized("Sync is paused; this profile change stays on this device."), systemImage: "clock")
+                        .font(.footnote)
+                    Button(AppLocalized("Retry personal data sync")) { Task { await sync.retry() } }
+                        .disabled(!sync.syncEnabled || sync.isFlushing)
+                }
+                if let message = sync.lastError { Label(message, systemImage: "exclamationmark.triangle").font(.footnote).foregroundStyle(.red) }
+                if let error { Label(error, systemImage: "exclamationmark.triangle").font(.footnote).foregroundStyle(.red) }
+                if saved { Label(AppLocalized("Profile change queued for Morde sync."), systemImage: "checkmark.circle").font(.footnote).foregroundStyle(.secondary) }
+            }
+        }
+        .navigationTitle(AppLocalized("Personal profile"))
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button(AppLocalized("Save")) { save() }
+                    .disabled(isLoading || isSaving || !authorization.signedIn || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .task(id: authorization.personalDataScopeKey) { await load() }
+    }
+
+    @MainActor
+    private func load() async {
+        guard authorization.signedIn, let scope = authorization.personalDataScopeKey else {
+            name = "Muse"
+            description = ""
+            revision = 0
+            return
+        }
+        isLoading = true
+        error = nil
+        sync.refresh()
+        do {
+            let profile = try await authorization.personalProfile()
+            guard authorization.personalDataScopeKey == scope else { return }
+            if let profile {
+                name = profile.body.name
+                description = profile.body.description ?? ""
+                style = profile.body.style ?? "muse"
+                revision = profile.revision
+            } else {
+                name = "Muse"
+                description = ""
+                style = "muse"
+                revision = 0
+            }
+        } catch {
+            if authorization.personalDataScopeKey == scope { self.error = error.localizedDescription }
+        }
+        isLoading = false
+    }
+
+    private func save() {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedDescription = description.trimmingCharacters(in: .whitespacesAndNewlines)
+        let body = MordePersonalProfileBody(name: trimmedName, avatar: "dragon", emoji: nil, color: nil,
+            description: trimmedDescription.isEmpty ? nil : trimmedDescription, style: style)
+        guard body.isValidForWrite else { error = AppLocalized("The profile fields are outside the allowed limits."); return }
+        isSaving = true
+        error = nil
+        saved = false
+        do {
+            _ = try sync.enqueue(body, baseRevision: revision)
+            saved = true
+        } catch { self.error = error.localizedDescription }
+        isSaving = false
     }
 }

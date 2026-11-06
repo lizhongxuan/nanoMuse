@@ -36,6 +36,8 @@ extension AIChatViewModel {
     /// Retries up to 3 times across agent loop iterations if the title is still missing.
     /// Skips if a generation request is already in-flight to avoid wasting tokens.
     func generateSessionTitleIfNeeded(toolEntries: [(name: String, args: [String: Any])] = []) {
+        // nanoMuse: Prevent title generation from starting local model work.
+        guard requireLocalExecution() else { return }
         guard let sessionId, titleGenAttempts < 3, !isTitleGenerating else { return }
 
         let userMessages = messages.filter { $0.role == .user }
@@ -209,6 +211,8 @@ extension AIChatViewModel {
     /// Regenerate the title and category for a session using its stored messages.
     /// Uses the first user/assistant pair + last user/assistant pair for better context.
     static func regenerateSessionTitle(sessionId: String) async throws {
+        // nanoMuse: Block direct title generation before loading model context.
+        guard MordeLocalExecutionPolicy.isEnabled else { throw MordeLocalExecutionDisabledError() }
         let rawMessages = await ChatStore.shared.loadMessages(sessionId: sessionId)
 
         let userMessages = rawMessages.filter { $0.role == .user }
@@ -329,6 +333,8 @@ extension AIChatViewModel {
     /// categories — titles are already AI-written semantic summaries, so no
     /// message content crosses into the sub model from this path.
     static func suggestFolder(forSessionIds sessionIds: [String]) async throws -> FolderSuggestion {
+        // nanoMuse: Block folder suggestions that would call a local submodel.
+        guard MordeLocalExecutionPolicy.isEnabled else { throw MordeLocalExecutionDisabledError() }
         // [T-ios-folder-suggest-retry] This path had NO logging at all, so a
         // user report of "works once, then always fails" left nothing in the
         // log to hunt with (the reporter searched sugg/generateGroupName and
@@ -473,6 +479,8 @@ extension AIChatViewModel {
         folderNames: [String] = [],
         folderContext: [String] = []
     ) async throws -> (String, String?, String?) {
+        // nanoMuse: Keep the shared title submodel call closed to local execution.
+        guard MordeLocalExecutionPolicy.isEnabled else { throw MordeLocalExecutionDisabledError() }
         guard let entry = subEntry else {
             throw NSError(domain: "TitleGen", code: -1, userInfo: [NSLocalizedDescriptionKey: "No sub model available"])
         }

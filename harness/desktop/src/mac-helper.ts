@@ -46,9 +46,10 @@ import { join } from "node:path";
  */
 
 export const HELPER_NAME = "nanoMuse Computer Use";
+export const HELPER_DISPLAY_NAME = "Morde Computer Use";
 export const HELPER_BUNDLE_ID = "io.github.nanomuse.desktop.computer-use";
 /** The permission text when the helper is the one that needs the switch (no app restart involved). */
-export const HELPER_SCREEN_PERMISSION_TEXT = "macOS: switch on nanoMuse Computer Use under System Settings → Privacy & Security → Screen Recording. The helper restarts by itself; the app does not need to.";
+export const HELPER_SCREEN_PERMISSION_TEXT = "macOS: switch on Morde Computer Use under System Settings → Privacy & Security → Screen Recording. The helper restarts by itself; the app does not need to.";
 
 export type HelperScreenState = "granted" | "denied" | "unknown";
 
@@ -137,7 +138,7 @@ export interface QuarantineOutcome {
 }
 
 /** The text of a flag that could not be removed — the one case where the person has to act. */
-export const QUARANTINE_KEPT_TEXT = "the helper bundle carries macOS's quarantine flag and it could not be removed; move nanoMuse to the Applications folder and open it again";
+export const QUARANTINE_KEPT_TEXT = "the helper bundle carries macOS's quarantine flag and it could not be removed; move Morde to the Applications folder and open it again";
 
 /** A path under Gatekeeper's App Translocation: a read-only copy with a random name, different on every launch. */
 export function translocated(path: string): boolean {
@@ -326,7 +327,7 @@ export class MacHelper {
       // the app itself under App Translocation: the helper inside it is read-only and
       // quarantined too, and would start translocated in turn — grants to a path that changes
       // every launch are no grants; better the plain reason than a helper that half works
-      if (translocated(appPath)) throw new Error("nanoMuse is running from a temporary copy macOS made of it (App Translocation); move it to the Applications folder and open it again");
+      if (translocated(appPath)) throw new Error("Morde is running from a temporary copy macOS made of it (App Translocation); move it to the Applications folder and open it again");
       const quarantine = (this.options.quarantine ?? clearQuarantine)(appPath);
       if (quarantine.result === "removed") this.log("removed the quarantine flag from the bundled helper, so macOS starts it in place and the privacy panes list it");
       else if (quarantine.result === "kept") throw new Error(`${QUARANTINE_KEPT_TEXT}${quarantine.detail ? ` (${quarantine.detail})` : ""}`);
@@ -350,7 +351,7 @@ export class MacHelper {
       // the token file stays (0600, in the app's own data dir) until stop(): a shell that
       // dies without /quit leaves it for the next launch's quitStale()
       const status = await this.status();
-      this.log(`${HELPER_NAME} ${status.version ?? "?"} (pid ${status.pid ?? "?"}) at ${this.base} — screen ${status.screen}${status.screenDetail ? ` (${status.screenDetail})` : ""}, accessibility ${status.accessibility}, capture ${status.capture ?? "?"}`);
+      this.log(`${HELPER_DISPLAY_NAME} ${status.version ?? "?"} (pid ${status.pid ?? "?"}) at ${this.base} — screen ${status.screen}${status.screenDetail ? ` (${status.screenDetail})` : ""}, accessibility ${status.accessibility}, capture ${status.capture ?? "?"}`);
       this.lastFailure = "";
       this.lastFailureAt = 0;
       this.watchStatus();
@@ -361,7 +362,7 @@ export class MacHelper {
       this.lastStatus = null;
       this.lastFailure = String((exc as Error).message ?? exc);
       this.lastFailureAt = Date.now();
-      this.log(`${HELPER_NAME} did not start (${this.lastFailure}) — screenshots and actions are refused with this reason until it does`);
+      this.log(`${HELPER_DISPLAY_NAME} did not start (${this.lastFailure}) — screenshots and actions are refused with this reason until it does`);
       return false;
     }
   }

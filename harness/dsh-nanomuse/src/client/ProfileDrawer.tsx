@@ -22,7 +22,7 @@ import { useOwnClipChooser } from './OwnClipChooser.tsx'
 import { useLive, type LiveProfile } from './live.ts'
 import type { ChatListState, ChatStatus } from './MuseChats.tsx'
 import { usePrefs } from './prefs.ts'
-import { useRooms, type ActivityRecord, type GoalAutomation } from './rooms.ts'
+import { roomsCall, useRooms, type ActivityRecord, type GoalAutomation } from './rooms.ts'
 import { TaskDetail } from './TaskDetail.tsx'
 import { ago, clockLabel, dayLabel, grantScopeLine } from './ui.tsx'
 import { standingGrants, type Grant } from '../desk.ts'
@@ -54,6 +54,10 @@ export function makeProfileDrawer(t: Translate, stop: (sessionId: string) => Pro
 function Drawer({ t, stop, openSchedules, useSessions, useSessionStatus }: ProfileDrawerProps): ReactNode {
   const live = useLive()
   const rooms = useRooms()
+  const mordeProfile = rooms.mordeProfile?.body ?? { name: 'nanoMuse', avatar: 'dragon' as const, description: '', style: '' }
+  const profile: LiveProfile = live.mordeHub?.signedIn
+    ? { ...live.profile, name: mordeProfile.name, avatar: mordeProfile.avatar, emoji: mordeProfile.avatar === 'emoji' ? mordeProfile.emoji : '', color: mordeProfile.avatar === 'emoji' ? mordeProfile.color : '', description: mordeProfile.description, style: mordeProfile.style, rev: rooms.mordeProfile?.revision ?? 0, faceId: '', connectors: [] }
+    : live.profile
   const prefs = usePrefs()
   const [tab, setTab] = useState<Tab>('activity')
   const [editing, setEditing] = useState<'none' | 'name' | 'look'>('none')
@@ -80,7 +84,7 @@ function Drawer({ t, stop, openSchedules, useSessions, useSessionStatus }: Profi
   }, [])
   useEffect(() => { panel.current?.focus() }, [])
 
-  const name = live.profile.name || t('brand')
+  const name = profile.name || t('brand')
   // the status line under the name follows what the agent is doing right now
   const running = rooms.activity.find((r) => r.status === 'running' || r.status === 'waiting')
   // "online" as on the phone: the agent answers here; the account's state is a matter for Settings
@@ -91,6 +95,10 @@ function Drawer({ t, stop, openSchedules, useSessions, useSessionStatus }: Profi
   // the phone's "Change avatar": the words land in the chat and the avatar flow takes them from there
   const changeAvatar = () => {
     setMenu(false)
+    if (live.mordeHub?.signedIn) {
+      setEditing('look')
+      return
+    }
     profileBus.close()
     prefillComposer(t('pfChangeAvatarPrefill'))
   }
@@ -103,12 +111,12 @@ function Drawer({ t, stop, openSchedules, useSessions, useSessionStatus }: Profi
   ]
 
   let body: ReactNode
-  if (editing === 'name') body = h(NameEditor, { t, profile: live.profile, onDone: () => setEditing('none') })
-  else if (editing === 'look') body = h(LookEditor, { t, profile: live.profile, onDone: () => setEditing('none') })
+  if (editing === 'name') body = h(NameEditor, { t, profile, onDone: () => setEditing('none') })
+  else if (editing === 'look') body = h(LookEditor, { t, profile, onDone: () => setEditing('none') })
   else if (tab === 'activity') body = h(Activity, { t, name, stop, useSessions, open: (id) => setDetail(id) })
   else if (tab === 'approvals') body = h(Approvals, { t, name, approvals: prefs.approvals, grants: live.grants, goneSchedules: live.goneSchedules, chatTasks: live.chatTasks })
   else if (tab === 'reminders') body = h(Reminders, { t, name, openSchedules: () => { profileBus.close(); openSchedules() } })
-  else body = h(Identity, { t, name, onEditName: () => setEditing('name') })
+  else body = h(Identity, { t, name, profile, onEditName: () => setEditing('name') })
 
   return h('aside', { ref: panel, tabIndex: -1, className: 'nm-pf', role: 'complementary', 'aria-label': name },
     h('div', { className: 'nm-pf-top', 'data-window-drag': true },
@@ -119,7 +127,7 @@ function Drawer({ t, stop, openSchedules, useSessions, useSessionStatus }: Profi
       h('div', { className: 'nm-pf-face' },
         // the face itself opens the same menu as the pen (as on the phone): the look, the name, the studio
         h('button', { type: 'button', className: 'nm-pf-face-btn', 'aria-label': t('pfChangeLook'), 'aria-haspopup': 'menu', 'aria-expanded': menu, onClick: () => setMenu((m) => !m) },
-          h(Avatar, { size: 86, profile: live.profile, mood: running ? 'working' : 'idle' })),
+          h(Avatar, { size: 86, profile, mood: running ? 'working' : 'idle' })),
         h('button', { type: 'button', className: 'nm-pf-pen', 'aria-label': t('pfEditName'), 'aria-haspopup': 'menu', 'aria-expanded': menu, onClick: () => setMenu((m) => !m) }, h(IconPencil, { size: 13 })),
         menu
           ? h('div', { className: 'nm-menu nm-pf-menu', role: 'menu' },
@@ -129,7 +137,7 @@ function Drawer({ t, stop, openSchedules, useSessions, useSessionStatus }: Profi
               live.ownClip
                 ? h('button', { type: 'button', role: 'menuitem', className: 'nm-menu-item', onClick: () => { setMenu(false); void call('own-clip/clear', {}).catch(() => undefined) } }, h('span', { className: 'nm-menu-item-label' }, t('ocDefault')))
                 : null,
-              h('button', { type: 'button', role: 'menuitem', className: 'nm-menu-item', onClick: () => { setMenu(false); profileBus.close(); studioBus.open?.(live.profile.description || '', live.profile.style || 'muse') } }, h('span', { className: 'nm-menu-item-label' }, t('pfAvatarStudio'))),
+              live.mordeHub?.signedIn ? null : h('button', { type: 'button', role: 'menuitem', className: 'nm-menu-item', onClick: () => { setMenu(false); profileBus.close(); studioBus.open?.(profile.description || '', profile.style || 'muse') } }, h('span', { className: 'nm-menu-item-label' }, t('pfAvatarStudio'))),
               h('button', { type: 'button', role: 'menuitem', className: 'nm-menu-item', onClick: () => { setMenu(false); setEditing('look') } }, h('span', { className: 'nm-menu-item-label' }, t('pfChangeLook'))))
           : null),
       h('div', { className: 'nm-pf-name' }, name),
@@ -308,16 +316,15 @@ function Reminders({ t, name, openSchedules }: { t: Translate; name: string; ope
     h('div', { className: 'nm-pf-foot' }, h('button', { type: 'button', className: 'nm-pill nm-pill-ghost nm-pill-sm', onClick: openSchedules }, t('pfManageRoutines'))))
 }
 
-function Identity({ t, name, onEditName }: { t: Translate; name: string; onEditName(): void }): ReactNode {
+function Identity({ t, name, profile, onEditName }: { t: Translate; name: string; profile: LiveProfile; onEditName(): void }): ReactNode {
   const rooms = useRooms()
-  const live = useLive()
   const memoryAt = rooms.memory.reduce((max, m) => Math.max(max, m.at), 0)
   const stamp = (at: number) => (at ? new Date(at).toLocaleDateString(rooms.lang || undefined, { year: '2-digit', month: '2-digit', day: '2-digit' }) : t('pfDocUntouched'))
   const openDoc = (doc: 'identity' | 'soul' | 'memory') => { win.openDoc({ kind: 'own', doc }); win.touchRecent(`own:${doc}`, doc === 'identity' ? 'IDENTITY.md' : doc === 'soul' ? 'SOUL.md' : 'MEMORY.md') }
   return h('div', { className: 'nm-pf-stack' },
     h('div', { className: 'nm-pf-card' },
       h('div', { className: 'nm-pf-card-name' }, name),
-      live.profile.description ? h('div', { className: 'nm-pf-card-sub' }, live.profile.description) : null,
+      profile.description ? h('div', { className: 'nm-pf-card-sub' }, profile.description) : null,
       h('div', { className: 'nm-pf-card-actions' },
         h('button', { type: 'button', className: 'nm-pill nm-pill-ghost nm-pill-sm nm-pill-wide', onClick: () => openDoc('identity') }, h(IconPencil, { size: 14 }), t('pfEdit')),
         h('button', { type: 'button', className: 'nm-pill nm-pill-ghost nm-pill-sm', onClick: onEditName }, t('pfEditName')))),
@@ -330,10 +337,11 @@ function Identity({ t, name, onEditName }: { t: Translate; name: string; onEditN
       h('div', { className: 'nm-pf-doc-sub' }, rooms.memory.length ? t('pfMemoryCount', { n: rooms.memory.length }) : t('pfDocOpen')),
       h('div', { className: 'nm-pf-doc-foot' }, h('span', null, stamp(memoryAt)), h('span', { 'aria-hidden': true }, '♥'))),
     h('p', { className: 'nm-pf-empty' }, t('pfHandleWithCare', { name })),
-    live.profile.avatar === 'face' ? h('p', { className: 'nm-pf-empty' }, t('pfFaceNote')) : null)
+    profile.avatar === 'face' ? h('p', { className: 'nm-pf-empty' }, t('pfFaceNote')) : null)
 }
 
 function NameEditor({ t, profile, onDone }: { t: Translate; profile: LiveProfile; onDone(): void }): ReactNode {
+  const live = useLive()
   const [value, setValue] = useState(profile.name)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | undefined>()
@@ -343,7 +351,8 @@ function NameEditor({ t, profile, onDone }: { t: Translate; profile: LiveProfile
     if (!name) return
     setBusy(true)
     setError(undefined)
-    call('profile', { name })
+    const saving = live.mordeHub?.signedIn ? roomsCall('profile/update', { name }) : call('profile', { name })
+    saving
       .then(() => onDone())
       .catch((err: unknown) => setError(failureText(t, err)))
       .finally(() => setBusy(false))
@@ -358,6 +367,7 @@ function NameEditor({ t, profile, onDone }: { t: Translate; profile: LiveProfile
 }
 
 function LookEditor({ t, profile, onDone }: { t: Translate; profile: LiveProfile; onDone(): void }): ReactNode {
+  const live = useLive()
   const [avatar, setAvatar] = useState<'dragon' | 'emoji'>(profile.avatar === 'emoji' ? 'emoji' : 'dragon')
   const [emoji, setEmoji] = useState(profile.emoji || '✨')
   const [color, setColor] = useState(profile.color || '#0064d4')
@@ -367,7 +377,9 @@ function LookEditor({ t, profile, onDone }: { t: Translate; profile: LiveProfile
   const save = () => {
     setBusy(true)
     setError(undefined)
-    call('profile', avatar === 'emoji' ? { avatar, emoji, color } : { avatar })
+    const patch = avatar === 'emoji' ? { avatar, emoji, color } : { avatar }
+    const saving = live.mordeHub?.signedIn ? roomsCall('profile/update', patch) : call('profile', patch)
+    saving
       .then(() => onDone())
       .catch((err: unknown) => setError(failureText(t, err)))
       .finally(() => setBusy(false))
@@ -377,7 +389,7 @@ function LookEditor({ t, profile, onDone }: { t: Translate; profile: LiveProfile
     h('div', { className: 'nm-seg', role: 'radiogroup' },
       h('button', { type: 'button', role: 'radio', 'aria-checked': avatar === 'dragon', className: `nm-seg-btn nm-seg-text${avatar === 'dragon' ? ' nm-active' : ''}`, onClick: () => setAvatar('dragon') }, t('lookDragon')),
       h('button', { type: 'button', role: 'radio', 'aria-checked': avatar === 'emoji', className: `nm-seg-btn nm-seg-text${avatar === 'emoji' ? ' nm-active' : ''}`, onClick: () => setAvatar('emoji') }, t('lookEmoji')),
-      h('button', { type: 'button', role: 'radio', 'aria-checked': false, className: 'nm-seg-btn nm-seg-text', onClick: () => { onDone(); profileBus.close(); studioBus.open?.(profile.description || '', profile.style || 'muse') } }, t('lookDraw'))),
+      live.mordeHub?.signedIn ? null : h('button', { type: 'button', role: 'radio', 'aria-checked': false, className: 'nm-seg-btn nm-seg-text', onClick: () => { onDone(); profileBus.close(); studioBus.open?.(profile.description || '', profile.style || 'muse') } }, t('lookDraw'))),
     avatar === 'emoji'
       ? h('div', { className: 'nm-pf-stack' },
           h('label', { className: 'nm-pf-label' }, t('pfEmoji')),

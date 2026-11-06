@@ -143,6 +143,7 @@ struct LogManagementView: View {
                 }
             }
 
+#if !MINIS_CLOUD_ONLY
             if #available(iOS 17.0, *) {
                 Section {
                     NavigationLink {
@@ -157,6 +158,7 @@ struct LogManagementView: View {
                     }
                 }
             }
+#endif
 
             if !vm.logFiles.isEmpty {
                 Section {

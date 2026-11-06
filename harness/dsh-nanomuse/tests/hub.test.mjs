@@ -2,8 +2,12 @@
 // their results/events/errors, incoming calls answered, the device list,
 // reconnect after a drop, and a refused key.
 import assert from 'node:assert/strict'
+import { createServer } from 'node:http'
+import { createRequire } from 'node:module'
 import { test } from 'node:test'
 import { helloLlm, HubClient, HubError } from '../lib/hub.js'
+
+const { WebSocketServer } = createRequire(import.meta.url)('ws')
 
 const OPEN = 1
 
@@ -86,6 +90,71 @@ test('hello carries the key; welcome brings the device list', async () => {
   assert.equal(h.client.connected, false)
 })
 
+test('Morde bearer mode authenticates the socket header and sends a credential-free hello', async () => {
+  const server = createServer()
+  const wss = new WebSocketServer({ noServer: true })
+  let authorization
+  let hello
+  server.on('upgrade', (request, socket, head) => {
+    authorization = request.headers.authorization
+    wss.handleUpgrade(request, socket, head, (connection) => wss.emit('connection', connection, request))
+  })
+  wss.on('connection', (connection) => {
+    connection.once('message', (data) => {
+      hello = JSON.parse(String(data))
+      connection.send(JSON.stringify({ type: 'welcome', device_id: 'i1234567', devices: [] }))
+    })
+  })
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+  const address = server.address()
+  const client = new HubClient({
+    url: `ws://127.0.0.1:${address.port}/api/hub`,
+    auth: 'bearer',
+    key: async () => 'chc_test-secret',
+    pingMs: 100_000,
+    backoffMs: { min: 5, max: 20 },
+  })
+  const connectedState = new Promise((resolve) => client.onState(() => { if (client.connected) resolve() }))
+  client.start()
+  try {
+    await Promise.race([connectedState, wait(2_000).then(() => { throw new Error('Morde Hub connection timed out') })])
+    assert.equal(authorization, 'Bearer chc_test-secret')
+    assert.deepEqual(hello, { type: 'hello' })
+    assert.equal(client.deviceId, 'i1234567')
+  } finally {
+    client.stop()
+    wss.close()
+    await new Promise((resolve) => server.close(resolve))
+  }
+})
+
+test('Morde bearer mode stops reconnecting after an HTTP authorization refusal', async () => {
+  let requests = 0
+  const server = createServer((_request, response) => {
+    requests += 1
+    response.writeHead(401).end()
+  })
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+  const address = server.address()
+  const client = new HubClient({
+    url: `ws://127.0.0.1:${address.port}/api/hub`,
+    auth: 'bearer',
+    key: async () => 'chc_revoked-secret',
+    backoffMs: { min: 5, max: 20 },
+  })
+  client.start()
+  try {
+    await wait(50)
+    assert.equal(client.lastError, 'the service refused the credential')
+    assert.equal(requests, 1)
+    await wait(50)
+    assert.equal(requests, 1, 'an unauthorized installation does not retry in a loop')
+  } finally {
+    client.stop()
+    await new Promise((resolve) => server.close(resolve))
+  }
+})
+
 test('a call resolves with the result body, sees events, and fails on an error frame', async () => {
   const h = harness()
   const s = await connected(h)
@@ -111,7 +180,9 @@ test('a call resolves with the result body, sees events, and fails on an error f
   await assert.rejects(p3, (e) => e instanceof HubError && e.code === 'denied' && e.message === 'no')
 
   const p4 = h.client.call('phone-1', 'info', {}, { timeoutMs: 10 })
+  const id4 = s.sent.at(-1).id
   await assert.rejects(p4, (e) => e instanceof HubError && e.code === 'timeout')
+  assert.deepEqual(s.sent.at(-1), { type: 'cancel', id: id4 }, 'a local timeout also cancels the remote Hub call')
 
   // A caller may pick the id up front, so it can ask the device to `stop` that very call.
   const id5 = h.client.nextId()
@@ -119,24 +190,113 @@ test('a call resolves with the result body, sees events, and fails on an error f
   assert.equal(s.sent.at(-1).id, id5)
   s.push({ type: 'result', id: id5, ok: true, body: { text: 'ok' } })
   assert.deepEqual(await p5, { text: 'ok' })
+
+  const controller = new AbortController()
+  const p6 = h.client.call('phone-1', 'open', { url: 'https://example.com' }, { signal: controller.signal, timeoutMs: 1000 })
+  const id6 = s.sent.at(-1).id
+  controller.abort()
+  await assert.rejects(p6, (e) => e instanceof HubError && e.code === 'aborted')
+  assert.deepEqual(s.sent.at(-1), { type: 'cancel', id: id6 }, 'an abort also cancels the remote Hub call')
+
+  const alreadyAborted = new AbortController()
+  alreadyAborted.abort()
+  const sentBefore = s.sent.length
+  await assert.rejects(h.client.call('phone-1', 'open', { url: 'https://example.com' }, { signal: alreadyAborted.signal }), (e) => e instanceof HubError && e.code === 'aborted')
+  assert.equal(s.sent.length, sentBefore, 'a call cancelled before dispatch is never sent')
   h.client.stop()
 })
 
 test('an incoming call is answered by its handler; unknown actions are refused', async () => {
   const h = harness()
   const s = await connected(h)
+  let ordinaryCaller
   h.client.handle('notify', async (args, call) => {
+    ordinaryCaller = call.from
     call.event({ stage: 'shown' })
     return { ok: true, text: args.text }
   })
   s.push({ type: 'call', id: 'c1', from: { id: 'phone-1', name: 'Phone', kind: 'phone' }, action: 'notify', args: { text: 'dinner' } })
   await tick()
+  assert.deepEqual(ordinaryCaller, { id: 'phone-1', name: 'Phone', kind: 'phone' })
   assert.deepEqual(s.sent.at(-2), { type: 'event', id: 'c1', body: { stage: 'shown' } })
   assert.deepEqual(s.sent.at(-1), { type: 'result', id: 'c1', ok: true, body: { ok: true, text: 'dinner' } })
   s.push({ type: 'call', id: 'c2', from: { id: 'phone-1', name: 'Phone', kind: 'phone' }, action: 'shell', args: {} })
   await tick()
   assert.equal(s.sent.at(-1).ok, false)
   assert.equal(s.sent.at(-1).error, 'unknown_action')
+  h.client.stop()
+})
+
+test('cancel and disconnect abort an incoming action handler', async () => {
+  const h = harness()
+  const s = await connected(h)
+  const started = []
+  h.client.handle('long', async (_args, call) => {
+    started.push({ id: call.id, signal: call.signal })
+    await new Promise((resolve) => call.signal.addEventListener('abort', resolve, { once: true }))
+    throw call.signal.reason
+  })
+
+  s.push({ type: 'call', id: 'cancel-me', from: { id: 'server-task', name: 'Task', kind: 'task' }, action: 'long', args: {} })
+  assert.equal(started[0].signal.aborted, false)
+  s.push({ type: 'cancel', id: 'cancel-me' })
+  await tick()
+  assert.equal(started[0].signal.aborted, true)
+  assert.deepEqual(s.sent.at(-1), {
+    type: 'result', id: 'cancel-me', ok: false, error: 'cancelled', message: 'The Hub action was cancelled',
+  })
+
+  s.push({ type: 'call', id: 'disconnect-me', from: { id: 'server-task', name: 'Task', kind: 'task' }, action: 'long', args: {} })
+  assert.equal(started[1].signal.aborted, false)
+  s.drop(1006, 'network')
+  assert.equal(started[1].signal.aborted, true)
+  h.client.stop()
+})
+
+test('an incoming Task caller is trusted only with a complete valid Task and target grant fence', async () => {
+  const h = harness()
+  const s = await connected(h)
+  const callers = []
+  h.client.handle('command', async (_args, call) => {
+    callers.push(call.from)
+    return { accepted: true }
+  })
+  const base = { id: 'server-task', name: 'Morde Task', kind: 'task' }
+  s.push({
+    type: 'call', id: 'c1', from: {
+      ...base, task_id: 'q1234567', authorization_version: 3, target_grant_version: 2, operation_id: 'op_abcd-1234',
+    }, action: 'command', args: {},
+  })
+  await tick()
+  assert.deepEqual(callers[0], {
+    ...base, taskContext: {
+      taskID: 'q1234567', authorizationVersion: 3, targetGrantVersion: 2, operationID: 'op_abcd-1234',
+    },
+  })
+
+  s.push({
+    type: 'call', id: 'c2', from: {
+      ...base, task_id: 'q1234567', authorization_version: 3, operation_id: 'op_abcd-1234',
+    }, action: 'command', args: {},
+  })
+  await tick()
+  assert.deepEqual(callers[1], base, 'a missing target grant version discards the whole Task context')
+
+  s.push({
+    type: 'call', id: 'c3', from: {
+      ...base, task_id: 'q1234567', authorization_version: 3, target_grant_version: 2, operation_id: 'op/unsafe',
+    }, action: 'command', args: {},
+  })
+  await tick()
+  assert.deepEqual(callers[2], base, 'an invalid operation id cannot leave a partial Task context')
+
+  s.push({
+    type: 'call', id: 'c4', from: {
+      ...base, kind: 'desktop', task_id: 'q1234567', authorization_version: 3, target_grant_version: 2, operation_id: 'op_abcd-1234',
+    }, action: 'command', args: {},
+  })
+  await tick()
+  assert.deepEqual(callers[3], { ...base, kind: 'desktop' }, 'a device caller cannot claim Task metadata')
   h.client.stop()
 })
 

@@ -1,6 +1,7 @@
 import AppIntents
 
 /// Registers app shortcuts so they appear in Shortcuts with zero user setup.
+// nanoMuse: Keep only the read-only session shortcuts available in the cloud-only Minis target.
 ///
 /// Phrase localization: the English phrases below are the KEYS. Localized
 /// Siri trigger phrases (zh-Hans/zh-Hant, e.g. "问问Minis") live in
@@ -13,93 +14,23 @@ import AppIntents
 @available(iOS 17.0, *)
 struct MinisShortcutsProvider: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
-        // Siri-facing "ask nanoMuse" entry — opens the app and lands in the
-        // conversation. Note: iOS App Intents cannot capture free-form trailing
-        // text from the phrase itself (e.g. "…the weather today"); Siri collects
-        // the prompt via the parameter's requestValueDialog follow-up. The
-        // phrases below are the invocation triggers, not the prompt.
-        AppShortcut(
-            intent: AskMinisIntent(),
-            phrases: [
-                "Ask \(.applicationName)",
-                "Ask \(.applicationName) a question",
-                "Talk to \(.applicationName)",
-                "New \(.applicationName) chat",
-            ],
-            shortTitle: "Ask nanoMuse",
-            systemImageName: "sparkles"
-        )
-        AppShortcut(
-            intent: QuickTaskIntent(),
-            phrases: [
-                "Run a \(.applicationName) quick task",
-                "Use \(.applicationName) quick task",
-            ],
-            shortTitle: "Quick Task",
-            systemImageName: "bolt.fill"
-        )
-        AppShortcut(
-            intent: SendPromptIntent(),
-            phrases: [
-                "Send a prompt to \(.applicationName)",
-                "Ask \(.applicationName) something",
-                "Start a \(.applicationName) task",
-            ],
-            shortTitle: "Send Prompt",
-            systemImageName: "message.fill"
-        )
         AppShortcut(
             intent: GetSessionStatusIntent(),
-            phrases: [
-                "Get \(.applicationName) session status",
-                "Check \(.applicationName) task",
-            ],
+            phrases: ["Get \(.applicationName) session status", "Check \(.applicationName) task"],
             shortTitle: "Session Status",
             systemImageName: "info.circle.fill"
         )
         AppShortcut(
             intent: ListSessionsIntent(),
-            phrases: [
-                "List \(.applicationName) sessions",
-                "Show \(.applicationName) chats",
-            ],
+            phrases: ["List \(.applicationName) sessions", "Show \(.applicationName) chats"],
             shortTitle: "List Sessions",
             systemImageName: "list.bullet"
         )
         AppShortcut(
-            intent: FollowUpSessionIntent(),
-            phrases: [
-                "Follow up a \(.applicationName) session",
-                "Continue a \(.applicationName) session",
-            ],
-            shortTitle: "Follow Up",
-            systemImageName: "arrowshape.turn.up.left.fill"
-        )
-        // RetryRunIntent is not registered here because its
-        // @IntentParameterDependency causes an iOS 16 launch crash
-        // (Swift metadata resolution). It remains available in Shortcuts
-        // via the "All Actions" list.
-        AppShortcut(
             intent: OpenSessionIntent(),
-            phrases: [
-                "Open a \(.applicationName) session",
-            ],
+            phrases: ["Open a \(.applicationName) session"],
             shortTitle: "Open Session",
             systemImageName: "arrow.up.right.square"
         )
-        // nanoMuse: voice entry for the Action Button / Back Tap (#296). Opens
-        // the app and starts listening; the spoken prompt lands in the composer.
-        AppShortcut(
-            intent: VoicePromptIntent(),
-            phrases: [
-                "Voice prompt to \(.applicationName)",
-                "Talk to \(.applicationName) by voice",
-            ],
-            shortTitle: "Voice Prompt",
-            systemImageName: "mic.fill"
-        )
-        // [T-ios-remove-open-webapp-shortcut-intent] OpenWebAppIntent removed —
-        // the Home-Screen WebApp tile path was replaced by another mechanism,
-        // so the Shortcuts/AppIntents action is no longer registered.
     }
 }

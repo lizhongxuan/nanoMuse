@@ -282,17 +282,40 @@ create_zip_archive() {
     local ROOTFS_DIR="$OUTPUT_DIR/alpine-rootfs"
     local ZIP_FILE="$OUTPUT_DIR/alpine-rootfs.zip"
 
-    # Remove existing zip
-    rm -f "$ZIP_FILE"
+    # Build a standard ZIP from guest file contents. Info-ZIP on macOS can skip
+    # downloaded Alpine files carrying host provenance metadata; Python avoids
+    # that metadata and preserves the Unix type and permission bits in the archive.
+    python3 - "$ROOTFS_DIR" "$ZIP_FILE" <<'PY'
+from pathlib import Path
+from zipfile import ZipFile, ZipInfo, ZIP_DEFLATED
+import os
+import stat
+import sys
 
-    # Create zip (exclude WAL files)
-    cd "$OUTPUT_DIR"
-    zip -r "alpine-rootfs.zip" "alpine-rootfs" \
-        -x "*.db-shm" \
-        -x "*.db-wal" \
-        > /dev/null
+root = Path(sys.argv[1])
+archive_path = Path(sys.argv[2])
+temporary_path = archive_path.with_suffix(archive_path.suffix + ".tmp")
+with ZipFile(temporary_path, "w", compression=ZIP_DEFLATED, compresslevel=9) as archive:
+    for path in sorted([root, *root.rglob("*")]):
+        if path.name.endswith((".db-shm", ".db-wal")):
+            continue
+        file_stat = path.lstat()
+        relative = path.relative_to(root.parent).as_posix()
+        is_directory = stat.S_ISDIR(file_stat.st_mode)
+        name = relative + ("/" if is_directory else "")
+        info = ZipInfo(name)
+        info.create_system = 3
+        info.external_attr = file_stat.st_mode << 16
+        if is_directory:
+            info.external_attr |= 0x10
+            archive.writestr(info, b"")
+        elif stat.S_ISLNK(file_stat.st_mode):
+            archive.writestr(info, os.readlink(path).encode())
+        else:
+            archive.writestr(info, path.read_bytes())
 
-    cd "$SCRIPT_DIR"
+os.replace(temporary_path, archive_path)
+PY
 
     if [ ! -f "$ZIP_FILE" ]; then
         log_error "Failed to create ZIP archive"

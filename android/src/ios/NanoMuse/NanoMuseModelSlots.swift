@@ -376,7 +376,7 @@ enum NanoMuseModelSlots {
         let capabilities = Set(NanoMuseSlot.allCases.compactMap { slot in
             (models[slot] ?? []).isEmpty ? nil : slot.capability
         })
-        return NanoMuseSlotProvider(id: inst.id, label: NanoMuseCloud.label, isCloud: true, capabilities: capabilities, defaults: defaults, models: models, names: names)
+        return NanoMuseSlotProvider(id: inst.id, label: NanoMuseCloud.displayLabel, isCloud: true, capabilities: capabilities, defaults: defaults, models: models, names: names)
     }
 
     /// The display names the entries carry where they differ from the id, for the picker's search.

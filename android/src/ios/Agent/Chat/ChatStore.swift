@@ -4950,8 +4950,8 @@ extension RawMessage {
     /// importantly, small enough that the list stops being one giant cell
     /// (`visibleCells=1` in the field log) and can recycle normally.
     ///
-    /// `splitMarkdownIntoSegments` is reused verbatim from
-    /// `PaginatedMarkdownView` (T-markdown-preview-paginate), which solved the
+    /// `splitMarkdownIntoSegments` is shared from
+    /// `MinisMarkdownParser.swift` (T-markdown-preview-paginate), which solved the
     /// same CALayer problem for document preview in May. It is fence-aware, so
     /// a fenced code block is never cut in half, and each returned segment
     /// parses independently under cmark.
@@ -6600,18 +6600,7 @@ extension ChatStore {
             }
             sqlite3_finalize(stmt)
         }
-        // Notify the in-process ViewModel cache that this session's
-        // messages have changed via iCloud merge. The foreground-visible
-        // VM already reloads via `.cloudSyncDidFetchChanges` at the end
-        // of the batch (AIChatViewModel:666), but a cached background VM
-        // for a non-active session would otherwise render its stale
-        // messages snapshot the next time the user opens it. The flag
-        // is consumed on the next getOrCreate HIT
-        // (T-inbound-message-cached-vm-stale).
-        let sid = sessionId
-        Task { @MainActor in
-            ViewModelCache.shared.markStale(sessionId: sid)
-        }
+        // nanoMuse: Keep the remote merge independent of the legacy chat VM cache.
     }
 
     func deleteRemoteSession(id: String, deviceId: String) {
@@ -7136,12 +7125,12 @@ extension ChatStore {
 
     /// Estimated size of memory files.
     func estimateMemoriesSize() -> Int64 {
-        return directorySize(AIChatViewModel.minisMemoryPersistentDir)
+        return directorySize(MinisStoragePaths.minisMemoryPersistentDir)
     }
 
     /// Estimated size of skills (db entries + skill files).
     func estimateSkillsSize() -> Int64 {
-        return directorySize(AIChatViewModel.minisSkillsPersistentDir)
+        return directorySize(MinisStoragePaths.minisSkillsPersistentDir)
     }
 
     /// Estimated size of provider config JSON.

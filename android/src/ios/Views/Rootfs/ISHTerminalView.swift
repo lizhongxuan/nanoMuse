@@ -93,7 +93,7 @@ struct ISHTerminalView: View {
             )
         }
         .background(Color.black)
-        .navigationTitle("nanoMuse Shell")
+        .navigationTitle("morde Shell")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if showCloseButton {

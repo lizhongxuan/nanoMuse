@@ -43,7 +43,7 @@ final class SyncDirtyScanner {
     private var knownModDates: [String: Date] = [:]
 
     private var skillsDir: URL {
-        AIChatViewModel.minisSkillsPersistentDir
+        MinisStoragePaths.minisSkillsPersistentDir
     }
 
     private init() {}
@@ -99,7 +99,7 @@ final class SyncDirtyScanner {
     /// Return the max file modification date for a given skill ID.
     /// Used by CloudSyncEngine to detect filesystem changes not reflected in the DB.
     static func maxModDate(inSkill skillId: String) -> Date {
-        let dir = AIChatViewModel.minisSkillsPersistentDir.appendingPathComponent(skillId)
+        let dir = MinisStoragePaths.minisSkillsPersistentDir.appendingPathComponent(skillId)
         return SyncDirtyScanner.shared.maxModDate(in: dir)
     }
 
@@ -245,7 +245,7 @@ final class SyncDirtyScanner {
     // MARK: - Memory Files
 
     private func scanMemoryFiles() async {
-        let memDir = AIChatViewModel.minisMemoryPersistentDir
+        let memDir = MinisStoragePaths.minisMemoryPersistentDir
         guard fm.fileExists(atPath: memDir.path),
               let files = try? fm.contentsOfDirectory(at: memDir,
                                                        includingPropertiesForKeys: [.contentModificationDateKey],

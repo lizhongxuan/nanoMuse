@@ -20,7 +20,7 @@ struct SharedFoldersSettingsView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Label("Shared folders", systemImage: "info.circle")
                         .font(.subheadline.weight(.semibold))
-                    Text("These directories appear in iOS Files under On My iPhone → nanoMuse. Tap a row to see details, browse, or toggle visibility.")
+                    Text("These directories appear in iOS Files under On My iPhone → morde. Tap a row to see details, browse, or toggle visibility.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -191,7 +191,7 @@ final class SharedFoldersViewModel: ObservableObject {
     }
 
     private static func buildEntries() -> [SharedFolderEntry] {
-        let root = AIChatViewModel.minisAppGroupRoot
+        let root = MinisStoragePaths.minisAppGroupRoot
         return [
             SharedFolderEntry(
                 name: "shared",

@@ -14,6 +14,38 @@
 import Foundation
 import SwiftUI
 
+struct NanoMuseMordeFeedPostBody: Codable, Equatable {
+    var title: String
+    var type: String
+    var emoji: String?
+    var created_at: String?
+    var liked: Bool?
+    var body: String
+
+    var isValid: Bool {
+        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && title.unicodeScalars.count <= 200 &&
+            NanoMusePost.types.contains(type) && (emoji?.unicodeScalars.count ?? 0) <= 16 &&
+            (created_at.map { ISO8601DateFormatter().date(from: $0) != nil } ?? true) &&
+            body.unicodeScalars.count > 0 && body.unicodeScalars.count <= 65_536
+    }
+}
+
+struct NanoMuseMordeFeedPost: Identifiable, Equatable {
+    let id: String
+    let revision: Int64
+    let body: NanoMuseMordeFeedPostBody
+}
+
+struct NanoMuseMordeFeedPreferences: Codable, Equatable {
+    let content: String
+    var isValid: Bool { !content.isEmpty && content.unicodeScalars.count <= 8192 }
+}
+
+struct NanoMuseMordeIdeaMarkBody: Codable, Equatable {
+    let state: String
+    var isValid: Bool { state == "saved" || state == "dismissed" }
+}
+
 // MARK: - Post (pure parse/serialize, tested)
 
 struct NanoMusePost: Identifiable, Equatable {
@@ -285,43 +317,19 @@ enum NanoMuseFeedFlow {
     static var hasModel: Bool {
         ProviderConfigStore.shared.defaultPrimaryGroupId != nil || !ProviderConfigStore.shared.modelEntries.isEmpty
     }
+    static var canRun: Bool { MordeLocalExecutionPolicy.isEnabled && hasModel }
 
-    /// The routine and its conversation exist. Needs a configured model for the conversation;
-    /// until then it quietly does nothing and is retried whenever the Feed shows.
+    // nanoMuse: Existing feed posts and routines stay readable; Morde does not create local Feed sessions.
     @discardableResult
     static func ensureRoutine() async -> NanoMuseRoutine? {
-        guard hasModel else { return nil }
-        var sid = sessionId
-        if let s = sid, !(await ChatStore.shared.sessionExists(id: s)) { sid = nil }
-        if sid == nil {
-            let vm = ViewModelCache.shared.createDraft()
-            vm.sessionSource = "nanomuse-feed"
-            let created = await vm.ensureSessionReturningId()
-            await ChatStore.shared.updateSessionTitle(created, title: AppLocalized("Feed"))
-            ViewModelCache.shared.cacheDraft(vm, sessionId: created)
-            UserDefaults.standard.set(created, forKey: Keys.session)
-            sid = created
-        }
-        let scheduler = NanoMuseScheduler.shared
-        if var existing = routine {
-            if existing.sessionId != sid {
-                existing.sessionId = sid
-                scheduler.update(existing)
-            }
-            return existing
-        }
-        var r = NanoMuseRoutine(label: AppLocalized("Write the feed"), prompt: AppLocalized("Write today's feed."), hour: defaultHour, minute: defaultMinute)
-        r.sessionId = sid
-        r.hidden = true
-        scheduler.create(r)
-        UserDefaults.standard.set(r.id, forKey: Keys.routine)
-        return r
+        nil
     }
 
     static var generating: Bool { NanoMuseScheduler.shared.running.contains(routineId ?? "") }
 
     /// "Write it now".
     static func generateNow() {
+        guard MordeLocalExecutionPolicy.isEnabled else { return }
         Task { @MainActor in
             guard let r = await ensureRoutine() else { return }
             await NanoMuseScheduler.shared.run(r.id, trigger: "feed-now")
@@ -333,7 +341,7 @@ enum NanoMuseFeedFlow {
     /// the feed's own conversation, so it is never counted as a task.
     static func writeFirstDayIfNeeded() {
         let key = "nanomuse.feed.first_day_written"
-        guard hasModel, !UserDefaults.standard.bool(forKey: key), NanoMuseFeedStore.shared.posts.isEmpty, !generating else { return }
+        guard canRun, !UserDefaults.standard.bool(forKey: key), NanoMuseFeedStore.shared.posts.isEmpty, !generating else { return }
         UserDefaults.standard.set(true, forKey: key)
         Task { @MainActor in
             guard let r = await ensureRoutine() else { return }
@@ -342,11 +350,13 @@ enum NanoMuseFeedFlow {
     }
 
     static func setEnabled(_ on: Bool) {
+        guard MordeLocalExecutionPolicy.isEnabled else { return }
         guard let id = routineId else { return }
         NanoMuseScheduler.shared.setEnabled(id, on)
     }
 
     static func setTime(hour: Int, minute: Int) {
+        guard MordeLocalExecutionPolicy.isEnabled else { return }
         guard var r = routine else { return }
         r.hour = hour
         r.minute = minute
@@ -371,7 +381,7 @@ enum NanoMuseFeedFlow {
         guard isFeedSession(session) else { return nil }
         let store = NanoMuseFeedStore.shared
         let recent = store.posts.prefix(24).map(\.title)
-        var s = "## This conversation writes the user's feed (nanoMuse)\n"
+        var s = "## This conversation writes the user's feed (morde)\n"
         s += "The Feed tab shows short posts you write for the user, like Muse's feed. The user's standing instruction for it:\n"
         s += "> " + store.preferences.replacingOccurrences(of: "\n", with: "\n> ") + "\n\n"
         s += "What you know about them right now (from GLOBAL.md, the diary of the last seven days, USER.md and their goals):\n"
@@ -429,6 +439,8 @@ struct NanoMuseFeedRoom: View {
 
     @ObservedObject private var store = NanoMuseFeedStore.shared
     @ObservedObject private var scheduler = NanoMuseScheduler.shared
+    @ObservedObject private var personal = NanoMuseMordePersonalContentStore.shared
+    @ObservedObject private var authorization = MordeShellAuthorization.shared
     @State private var showSettings = false
     @State private var introShown = !NanoMuseFeedFlow.introAcknowledged
     @State private var detail: NanoMusePost?
@@ -437,6 +449,13 @@ struct NanoMuseFeedRoom: View {
         var seen: [String] = []
         for p in store.posts where !seen.contains(p.day) { seen.append(p.day) }
         return seen
+    }
+
+    private var cloudPosts: [NanoMuseMordeFeedPost] {
+        personal.values("feed_post").compactMap { item in
+            guard let body = try? item.decodeBody(NanoMuseMordeFeedPostBody.self), body.isValid else { return nil }
+            return NanoMuseMordeFeedPost(id: item.object_id, revision: item.revision, body: body)
+        }.sorted { ($0.body.created_at ?? "") > ($1.body.created_at ?? "") }
     }
 
     var body: some View {
@@ -457,12 +476,19 @@ struct NanoMuseFeedRoom: View {
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 4)
+                    if authorization.signedIn { cloudFeedSection }
                     if introShown {
                         introCard
                     }
                     if store.posts.isEmpty {
-                        emptyState
+                        if authorization.signedIn && !cloudPosts.isEmpty {
+                            Text(AppLocalized("No additional feed posts are stored on this iPhone."))
+                                .font(.footnote).foregroundStyle(.secondary).padding(.horizontal, 4)
+                        } else {
+                            emptyState
+                        }
                     } else {
+                        Text(AppLocalized("On this iPhone")).font(.footnote.weight(.semibold)).foregroundStyle(.secondary).padding(.horizontal, 4)
                         ForEach(groupedDays, id: \.self) { day in
                             if day != NanoMuseDay.key() {
                                 Text(dayLabel(day))
@@ -478,16 +504,70 @@ struct NanoMuseFeedRoom: View {
                 }
                 .padding(16)
             }
-            .refreshable { store.reload() }
+            .refreshable { store.reload(); await personal.refresh(root: NanoMuseDirs.root) }
         }
         .background(NanoMuseTones.canvas.ignoresSafeArea())
         .onAppear {
             store.reload()
             Task { @MainActor in await NanoMuseFeedFlow.ensureRoutine() }
         }
+        .task { await personal.refresh(root: NanoMuseDirs.root) }
+        .nmOnChange(of: authorization.personalDataScopeKey) { _ in Task { await personal.refresh(root: NanoMuseDirs.root) } }
         .sheet(isPresented: $showSettings) { NanoMuseFeedSettingsSheet(onOpenSession: onOpenSession) }
         .sheet(item: $detail) { post in
             NanoMusePostDetail(post: post, onDiscuss: { detail = nil; onDiscuss(post) })
+        }
+    }
+
+    private var cloudFeedSection: some View {
+        let posts = cloudPosts
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(AppLocalized("Cloud feed")).font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
+                Spacer()
+                if personal.isLoading { ProgressView().controlSize(.small) }
+                Button { Task { await personal.refresh(root: NanoMuseDirs.root) } } label: { Image(systemName: "arrow.clockwise") }
+                    .buttonStyle(.plain).accessibilityLabel(Text(AppLocalized("Refresh")))
+            }.padding(.horizontal, 4)
+            if let error = personal.error {
+                Label(String(format: AppLocalized("Cloud feed unavailable: %@"), error), systemImage: "exclamationmark.triangle")
+                    .font(.footnote).foregroundStyle(.red)
+                Button(AppLocalized("Retry cloud feed")) { Task { await personal.retry(root: NanoMuseDirs.root) } }.font(.footnote)
+            } else if posts.isEmpty {
+                Text(AppLocalized("No cloud feed posts yet.")).font(.subheadline).foregroundStyle(.secondary)
+                    .padding(14).frame(maxWidth: .infinity, alignment: .leading)
+                    .background(NanoMuseTones.surface, in: RoundedRectangle(cornerRadius: 14))
+            } else {
+                ForEach(posts) { post in
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text(post.body.emoji ?? "📝")
+                            Text(post.body.title).font(.subheadline.weight(.semibold))
+                            Spacer()
+                            Menu {
+                                Button(AppLocalized(post.body.liked == true ? "Unlike" : "Like")) {
+                                    var body = post.body
+                                    body.liked = body.liked != true
+                                    Task { try? await personal.replace("feed_post", id: post.id, revision: post.revision, body: body, root: NanoMuseDirs.root) }
+                                }
+                                Button(AppLocalized("Delete"), role: .destructive) {
+                                    Task { try? await personal.delete("feed_post", id: post.id, revision: post.revision, root: NanoMuseDirs.root) }
+                                }
+                            } label: { Image(systemName: post.body.liked == true ? "heart.fill" : "ellipsis") }
+                                .accessibilityLabel(Text(AppLocalized("More")))
+                                .accessibilityIdentifier("morde.feed.post.menu.\(post.id)")
+                        }
+                        Text(post.body.body).font(.subheadline).foregroundStyle(.secondary)
+                    }
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(NanoMuseTones.surface, in: RoundedRectangle(cornerRadius: 14))
+                }
+            }
+            if let pending = personal.pending, pending.objectType == "feed_post" || pending.objectType == "feed_preferences" {
+                Label(AppLocalized(personal.syncEnabled ? "A Feed change is waiting to sync." : "Sync is paused; the Feed change stays on this device."), systemImage: "clock")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -543,7 +623,7 @@ struct NanoMuseFeedRoom: View {
         staticCard("📝", AppLocalized("Steer it with one sentence"),
                    AppLocalized("Tap the sliders at the top right to tell me what you want more of, switch the daily routine off, or have me write the first day now."))
         VStack(spacing: 8) {
-            if NanoMuseFeedFlow.hasModel {
+            if NanoMuseFeedFlow.canRun {
                 if NanoMuseFeedFlow.generating {
                     HStack(spacing: 10) {
                         ProgressView().controlSize(.small)
@@ -557,8 +637,12 @@ struct NanoMuseFeedRoom: View {
                         .background(NanoMuseTones.action, in: Capsule())
                         .buttonStyle(.plain)
                 }
-            } else {
+            } else if MordeLocalExecutionPolicy.isEnabled {
                 Text(AppLocalized("Add a model first; the feed is written by your agent."))
+                    .font(.footnote).foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            } else {
+                Text(MordeLocalExecutionPolicy.disabledMessage)
                     .font(.footnote).foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
             }
@@ -701,8 +785,12 @@ struct NanoMuseFeedSettingsSheet: View {
     var onOpenSession: (String) -> Void
     @ObservedObject private var store = NanoMuseFeedStore.shared
     @ObservedObject private var scheduler = NanoMuseScheduler.shared
+    @ObservedObject private var personal = NanoMuseMordePersonalContentStore.shared
+    @ObservedObject private var authorization = MordeShellAuthorization.shared
     @Environment(\.dismiss) private var dismiss
     @State private var text = ""
+    @State private var cloudText = ""
+    @State private var cloudSaving = false
     @State private var time = Date()
 
     private var routine: NanoMuseRoutine? { NanoMuseFeedFlow.routine }
@@ -717,21 +805,41 @@ struct NanoMuseFeedSettingsSheet: View {
                 } footer: {
                     Text(AppLocalized("One or two sentences. Every post from now on follows it."))
                 }
+                if authorization.signedIn {
+                    Section {
+                        TextEditor(text: $cloudText).frame(minHeight: 90)
+                        Button(AppLocalized("Save cloud feed preference")) { saveCloudPreference() }
+                            .disabled(cloudSaving || cloudText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        if let error = personal.error {
+                            Label(error, systemImage: "exclamationmark.triangle").font(.footnote).foregroundStyle(.red)
+                        }
+                        if let pending = personal.pending, pending.objectType == "feed_preferences" {
+                            Label(AppLocalized(personal.syncEnabled ? "Cloud feed preference is waiting to sync." : "Sync is paused; the preference remains on this device."), systemImage: "clock")
+                                .font(.footnote).foregroundStyle(.secondary)
+                        }
+                    } header: { Text(AppLocalized("Cloud feed preference")) } footer: {
+                        Text(AppLocalized("This preference belongs to your Morde account. Local feed preferences stay on this iPhone."))
+                    }
+                }
                 Section {
                     if let r = routine {
                         Toggle(AppLocalized("Write it every day"), isOn: Binding(get: { r.enabled }, set: { NanoMuseFeedFlow.setEnabled($0) }))
                             .tint(NanoMuseTones.action)
+                            .disabled(!MordeLocalExecutionPolicy.isEnabled)
                         DatePicker(AppLocalized("Time"), selection: $time, displayedComponents: .hourAndMinute)
                             .nmOnChange(of: time) { t in
                                 let c = Calendar.current.dateComponents([.hour, .minute], from: t)
                                 NanoMuseFeedFlow.setTime(hour: c.hour ?? NanoMuseFeedFlow.defaultHour, minute: c.minute ?? 0)
                             }
+                            .disabled(!MordeLocalExecutionPolicy.isEnabled)
                         if let last = r.runs.first {
                             Text(String(format: last.ok ? AppLocalized("last run %@") : AppLocalized("last run %@, failed"), NanoMuseDay.relative(last.at)))
                                 .font(.footnote).foregroundStyle(.secondary)
                         }
                     } else {
-                        Text(AppLocalized("Add a model first; the feed is written by your agent."))
+                        Text(MordeLocalExecutionPolicy.isEnabled
+                             ? AppLocalized("Add a model first; the feed is written by your agent.")
+                             : MordeLocalExecutionPolicy.disabledMessage)
                             .font(.footnote).foregroundStyle(.secondary)
                     }
                     Button {
@@ -743,7 +851,7 @@ struct NanoMuseFeedSettingsSheet: View {
                             Text(AppLocalized("Write it now"))
                         }
                     }
-                    .disabled(!NanoMuseFeedFlow.hasModel || NanoMuseFeedFlow.generating)
+                    .disabled(!NanoMuseFeedFlow.canRun || NanoMuseFeedFlow.generating)
                     if let sid = NanoMuseFeedFlow.sessionId {
                         Button(AppLocalized("Open the feed's conversation")) {
                             dismiss()
@@ -769,12 +877,48 @@ struct NanoMuseFeedSettingsSheet: View {
             }
             .onAppear {
                 text = store.preferences
+                cloudText = store.preferences
+                Task {
+                    await personal.refresh(root: NanoMuseDirs.root)
+                    if let item = personal.object("feed_preferences", "default"),
+                       let body = try? item.decodeBody(NanoMuseMordeFeedPreferences.self), body.isValid {
+                        cloudText = body.content
+                    }
+                }
                 var c = DateComponents()
                 c.hour = routine?.hour ?? NanoMuseFeedFlow.defaultHour
                 c.minute = routine?.minute ?? NanoMuseFeedFlow.defaultMinute
                 time = Calendar.current.date(from: c) ?? Date()
             }
+            .nmOnChange(of: authorization.personalDataScopeKey) { _ in
+                cloudText = store.preferences
+                Task {
+                    await personal.refresh(root: NanoMuseDirs.root)
+                    if let item = personal.object("feed_preferences", "default"),
+                       let body = try? item.decodeBody(NanoMuseMordeFeedPreferences.self), body.isValid {
+                        cloudText = body.content
+                    }
+                }
+            }
         }
+    }
+
+    private func saveCloudPreference() {
+        guard let item = personal.object("feed_preferences", "default") else {
+            Task { await saveCloudPreference(revision: 0) }
+            return
+        }
+        Task { await saveCloudPreference(revision: item.revision) }
+    }
+
+    private func saveCloudPreference(revision: Int64) async {
+        cloudSaving = true
+        defer { cloudSaving = false }
+        do {
+            _ = try await personal.replace("feed_preferences", id: "default", revision: revision,
+                body: NanoMuseMordeFeedPreferences(content: cloudText.trimmingCharacters(in: .whitespacesAndNewlines)),
+                root: NanoMuseDirs.root)
+        } catch { }
     }
 }
 
@@ -791,9 +935,6 @@ struct NanoMuseFeedFenceCard: View {
                 Text(title).font(.subheadline.weight(.semibold)).lineLimit(2)
             }
             Spacer(minLength: 0)
-            Button(AppLocalized("Open")) { NotificationCenter.default.post(name: .nanoMuseOpenRoom, object: "feed") }
-                .font(.footnote.weight(.medium))
-                .tint(NanoMuseTones.action)
         }
         .padding(12)
         .background(NanoMuseTones.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))

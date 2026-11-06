@@ -381,17 +381,9 @@ final class CrashReporter: NSObject, MXMetricManagerSubscriber {
         marker["memoryFreeMB"] = systemFreeMB()
         marker["activeSessionCount"] = SessionActivityTracker.shared.activeSessions.count
         marker["runningShellCommand"] = ShellCommandRingBuffer.hasRunningCommand
-        // [T-ios-bgkeepalive-diag] Two DIFFERENT signals, previously
-        // conflated into one misleading "BG task active" line:
-        //   keepAliveIntent — BackgroundKeepAliveManager.isActive, i.e. "we WANT
-        //     to stay alive" (derived from SessionActivityTracker).
-        //   liveBackgroundTaskCount — how many real UIBackgroundTaskIdentifier
-        //     grants the OS has actually given us.
-        // The old field reported the intent flag under a name that reads as the
-        // OS grant, so every crash report looked like "background task healthy"
-        // regardless of the real grant state.
+        // BackgroundKeepAliveManager.isActive records the keep-alive intent.
+        // OS background-task grant counts belong to the removed local chat executor.
         marker["bgKeepAliveIntent"] = BackgroundKeepAliveManager.shared.isActive
-        marker["bgTaskGrants"] = AIChatViewModel.liveBackgroundTaskCount
         marker["bgSilentAudioLeg"] = BackgroundKeepAliveManager.shared.silentAudioIsPlaying
 
         let remaining = UIApplication.shared.backgroundTimeRemaining
@@ -871,7 +863,7 @@ final class CrashReporter: NSObject, MXMetricManagerSubscriber {
         let dateStr = df.string(from: crashDate)
 
         var report = """
-        === nanoMuse Crash Report ===
+        === morde Crash Report ===
         Date:    \(dateStr)
         Type:    \(type)
         Build:   \(displayBuild)
@@ -892,7 +884,7 @@ final class CrashReporter: NSObject, MXMetricManagerSubscriber {
         let foreign = Self.detectInjectedDylibs()
         if !foreign.isEmpty {
             report += "\n⚠️ Injected: \(foreign.joined(separator: ", "))"
-            report += "\n         (third-party tweak/hook libraries loaded in-process — crashes may originate there, not in nanoMuse)"
+            report += "\n         (third-party tweak/hook libraries loaded in-process — crashes may originate there, not in morde)"
         }
 
         if let phase = lastPhase {

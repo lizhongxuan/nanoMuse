@@ -11,6 +11,40 @@ extension Notification.Name {
     static let openWebAppDeepLink = Notification.Name("openWebAppDeepLink")
 }
 
+/// Buffers session navigation until the app's cold-launch view has mounted.
+@MainActor
+final class NotificationNavigationStore {
+    static let shared = NotificationNavigationStore()
+
+    private var pendingSessionId: String?
+    private var pendingSetAt: Date?
+    private var handledAt: Date?
+
+    func setPending(_ sessionId: String) {
+        pendingSessionId = sessionId
+        pendingSetAt = Date()
+    }
+
+    func takePending() -> String? {
+        defer { pendingSessionId = nil; pendingSetAt = nil }
+        guard let sid = pendingSessionId,
+              let t = pendingSetAt,
+              Date().timeIntervalSince(t) < 30 else { return nil }
+        return sid
+    }
+
+    func markHandled() {
+        pendingSessionId = nil
+        pendingSetAt = nil
+        handledAt = Date()
+    }
+
+    var handledRecently: Bool {
+        guard let t = handledAt else { return false }
+        return Date().timeIntervalSince(t) < 10
+    }
+}
+
 /// Parses `minis://` URLs into navigation actions and dispatches them
 /// to the relevant coordinator. Mirrors the Android `DeepLinkHandler`
 /// route table at `src/android/.../deeplink/DeepLinkHandler.kt`.

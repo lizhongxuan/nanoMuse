@@ -54,7 +54,9 @@ final class BrowserUseManager: NSObject, ObservableObject {
 
     /// Returns the chat session id owning this browser — wired by BrowserTabPool.
     /// Downloads are saved into that session's /var/minis/workspace/ directory.
-    var sessionIdProvider: (() -> String?)?
+    var sessionIdProvider: (() -> String?)? {
+        didSet { registerSessionContext(on: webView) }
+    }
 
     /// Returns this tab's pool id — wired by BrowserTabPool. Diagnostics only,
     /// so WebContent-process death can be attributed to a tab. [BrowserToolDiag]
@@ -240,12 +242,16 @@ final class BrowserUseManager: NSObject, ObservableObject {
         controller.add(WeakScriptMessageHandler(self), name: Self.printMessageHandlerName)
     }
 
+    private func registerSessionContext(on webView: WKWebView) {
+        Self.sharedMinisSchemeHandler.setSessionId(sessionIdProvider?(), for: webView)
+    }
+
     /// Present the iOS system print dialog for the current page contents.
     private func presentPrintDialog() {
         let printController = UIPrintInteractionController.shared
         let printInfo = UIPrintInfo.printInfo()
         printInfo.outputType = .general
-        printInfo.jobName = pageTitle.isEmpty ? "nanoMuse" : pageTitle
+        printInfo.jobName = pageTitle.isEmpty ? "morde" : pageTitle
         printController.printInfo = printInfo
         printController.printFormatter = webView.viewPrintFormatter()
         printController.present(animated: true) { _, completed, error in
@@ -1834,6 +1840,7 @@ final class BrowserUseManager: NSObject, ObservableObject {
         let oldURL = webView.url
 
         webView = newView
+        registerSessionContext(on: newView)
 
         if let url = oldURL {
             webView.load(URLRequest(url: url))
@@ -1858,6 +1865,7 @@ final class BrowserUseManager: NSObject, ObservableObject {
 
         let oldURL = webView.url
         webView = newView
+        registerSessionContext(on: newView)
         if let url = oldURL {
             webView.load(URLRequest(url: url))
         }
@@ -2494,7 +2502,7 @@ extension BrowserUseManager: WKDownloadDelegate {
                 completionHandler(nil)
                 return
             }
-            let dir = AIChatViewModel.minisWorkspacePersistentDir(for: sid)
+            let dir = MinisStoragePaths.minisWorkspacePersistentDir(for: sid)
             try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
 
             // Unique filename: name.ext, name-1.ext, name-2.ext, …
@@ -2538,16 +2546,6 @@ extension BrowserUseManager: WKDownloadDelegate {
                 BrowserDownloadCenter.shared.finished(id: entryId, sizeText: sizeText)
             }
             logger.info("✅ Download finished: \(name) (\(sizeText))")
-            if let sid = self.sessionIdProvider?(), !sid.isEmpty {
-                // [T-browser-download-ux-v3] Name + size only — the full
-                // path/link made the bubble wrap badly, and path navigation
-                // is the downloads panel's "Show in Files" job now.
-                self.notifySessionChat(
-                    sid: sid,
-                    text: "Downloaded \(name.middleTruncated()) (\(sizeText))",
-                    icon: "checkmark.circle"
-                )
-            }
         }
     }
 
@@ -2563,15 +2561,7 @@ extension BrowserUseManager: WKDownloadDelegate {
             // Remove any partial file so a retried download can reuse the name.
             if let dest { try? FileManager.default.removeItem(at: dest) }
             logger.error("Download failed: \(name) — \(error.localizedDescription)")
-            if let sid = self.sessionIdProvider?(), !sid.isEmpty {
-                self.notifySessionChat(sid: sid, text: "Download failed: \(name.middleTruncated()) — \(error.localizedDescription)", icon: "xmark.circle")
-            }
         }
-    }
-
-    /// Post an ephemeral system-info notice into the owning session's chat.
-    private func notifySessionChat(sid: String, text: String, icon: String) {
-        ViewModelCache.shared.get(for: sid)?.appendSystemInfo(text, icon: icon)
     }
 
     /// User-initiated cancel (downloads panel). Cancels the WKDownload and
@@ -2654,15 +2644,49 @@ extension BrowserUseManager: WKScriptMessageHandler {
 // MARK: - MinisURLSchemeHandler
 
 /// Handles `minis://` URLs in WKWebView by resolving them to local files.
-/// Supports `minis://workspace/file.html`, `minis://shared/...`, etc.
+/// Session-scoped URLs use the owning BrowserTabPool session; ownerless previews
+/// can resolve only the global skills, memory, and shared directories.
 final class MinisURLSchemeHandler: NSObject, WKURLSchemeHandler {
     private let logger = AppLogger(category: "MinisScheme")
+    private let contextLock = NSLock()
+    private var sessionContexts: [ObjectIdentifier: WebViewSessionContext] = [:]
+
+    private final class WebViewSessionContext {
+        weak var webView: WKWebView?
+        let sessionId: String
+
+        init(webView: WKWebView, sessionId: String) {
+            self.webView = webView
+            self.sessionId = sessionId
+        }
+    }
+
+    /// Bind a browser WebView to the owner supplied by its BrowserTabPool.
+    /// Standalone previews without an owner can still resolve global files.
+    func setSessionId(_ sessionId: String?, for webView: WKWebView) {
+        contextLock.lock()
+        defer { contextLock.unlock() }
+        sessionContexts = sessionContexts.filter { $0.value.webView != nil }
+        let key = ObjectIdentifier(webView)
+        guard let sessionId, !sessionId.isEmpty else {
+            sessionContexts.removeValue(forKey: key)
+            return
+        }
+        sessionContexts[key] = WebViewSessionContext(webView: webView, sessionId: sessionId)
+    }
+
+    private func sessionId(for webView: WKWebView) -> String? {
+        contextLock.lock()
+        defer { contextLock.unlock() }
+        sessionContexts = sessionContexts.filter { $0.value.webView != nil }
+        return sessionContexts[ObjectIdentifier(webView)]?.sessionId
+    }
 
     func webView(_ webView: WKWebView, start urlSchemeTask: any WKURLSchemeTask) {
         let url = urlSchemeTask.request.url!
         logger.info("[MinisScheme] start \(url.absoluteString)")
 
-        guard let fileURL = AIChatViewModel.resolveMinisURL(url) else {
+        guard let fileURL = resolveFileURL(url, sessionId: sessionId(for: webView)) else {
             logger.warning("[MinisScheme] not found: \(url.absoluteString)")
             urlSchemeTask.didFailWithError(URLError(.fileDoesNotExist))
             return
@@ -2689,6 +2713,59 @@ final class MinisURLSchemeHandler: NSObject, WKURLSchemeHandler {
 
     func webView(_ webView: WKWebView, stop urlSchemeTask: any WKURLSchemeTask) {
         // No async work to cancel.
+    }
+
+    private func resolveFileURL(_ url: URL, sessionId: String?) -> URL? {
+        guard url.scheme == "minis", let host = url.host else { return nil }
+        let safeSessionId: String? = {
+            guard let sessionId,
+                  !sessionId.isEmpty,
+                  sessionId != ".",
+                  sessionId != "..",
+                  !sessionId.contains("/"),
+                  !sessionId.contains("\\")
+            else { return nil }
+            return sessionId
+        }()
+
+        let root: URL
+        switch host {
+        case "skills": root = MinisStoragePaths.minisSkillsPersistentDir
+        case "memory": root = MinisStoragePaths.minisMemoryPersistentDir
+        case "shared": root = MinisStoragePaths.minisSharedPersistentDir
+        case "attachments":
+            guard let sessionId = safeSessionId else { return nil }
+            root = MinisStoragePaths.minisAttachmentsPersistentDir(for: sessionId)
+        case "offloads":
+            guard let sessionId = safeSessionId else { return nil }
+            root = MinisStoragePaths.minisOffloadsPersistentDir(for: sessionId)
+        case "workspace":
+            guard let sessionId = safeSessionId else { return nil }
+            root = MinisStoragePaths.minisWorkspacePersistentDir(for: sessionId)
+        case "browser":
+            guard let sessionId = safeSessionId else { return nil }
+            root = MinisStoragePaths.minisBrowserPersistentDir(for: sessionId)
+        default:
+            return nil
+        }
+
+        let fm = FileManager.default
+        let rootPath = root.standardizedFileURL.resolvingSymlinksInPath().path
+        for subPath in MinisURLPathDecoding.subPathCandidates(for: url) {
+            guard !subPath.isEmpty,
+                  !subPath.hasPrefix("/"),
+                  !subPath.split(separator: "/", omittingEmptySubsequences: false).contains("..")
+            else { continue }
+
+            let candidate = root.appendingPathComponent(subPath).standardizedFileURL
+            let resolved = candidate.resolvingSymlinksInPath()
+            let resolvedPath = resolved.path
+            guard resolvedPath == rootPath || resolvedPath.hasPrefix(rootPath + "/"),
+                  fm.fileExists(atPath: resolvedPath)
+            else { continue }
+            return candidate
+        }
+        return nil
     }
 
     private static func mimeType(for ext: String) -> String {

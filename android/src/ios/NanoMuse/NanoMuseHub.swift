@@ -3,7 +3,8 @@
 // web console) reach it from any network, and it can ask them for things.
 //
 // The protocol is docs/hub.md. What this phone does for others is decided here: `info`, `open`,
-// `notify`, `task` and `stop` work (the task runs on this phone's Muse, NanoMuseHubTasks);
+// `notify` works. Local task execution is disabled in the Morde iOS target;
+// task requests are refused and stop reports no local task to cancel.
 // `screen` is refused with `no_screen`, and `shell`, `files` and `approve` are not offered on
 // iOS (the sandbox has no entry point for other devices), so a caller asking for them gets a
 // clear `not_supported` rather than a hang. Mirrors io.github.nanomuse.hub on Android.
@@ -66,10 +67,10 @@ enum NanoMuseHubErrors {
         case "not_controllable", "self_call": return AppLocalized("That device cannot be asked to do things.")
         case "unknown_agent": return AppLocalized("That coding agent is not on the computer.")
         case "no_session": return AppLocalized("That session is not on the computer any more.")
-        case "unknown_action": return AppLocalized("The computer runs an older nanoMuse that does not know this action.")
+        case "unknown_action": return AppLocalized("The computer runs an older morde that does not know this action.")
         case "bad_key", "bad_device": return AppLocalized("Signed out on the relay; sign in again.")
         default:
-            if !message.isEmpty { AppLogger(category: "NanoMuseHub").info("hub failure \(code): \(message)") }
+            if !message.isEmpty { AppLogger(category: "mordeHub").info("hub failure \(code): \(message)") }
             return AppLocalized("The computer could not do it.")
         }
     }
@@ -166,11 +167,13 @@ final class NanoMuseHub: ObservableObject {
 
     /// Joins the hub when the account is signed in and the switch is on; a no-op otherwise.
     func autoStart() {
-        guard enabled, NanoMuseCloud.isSignedIn, task == nil, !refused else { return }
+        guard MordeLocalExecutionPolicy.isEnabled, enabled, NanoMuseCloud.isSignedIn, task == nil, !refused else { return }
         start()
     }
 
     func start() {
+        // nanoMuse: Never open the legacy Relay WebSocket from the Morde app.
+        guard MordeLocalExecutionPolicy.isEnabled, MordeLegacyServicePolicy.isEnabled else { return }
         guard task == nil, let inst = NanoMuseCloud.instance,
               let key = ProviderKeychainHelper.loadAPIKey(instanceId: inst.id), !key.isEmpty else { return }
         var base = NanoMuseCloud.baseURL
@@ -182,7 +185,7 @@ final class NanoMuseHub: ObservableObject {
         reconnectTask = nil
         var request = URLRequest(url: url)
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-        request.setValue("nanoMuse-iOS/\(Self.version)", forHTTPHeaderField: "User-Agent")
+        request.setValue("morde-iOS/\(Self.version)", forHTTPHeaderField: "User-Agent")
         let task = URLSession.shared.webSocketTask(with: request)
         task.maximumMessageSize = 16 * 1024 * 1024
         generation += 1
@@ -378,7 +381,7 @@ final class NanoMuseHub: ObservableObject {
             } else if connected {
                 // `too_large`, `rate_limited`, `bad_frame`: a word about one frame while the
                 // socket stays open (docs/hub.md); the Devices row keeps saying Connected.
-                AppLogger(category: "NanoMuseHub").info("relay error frame: \(frame["code"] as? String ?? "error")")
+                AppLogger(category: "mordeHub").info("relay error frame: \(frame["code"] as? String ?? "error")")
             } else {
                 // `bad_key` / `bad_device` ahead of the close: the row says so until 4001/4002 lands
                 state = .error(frame["message"] as? String ?? "")
@@ -410,7 +413,7 @@ final class NanoMuseHub: ObservableObject {
     /// Asks another device for something; resolves with its `result` body. Progress arrives on `onEvent`.
     /// `id` is the call's frame id when the caller needs it later (`stop {call}`); a fresh one otherwise.
     func call(to: String, action: String, args: [String: Any] = [:], timeout: TimeInterval = 120, id given: String? = nil, onEvent: (([String: Any]) -> Void)? = nil) async throws -> [String: Any] {
-        guard connected else { throw HubError(code: "disconnected", message: "this iPhone is not on the hub; sign in to nanoMuse Cloud and turn on Devices") }
+        guard connected else { throw HubError(code: "disconnected", message: "this iPhone is not on the hub; sign in to morde Cloud and turn on Devices") }
         let id = given ?? Self.newCallId()
         return try await withCheckedThrowingContinuation { cont in
             var finished = false
@@ -473,35 +476,24 @@ final class NanoMuseHub: ObservableObject {
                     if ok {
                         self.reply(id, body: ["ok": true, "url": raw])
                     } else {
-                        self.refuse(id, "not_opened", "this iPhone did not open \(raw): nothing handles it, or nanoMuse is not in the foreground")
+                        self.refuse(id, "not_opened", "this iPhone did not open \(raw): nothing handles it, or morde is not in the foreground")
                     }
                 }
             }
         case "notify":
             guard let text = args["text"] as? String, !text.isEmpty else { refuse(id, "usage", "text is required"); return }
-            let title = (args["title"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "nanoMuse"
+            let title = (args["title"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "morde"
             notify(title: title, text: text, from: from) { ok in
                 Task { @MainActor in self.reply(id, body: ["ok": ok, "shown": ok]) }
             }
         case "screen":
             refuse(id, "no_screen", "this iPhone cannot be screenshotted from another device")
         case "task":
-            // "@iPhone …" from another device: this phone's Muse does it (NanoMuseHubTasks).
-            let sender = frame["from"] as? [String: Any] ?? [:]
-            Task { @MainActor [weak self] in
-                let outcome = await NanoMuseHubTasks.run(callId: id, args: args, from: sender) { [weak self] body in
-                    self?.event(id, body: body)
-                }
-                switch outcome {
-                case .result(let body): self?.reply(id, body: body)
-                case .failure(let code, let message): self?.refuse(id, code, message)
-                }
-            }
+            refuse(id, "local_execution_disabled", MordeLocalExecutionPolicy.disabledMessage)
         case "stop":
-            let sender = frame["from"] as? [String: Any] ?? [:]
-            reply(id, body: ["stopped": NanoMuseHubTasks.stop(args: args, from: sender)])
+            reply(id, body: ["stopped": false])
         case "shell", "files", "file.get", "file.put", "approve":
-            refuse(id, "not_supported", "nanoMuse on iOS does not do '\(action)' for other devices yet; ask on the phone itself")
+            refuse(id, "not_supported", "morde on iOS does not do '\(action)' for other devices yet; ask on the phone itself")
         default:
             refuse(id, "unknown_action", "this iPhone does not do '\(action)'")
         }
@@ -525,9 +517,9 @@ final class NanoMuseHub: ObservableObject {
             "name": name,
             "os": "iOS \(UIDevice.current.systemVersion)",
             "model": UIDevice.current.model,
-            "app": "nanoMuse \(Self.version)",
+            "app": "morde \(Self.version)",
             "actions": Self.actions,
-            "note": "iOS answers info, open, notify and task (its Muse runs the task while nanoMuse is open); no shell, files or screen",
+            "note": "iOS answers info, open, notify and task (its Muse runs the task while morde is open); no shell, files or screen",
         ]
     }
 

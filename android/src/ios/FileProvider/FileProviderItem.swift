@@ -32,7 +32,8 @@ final class FileProviderItem: NSObject, NSFileProviderItem {
     }
 
     var filename: String {
-        if isRoot { return "nanoMuse" }
+        // nanoMuse: keep the Files root label aligned with the renamed app.
+        if isRoot { return "morde" }
         return fileURL.lastPathComponent
     }
 

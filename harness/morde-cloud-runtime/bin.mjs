@@ -1,5 +1,5 @@
 import { WorkerIPC } from './src/ipc.mjs'
-import { runAgent } from './src/engine.mjs'
+import { ENGINE_VERSION, runAgent } from './src/engine.mjs'
 
 const ipc = new WorkerIPC(process.stdin, process.stdout)
 process.on('SIGTERM', () => {
@@ -10,8 +10,10 @@ process.on('SIGTERM', () => {
 try {
   const allowedEnv = new Set(['PATH', 'LANG', 'LC_ALL', 'TZ', 'NODE_ENV'])
   if (process.platform === 'darwin') allowedEnv.add('__CF_USER_TEXT_ENCODING')
+  // Node 24 on Linux adds this libuv control to its own process environment.
+  if (process.platform === 'linux' && ['0', '1'].includes(process.env.UV_USE_IO_URING)) allowedEnv.add('UV_USE_IO_URING')
   if (Object.keys(process.env).some(key => !allowedEnv.has(key))) throw new Error('unclean process environment')
-  await ipc.send({ type: 'ready', version: 1, engine: 'dsh', engine_version: '0.2.0-rc.2' })
+  await ipc.send({ type: 'ready', version: 1, engine: 'dsh', engine_version: ENGINE_VERSION })
   const start = await ipc.start.promise
   const result = await runAgent(ipc, start)
   await ipc.send(result)

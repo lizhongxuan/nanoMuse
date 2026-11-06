@@ -259,6 +259,7 @@ final class ICloudSharedZoneTransport: NSObject, SyncTransport {
     /// was set from an incomplete (eventually-consistent) pull and whose
     /// incremental window can therefore never see older-updatedAt records.
     static func resetProviderConfigAnchors() {
+        guard MordeCloudKitSyncPolicy.isEnabled else { return }
         let types = ["ProviderInstanceV3", "ProviderModelEntryV3",
                      "ProviderModelGroupV3", "ProviderThinkingRuleV3",
                      "ProviderConfigV2"]
@@ -504,6 +505,10 @@ final class ICloudSharedZoneTransport: NSObject, SyncTransport {
     }
 
     func start() async throws {
+        guard MordeCloudKitSyncPolicy.isEnabled else {
+            await stop()
+            throw SyncTransportError.notStarted
+        }
         guard syncEngine == nil else { return }
         logger.info("[SyncTransport] start STEP=enter")
         // Restore etag cache before any send; without this, the first
@@ -541,12 +546,20 @@ final class ICloudSharedZoneTransport: NSObject, SyncTransport {
         logger.info("[SyncTransport] start STEP=ensureZonesExist begin")
         await ensureZonesExist()
         logger.info("[SyncTransport] start STEP=ensureZonesExist done")
+        guard MordeCloudKitSyncPolicy.isEnabled else {
+            await stop()
+            throw SyncTransportError.notStarted
+        }
         // Now drive engine to flush pendingDatabaseChanges (the saveZone
         // entries we queued above). With zones already on cloud the
         // engine's own attempt is a no-op success, but we still need
         // this so engine.state knows the saves are done.
         logger.info("[SyncTransport] start STEP=initialSendChanges begin")
         do {
+            guard MordeCloudKitSyncPolicy.isEnabled else {
+                await stop()
+                throw SyncTransportError.notStarted
+            }
             try await engine.sendChanges()
             logger.info("[SyncTransport] start STEP=initialSendChanges done")
         } catch {
@@ -563,6 +576,11 @@ final class ICloudSharedZoneTransport: NSObject, SyncTransport {
     }
 
     private func scheduleRecentFetchTimer() {
+        guard MordeCloudKitSyncPolicy.isEnabled else {
+            recentFetchTimer?.cancel()
+            recentFetchTimer = nil
+            return
+        }
         recentFetchTimer?.cancel()
         let t = DispatchSource.makeTimerSource(queue: DispatchQueue(label: "com.openminis.sync.recentFetch", qos: .utility))
         t.schedule(deadline: .now() + Self.recentFetchInterval, repeating: Self.recentFetchInterval)
@@ -588,6 +606,10 @@ final class ICloudSharedZoneTransport: NSObject, SyncTransport {
     @MainActor
     private func fetchRecentV2() async {
         logger.info("[iCloudTrace] fetchRecentV2 entering")
+        guard MordeCloudKitSyncPolicy.isEnabled else {
+            await stop()
+            return
+        }
         guard !recentFetchInFlight else {
             logger.info("[iCloudTrace] fetchRecentV2 skip — already in flight")
             // Safety net: if a previous run got stuck for any reason
@@ -717,6 +739,10 @@ final class ICloudSharedZoneTransport: NSObject, SyncTransport {
         var typesWithError: Set<String> = []
         let registry = SyncableTypeRegistry.shared
         for (type, dateKey) in typesAndKeys {
+            guard MordeCloudKitSyncPolicy.isEnabled else {
+                await stop()
+                return
+            }
             // Resolve the type's home zone; fall back to the shared zone for
             // any type not explicitly mapped (keeps behavior safe if a new
             // type is added to the poll list before the zone map).
@@ -750,6 +776,9 @@ final class ICloudSharedZoneTransport: NSObject, SyncTransport {
             let outcome: Result<[(CKRecord, PortableRecord?)], Error>
             outcome = await Task.detached(priority: .utility) { [self] () -> Result<[(CKRecord, PortableRecord?)], Error> in
                 do {
+                    guard MordeCloudKitSyncPolicy.isEnabled else {
+                        return .failure(SyncTransportError.notStarted)
+                    }
                     var rows: [(CKRecord, PortableRecord?)] = []
                     var result = try await db.records(
                         matching: query,
@@ -758,6 +787,9 @@ final class ICloudSharedZoneTransport: NSObject, SyncTransport {
                         resultsLimit: 200
                     )
                     while true {
+                        guard MordeCloudKitSyncPolicy.isEnabled else {
+                            return .failure(SyncTransportError.notStarted)
+                        }
                         for (_, recResult) in result.matchResults {
                             if case .success(let rec) = recResult {
                                 // toPortable is nonisolated — safe to call off-actor.
@@ -774,6 +806,10 @@ final class ICloudSharedZoneTransport: NSObject, SyncTransport {
                     return .failure(error)
                 }
             }.value
+            guard MordeCloudKitSyncPolicy.isEnabled else {
+                await stop()
+                return
+            }
             switch outcome {
             case .success(let rows):
                 for (rec, p) in rows {
@@ -917,6 +953,7 @@ final class ICloudSharedZoneTransport: NSObject, SyncTransport {
     /// `id == X` for SessionV2 since the parent record uses `id`).
     /// Bypasses the 24h time window of fetchRecentV2.
     func fetchSessionPortables(sessionId: String) async throws -> [PortableRecord] {
+        guard MordeCloudKitSyncPolicy.isEnabled else { throw SyncTransportError.notStarted }
         let zoneID = CKRecordZone.ID(zoneName: Self.sharedZoneName)
         let registry = SyncableTypeRegistry.shared
         var portables: [PortableRecord] = []
@@ -968,6 +1005,7 @@ final class ICloudSharedZoneTransport: NSObject, SyncTransport {
     /// server has actually committed the zone. Uses CKModifyRecordZonesOperation
     /// because CKSyncEngine doesn't expose a "wait for zone create" hook.
     private func ensureZonesExist() async {
+        guard MordeCloudKitSyncPolicy.isEnabled else { return }
         logger.info("[SyncTransport] ensureZonesExist: starting modifyRecordZones")
         let zones = [Self.sharedZoneName, Self.devicesZoneName, Self.secretsZoneName]
             .map { CKRecordZone(zoneID: CKRecordZone.ID(zoneName: $0)) }
@@ -998,6 +1036,12 @@ final class ICloudSharedZoneTransport: NSObject, SyncTransport {
     }
 
     func stop() async {
+        if sendCompletion != nil {
+            completeSendWithError(SyncTransportError.notStarted)
+        }
+        if fetchCompletion != nil {
+            completeFetchWithError(SyncTransportError.notStarted)
+        }
         syncEngine = nil
         recentFetchTimer?.cancel()
         recentFetchTimer = nil
@@ -1010,6 +1054,7 @@ final class ICloudSharedZoneTransport: NSObject, SyncTransport {
     // MARK: - send
 
     func send(_ batch: SyncOutboundBatch, trigger: SyncSendTrigger) async throws -> [SyncOutcome] {
+        guard MordeCloudKitSyncPolicy.isEnabled else { throw SyncTransportError.notStarted }
         guard let engine = syncEngine else { throw SyncTransportError.notStarted }
         // H2 fix: refuse overlapping sends rather than clobbering the
         // pending continuation (the first awaiter would hang forever).
@@ -1106,6 +1151,7 @@ final class ICloudSharedZoneTransport: NSObject, SyncTransport {
             pendingDeletes.append(recordID)
             logger.info("[iCloudTrace] queue delete \(d.type):\(d.id.prefix(8)) → zone=\(zoneName)")
         }
+        guard MordeCloudKitSyncPolicy.isEnabled else { throw SyncTransportError.notStarted }
         engine.state.add(pendingRecordZoneChanges:
             ckIds.map { .saveRecord($0) } +
             pendingDeletes.map { .deleteRecord($0) }
@@ -1117,6 +1163,9 @@ final class ICloudSharedZoneTransport: NSObject, SyncTransport {
             self.sendCompletion = cont
             Task.detached { [weak self] in
                 do {
+                    guard MordeCloudKitSyncPolicy.isEnabled else {
+                        throw SyncTransportError.notStarted
+                    }
                     try await engine.sendChanges()
                     await self?.completeSend()
                 } catch {
@@ -1239,6 +1288,7 @@ final class ICloudSharedZoneTransport: NSObject, SyncTransport {
     // MARK: - fetch
 
     func fetchChanges(trigger: SyncFetchTrigger) async throws -> SyncInboundBatch {
+        guard MordeCloudKitSyncPolicy.isEnabled else { throw SyncTransportError.notStarted }
         guard let engine = syncEngine else { throw SyncTransportError.notStarted }
         if fetchCompletion != nil {
             throw SyncTransportError.fetchInFlight
@@ -1248,6 +1298,9 @@ final class ICloudSharedZoneTransport: NSObject, SyncTransport {
             self.fetchCompletion = cont
             Task.detached {
                 do {
+                    guard MordeCloudKitSyncPolicy.isEnabled else {
+                        throw SyncTransportError.notStarted
+                    }
                     try await engine.fetchChanges()
                 } catch {
                     await self.completeFetchWithError(error)
@@ -1259,6 +1312,7 @@ final class ICloudSharedZoneTransport: NSObject, SyncTransport {
     }
 
     func fullFetch(trigger: SyncFetchTrigger) async throws -> SyncInboundBatch {
+        guard MordeCloudKitSyncPolicy.isEnabled else { throw SyncTransportError.notStarted }
         // H5: resume any in-flight send/fetch awaiters with an error
         // before tearing down the engine, otherwise their continuations
         // are silently abandoned (caller hangs forever).
@@ -1413,6 +1467,27 @@ final class ICloudSharedZoneTransport: NSObject, SyncTransport {
 @available(iOS 17.0, *)
 extension ICloudSharedZoneTransport: CKSyncEngineDelegate {
     nonisolated func handleEvent(_ event: CKSyncEngine.Event, syncEngine: CKSyncEngine) {
+        guard MordeCloudKitSyncPolicy.isEnabled else {
+            // Keep the most recent local token but ignore remote data and
+            // upload acknowledgements while CloudKit is stopped.
+            switch event {
+            case .stateUpdate(let stateUpdate):
+                Task { @MainActor [weak self] in
+                    self?.persistState(stateUpdate.stateSerialization)
+                }
+            case .fetchedRecordZoneChanges(let zoneChanges):
+                Task { @MainActor [weak self] in
+                    self?.handleFetchedZoneChanges(zoneChanges)
+                }
+            case .sentRecordZoneChanges(let sent):
+                Task { @MainActor [weak self] in
+                    self?.handleSentRecordZoneChanges(sent)
+                }
+            default:
+                break
+            }
+            return
+        }
         switch event {
         case .stateUpdate(let stateUpdate):
             Task { @MainActor [weak self] in
@@ -1446,6 +1521,7 @@ extension ICloudSharedZoneTransport: CKSyncEngineDelegate {
     ) async -> CKSyncEngine.RecordZoneChangeBatch? {
         await MainActor.run { [weak self] in
             guard let self else { return nil as CKSyncEngine.RecordZoneChangeBatch? }
+            guard MordeCloudKitSyncPolicy.isEnabled else { return nil }
             let recs = self.pendingRecords; self.pendingRecords.removeAll()
             let dels = self.pendingDeletes; self.pendingDeletes.removeAll()
             guard !recs.isEmpty || !dels.isEmpty else { return nil }
@@ -1535,6 +1611,10 @@ extension ICloudSharedZoneTransport: CKSyncEngineDelegate {
 
     @MainActor
     private func handleFetchedZoneChanges(_ zoneChanges: CKSyncEngine.Event.FetchedRecordZoneChanges) {
+        guard MordeCloudKitSyncPolicy.isEnabled else {
+            completeFetchWithError(SyncTransportError.notStarted)
+            return
+        }
         logger.info("[iCloudTrace] handleFetchedZoneChanges called: mods=\(zoneChanges.modifications.count) dels=\(zoneChanges.deletions.count)")
         let registry = SyncableTypeRegistry.shared
         let v2Zones: Set<String> = [Self.sharedZoneName, Self.devicesZoneName, Self.secretsZoneName]
@@ -1645,6 +1725,11 @@ extension ICloudSharedZoneTransport: CKSyncEngineDelegate {
 
     @MainActor
     private func handleSentRecordZoneChanges(_ sent: CKSyncEngine.Event.SentRecordZoneChanges) {
+        guard MordeCloudKitSyncPolicy.isEnabled else {
+            // Leave ChatStore's durable dirty rows for a later opt-in.
+            completeSendWithError(SyncTransportError.notStarted)
+            return
+        }
         if !sent.savedRecords.isEmpty {
             // Diagnostic split: how many of this batch's recordIDs we've
             // never seen saved before (this process lifetime) vs how
@@ -1872,6 +1957,7 @@ extension ICloudSharedZoneTransport: CKSyncEngineDelegate {
 
     @MainActor
     private func triggerV1Deletion() {
+        guard MordeCloudKitSyncPolicy.isEnabled else { return }
         guard !v1DeleteInFlight else { return }
         guard !pendingV1Deletions.isEmpty else { return }
         guard v1DeleteConsecutiveFailures < Self.v1DeleteFailureCap else { return }

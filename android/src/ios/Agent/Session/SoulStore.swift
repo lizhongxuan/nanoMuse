@@ -147,8 +147,8 @@ enum SoulIconSource {
                 return "no file at \(p)"
             case .outsideAllowedDirs(let p):
                 return "\(p) is outside the directories this tool may read. "
-                     + "Use a minis:// URL (e.g. minis://attachments/icon.png) "
-                     + "or a path under the session's minis directories."
+                     + "Use a minis:// URL (e.g. minis://shared/icon.png) "
+                     + "or a path under the global Minis directories."
             case .badURL(let s):
                 return "couldn't parse '\(s)' as an image source"
             case .blockedHost(let h):
@@ -250,14 +250,42 @@ enum SoulIconSource {
         return d
     }
 
-    /// `minis://` goes through the app's own resolver, which is what enforces
-    /// session scoping — this must not reach into another session's files.
+    /// Without an explicit session owner, SOUL imports resolve global Minis
+    /// directories only; they never guess the active or mounted session.
     private static func readMinisURL(_ s: String) throws -> Data {
         guard let url = URL(string: s) else { throw SourceError.badURL(s) }
-        guard let fileURL = AIChatViewModel.resolveMinisURL(url) else {
+        guard let fileURL = resolveGlobalMinisURL(url) else {
             throw SourceError.notFound(s)
         }
         return try readFile(at: fileURL, label: s)
+    }
+
+    private static func resolveGlobalMinisURL(_ url: URL) -> URL? {
+        guard url.scheme == "minis", let host = url.host else { return nil }
+        let roots: [String: URL] = [
+            "skills": MinisStoragePaths.minisSkillsPersistentDir,
+            "memory": MinisStoragePaths.minisMemoryPersistentDir,
+            "shared": MinisStoragePaths.minisSharedPersistentDir,
+        ]
+        guard let root = roots[host] else { return nil }
+
+        let fm = FileManager.default
+        let rootPath = root.standardizedFileURL.resolvingSymlinksInPath().path
+        for subPath in MinisURLPathDecoding.subPathCandidates(for: url) {
+            guard !subPath.isEmpty,
+                  !subPath.hasPrefix("/"),
+                  !subPath.split(separator: "/", omittingEmptySubsequences: false).contains("..")
+            else { continue }
+
+            let candidate = root.appendingPathComponent(subPath).standardizedFileURL
+            let resolved = candidate.resolvingSymlinksInPath()
+            let resolvedPath = resolved.path
+            guard resolvedPath == rootPath || resolvedPath.hasPrefix(rootPath + "/"),
+                  fm.fileExists(atPath: resolvedPath)
+            else { continue }
+            return resolved
+        }
+        return nil
     }
 
     /// A raw filesystem path is accepted only inside the minis persistent
@@ -286,19 +314,14 @@ enum SoulIconSource {
         return nil
     }
 
-    /// The directories a config-driven read may touch. Session-scoped dirs use
-    /// the ACTIVE session only, matching `resolveMinisURL`'s isolation rule.
+    /// The directories a config-driven read may touch. Session-scoped roots
+    /// require an explicit session identity and are unavailable to global SOUL settings.
     private static func allowedRoots() -> [URL] {
-        var roots: [URL] = [
-            AIChatViewModel.minisSkillsPersistentDir,
-            AIChatViewModel.minisMemoryPersistentDir,
-            AIChatViewModel.minisSharedPersistentDir,
+        [
+            MinisStoragePaths.minisSkillsPersistentDir,
+            MinisStoragePaths.minisMemoryPersistentDir,
+            MinisStoragePaths.minisSharedPersistentDir,
         ]
-        if let sid = AIChatViewModel.activeSessionId {
-            roots.append(AIChatViewModel.minisPersistentBase
-                .appendingPathComponent(sid, isDirectory: true))
-        }
-        return roots
     }
 
     private static func readFile(at url: URL, label: String) throws -> Data {
@@ -510,7 +533,7 @@ struct SoulMetadata: Equatable {
     var displayEmoji: String { "🐾" }
 
     static let `default` = SoulMetadata(
-        name: "nanoMuse",
+        name: "morde",
         // Default emoji is intentionally empty — the UI uses the fixed
         // `displayEmoji` sparkle and serialize() no longer writes the
         // `emoji:` line. Kept on the struct only so the parser can
@@ -648,7 +671,7 @@ enum SoulBodyLimitCheck: Equatable {
 enum SoulStore {
 
     static var fileURL: URL {
-        AIChatViewModel.minisMemoryPersistentDir.appendingPathComponent("SOUL.md")
+        MinisStoragePaths.minisMemoryPersistentDir.appendingPathComponent("SOUL.md")
     }
 
     // MARK: - Body length rules (unified token count)
@@ -755,7 +778,7 @@ enum SoulStore {
     /// style / lang) is seeded.
     static let defaultContent: String = """
     ---
-    name: "nanoMuse"
+    name: "morde"
     style: ""
     lang: "auto"
     ---
@@ -799,6 +822,9 @@ enum SoulStore {
     static func refreshCache() {
         if let file = load() {
             cachedMetadata = file.metadata
+            if cachedMetadata.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "nanomuse" {
+                cachedMetadata.name = "morde"
+            }
         } else {
             cachedMetadata = .default
         }
@@ -925,7 +951,7 @@ enum SystemPromptBuilder {
         let name: String = {
             let n = (file?.metadata.name ?? SoulMetadata.default.name)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            return n.isEmpty ? "nanoMuse" : n
+            return n.isEmpty || n.lowercased() == "nanomuse" ? "morde" : n
         }()
         let style: String = (file?.metadata.style ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1029,12 +1055,12 @@ enum SystemPromptBuilder {
 @MainActor
 struct AssistantSoulName: View {
     @State private var name: String = SoulStore.cachedMetadata.name.isEmpty
-        ? "nanoMuse" : SoulStore.cachedMetadata.name
+        ? "morde" : SoulStore.cachedMetadata.name
     var body: some View {
         Text(name)
             .onReceive(NotificationCenter.default.publisher(for: .soulMdChanged)) { _ in
                 let n = SoulStore.cachedMetadata.name
-                name = n.isEmpty ? "nanoMuse" : n
+                name = n.isEmpty ? "morde" : n
             }
     }
 }

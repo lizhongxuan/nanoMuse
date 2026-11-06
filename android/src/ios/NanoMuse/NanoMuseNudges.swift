@@ -243,6 +243,8 @@ final class NanoMuseNudges: ObservableObject {
 
     /// `GET /v1/nudges` when the copy is older than a day (or never fetched).
     func fetchIfStale() {
+        // nanoMuse: Morde has no legacy Relay nudges endpoint.
+        guard MordeLegacyServicePolicy.isEnabled else { return }
         let last = UserDefaults.standard.double(forKey: Keys.fetchedAt)
         guard Date().timeIntervalSince1970 - last > Self.ttl, !fetching else { return }
         fetching = true

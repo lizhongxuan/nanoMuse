@@ -21,10 +21,10 @@ final class MinisFsRouter: @unchecked Sendable {
     /// /var/minis/{memory,skills,shared} stay global and are NOT listed here —
     /// they fall through to the legacy g_bind_mounts[] table.
     private let perSessionBuckets: [(linuxPrefix: String, hostSubdir: String)] = [
-        (AIChatViewModel.minisOffloadsLinuxDir,    "offloads"),
-        (AIChatViewModel.minisAttachmentsLinuxDir, "attachments"),
-        (AIChatViewModel.minisWorkspaceLinuxDir,   "workspace"),
-        (AIChatViewModel.minisBrowserLinuxDir,     "browser"),
+        (MinisStoragePaths.minisOffloadsLinuxDir,    "offloads"),
+        (MinisStoragePaths.minisAttachmentsLinuxDir, "attachments"),
+        (MinisStoragePaths.minisWorkspaceLinuxDir,   "workspace"),
+        (MinisStoragePaths.minisBrowserLinuxDir,     "browser"),
     ]
 
     private let lock = NSLock()
@@ -36,7 +36,7 @@ final class MinisFsRouter: @unchecked Sendable {
     private let minisBaseURL: URL
 
     private init() {
-        self.minisBaseURL = AIChatViewModel.minisPersistentBase
+        self.minisBaseURL = MinisStoragePaths.minisPersistentBase
     }
 
     /// Allocate a stable fs_context token for `sid`. Repeated calls with the

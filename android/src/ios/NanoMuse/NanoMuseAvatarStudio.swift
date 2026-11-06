@@ -180,6 +180,8 @@ final class NanoMuseAvatarStudioModel: ObservableObject {
 
     /// Whether a picture can be drawn at all right now; the reason when not.
     var cannotDrawReason: String? {
+        // nanoMuse: A disabled Morde model route must not invite the person to add a local key.
+        guard MordeLocalExecutionPolicy.isEnabled else { return MordeLocalExecutionPolicy.disabledMessage }
         if case .unavailable = NanoMuseImageGen.route() {
             return AppLocalized("No image model found on this provider. Type one below, or check again once the key is in.")
         }
@@ -393,7 +395,7 @@ struct NanoMuseAvatarStudioView: View {
         case .ownKey:
             return AppLocalized("Pictures are drawn with your Bailian key and kept on this phone; the face is shared with your other devices through your account. Each new face is eight pictures: four to choose from and four moods.")
         case .relay:
-            return AppLocalized("Pictures are drawn through nanoMuse Cloud and kept on this phone; the face is shared with your other devices through your account. Each new face is eight pictures: four to choose from and four moods.")
+            return AppLocalized("Pictures are drawn through morde Cloud and kept on this phone; the face is shared with your other devices through your account. Each new face is eight pictures: four to choose from and four moods.")
         case .unavailable:
             return AppLocalized("Until one is set, the avatar cannot be changed and no pictures can be drawn. The agent will say so if you ask.")
         }
@@ -449,15 +451,12 @@ struct NanoMuseAvatarStudioView: View {
                         Text(error).foregroundStyle(.red).font(.footnote)
                     }
                 }
-                Section {
-                    Text(sourceNote)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    Text(NanoMuseImageGen.providerLine())
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    if studio.usesOwnKey {
-                        NavigationLink(AppLocalized("Image model")) { NanoMuseImageModelPicker() }
+                if MordeLocalExecutionPolicy.isEnabled {
+                    // nanoMuse: Morde hides legacy image-provider details while direct model calls are disabled.
+                    Section {
+                        Text(sourceNote)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                     }
                 }
             }
@@ -513,7 +512,7 @@ struct NanoMuseAvatarStudioView: View {
                 Text(own.clip != nil
                      ? AppLocalized("Your clip is on and plays for every mood; the drawn stills still show where a still is used. Default face removes it.")
                      : AppLocalized("A short video of yours plays as the face at rest, and the other moods fall back to it. MP4 or MOV with H.264 or HEVC video, up to 15 seconds and 30 MB; it plays muted in a loop."))
-                Text(AppLocalized("The clip stays on this phone. It is not uploaded to nanoMuse Cloud or synced to your other devices."))
+                Text(AppLocalized("The clip stays on this phone. It is not uploaded to morde Cloud or synced to your other devices."))
             }
         }
     }
@@ -782,50 +781,5 @@ struct NanoMuseFaceCostSheet: View {
     static func money(_ v: Double) -> String {
         if v == v.rounded() { return String(format: "%.0f", v) }
         return String(format: "%.2f", v)
-    }
-}
-
-// MARK: - Image model (own key)
-
-/// Which Bailian instance and model draw the face, when a key is on this phone.
-struct NanoMuseImageModelPicker: View {
-    @State private var instances: [ProviderInstance] = []
-    @State private var instanceId: String = ""
-    @State private var model: String = ""
-
-    var body: some View {
-        Form {
-            Section {
-                Picker(AppLocalized("Provider"), selection: $instanceId) {
-                    ForEach(instances) { inst in Text(inst.label).tag(inst.id) }
-                }
-                .nmOnChange(of: instanceId) { _ in
-                    if let inst = instances.first(where: { $0.id == instanceId }) { model = NanoMuseImageGen.suggestedModel(for: inst) }
-                }
-                if let inst = instances.first(where: { $0.id == instanceId }) {
-                    Picker(AppLocalized("Image model"), selection: $model) {
-                        ForEach(NanoMuseImageGen.availableModels(for: inst), id: \.self) { Text($0).tag($0) }
-                    }
-                }
-            } footer: {
-                Text(AppLocalized("Drawn through Model Studio's native image endpoint with the same key. qwen-image-3.0 is about ¥0.18 a picture."))
-            }
-        }
-        .navigationTitle(AppLocalized("Image model"))
-        .navigationBarTitleDisplayMode(.inline)
-        .onAppear {
-            instances = NanoMuseImageGen.bailianInstances()
-            if case .ownKey(let k) = NanoMuseImageGen.route() {
-                instanceId = k.instanceId
-                model = k.model
-            } else if let first = instances.first {
-                instanceId = first.id
-                model = NanoMuseImageGen.suggestedModel(for: first)
-            }
-        }
-        .onDisappear {
-            guard !instanceId.isEmpty, !model.isEmpty else { return }
-            NanoMuseImageGen.save(instanceId: instanceId, model: model)
-        }
     }
 }

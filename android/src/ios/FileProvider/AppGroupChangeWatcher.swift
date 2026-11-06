@@ -49,9 +49,9 @@ final class AppGroupChangeWatcher {
 
         let fm = FileManager.default
         let roots: [(URL, String)] = [
-            (AIChatViewModel.minisSharedPersistentDir, "shared"),
-            (AIChatViewModel.minisSkillsPersistentDir, "skills"),
-            (AIChatViewModel.minisMemoryPersistentDir, "memory"),
+            (MinisStoragePaths.minisSharedPersistentDir, "shared"),
+            (MinisStoragePaths.minisSkillsPersistentDir, "skills"),
+            (MinisStoragePaths.minisMemoryPersistentDir, "memory"),
         ]
 
         for (rootURL, rootKey) in roots {

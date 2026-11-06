@@ -198,13 +198,17 @@ final class FontSettings: ObservableObject {
 
 // MARK: - View extension for app-wide font scaling
 
-/// Applies app-base font scaling via `dynamicTypeSize`.
+/// Applies an explicit app-base scale; the default inherits system Dynamic Type.
 /// Use on sheet content and any view that doesn't inherit the root environment.
 private struct AppFontScaleModifier: ViewModifier {
     @ObservedObject private var fontSettings = FontSettings.shared
 
     func body(content: Content) -> some View {
-        content.dynamicTypeSize(fontSettings.appBaseScale.dynamicTypeSize)
+        if fontSettings.appBaseScale == .default {
+            content
+        } else {
+            content.dynamicTypeSize(fontSettings.appBaseScale.dynamicTypeSize)
+        }
     }
 }
 

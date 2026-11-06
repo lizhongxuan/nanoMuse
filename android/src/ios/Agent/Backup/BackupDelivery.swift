@@ -46,7 +46,7 @@ enum BackupDelivery {
 
     /// Where delivered packages live: `<AppGroup>/MinisFileProvider/Backups/`.
     static var backupsDirectory: URL {
-        AIChatViewModel.minisAppGroupRoot
+        MinisStoragePaths.minisAppGroupRoot
             .appendingPathComponent(backupsDirectoryName, isDirectory: true)
     }
 
@@ -95,7 +95,7 @@ enum BackupDelivery {
     /// are sitting in the agent-visible workspace and would be swept into the
     /// next Shared Files export. Called on app start.
     static func migrateLegacySharedBackups() {
-        let legacy = AIChatViewModel.minisSharedPersistentDir
+        let legacy = MinisStoragePaths.minisSharedPersistentDir
             .appendingPathComponent(backupsDirectoryName, isDirectory: true)
         let fm = FileManager.default
         guard fm.fileExists(atPath: legacy.path) else { return }

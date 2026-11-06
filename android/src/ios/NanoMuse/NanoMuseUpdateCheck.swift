@@ -106,6 +106,9 @@ final class NanoMuseUpdateCheck: ObservableObject {
 
     /// A check in the background when the last one is older than a day.
     func checkIfStale() {
+#if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-morde.localRegistrationStub") { return }
+#endif
         if let checkedAt, Date().timeIntervalSince(checkedAt) < Self.ttl { return }
         Task { @MainActor [self] in await checkNow() }
     }
@@ -117,6 +120,8 @@ final class NanoMuseUpdateCheck: ObservableObject {
 
     /// The download index first, GitHub second. Nil when neither answered usefully.
     private static func fetchLatest() async -> Found? {
+        // nanoMuse: Wait for a Morde-owned release index before making update requests.
+        guard MordeLegacyServicePolicy.isEnabled else { return nil }
         if let json = await fetchJSON(indexURL), let found = parseIndex(json) {
             return found
         }
@@ -157,7 +162,7 @@ final class NanoMuseUpdateCheck: ObservableObject {
         var request = URLRequest(url: url)
         request.timeoutInterval = 10
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue("nanoMuse-iOS/\(installed)", forHTTPHeaderField: "User-Agent")
+        request.setValue("morde-iOS/\(installed)", forHTTPHeaderField: "User-Agent")
         guard let result = try? await URLSession.shared.data(for: request) else { return nil }
         let (data, response) = result
         guard (200..<300).contains((response as? HTTPURLResponse)?.statusCode ?? 0) else { return nil }

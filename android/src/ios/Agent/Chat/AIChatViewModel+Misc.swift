@@ -31,20 +31,10 @@ extension AIChatViewModel {
                         kernelStatus = .failed("Kernel boot failed: \(err)")
                         return
                     }
-                    // Wire fakefs change events into the iCloud Sync v2
-                    // SessionFile dirty pipeline. Must be done after boot
-                    // (the C-side dispatch source is created by this call)
-                    // and before any bind mount, so the first realfs op
-                    // already has a consumer registered.
-                    installSessionFileChangeTracker(kernel: ISHKernel.shared)
-
-                    // Install per-session path-translate hook. Must run
-                    // before any session task is spawned so the first
-                    // /var/minis/* access already routes correctly.
-                    MinisFsRouter.shared.installHook()
+                    // nanoMuse: iSH filesystem routing and fakefs event ingestion are retired.
                 }
                 RootfsManager.shared.applyDefaultMountOverlay()
-                Task { @MainActor in MirrorSpeedTestViewModel.shared.autoDetectOnceIfNeeded() }
+                // nanoMuse: Morde has no package-management UI for mirror auto-detection.
                 kernelStatus = .booted
                 let totalElapsed = (CFAbsoluteTimeGetCurrent() - bootStart) * 1000
                 logger.info("[KernelBoot] TOTAL: \(String(format: "%.1f", totalElapsed))ms")
@@ -60,6 +50,8 @@ extension AIChatViewModel {
     /// Queue the current input text as a prompt to be injected into the running agent loop.
     /// The message immediately appears in the chat with a dashed border (isQueued=true).
     func enqueuePrompt() {
+        // nanoMuse: Keep the composer intact while local execution is disabled.
+        guard requireLocalExecution() else { return }
         let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty || !attachments.isEmpty, isProcessing else { return }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()

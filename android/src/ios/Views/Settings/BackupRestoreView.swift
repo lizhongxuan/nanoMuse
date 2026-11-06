@@ -510,7 +510,11 @@ struct BackupRestoreView: View {
             }
             let credsRestored = r.categories.reduce(0) { $0 + $1.credentialsRestored }
             if credsRestored > 0 {
-                LabeledContent("API keys restored", value: "\(credsRestored)")
+                LabeledContent("Provider credentials restored", value: "\(credsRestored)")
+            }
+            let providerAPIKeysSkipped = r.categories.reduce(0) { $0 + $1.providerAPIKeysSkippedByPolicy }
+            if providerAPIKeysSkipped > 0 {
+                LabeledContent("Provider API keys not restored", value: "\(providerAPIKeysSkipped)")
             }
             ForEach(r.categories, id: \.category) { c in
                 if let failed = c.failed {
@@ -541,6 +545,21 @@ struct BackupRestoreView: View {
                             .font(.caption)
                             .foregroundStyle(.red)
                     }
+                    if c.providerAPIKeysSkippedByPolicy > 0 {
+                        Text("\(displayNameRaw(c.category)): \(c.providerAPIKeysSkippedByPolicy) provider API key(s) were intentionally not restored. Configure models through Morde instead.")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+                    if c.unknownCredentialFieldsIgnored > 0 {
+                        Text("\(displayNameRaw(c.category)): \(c.unknownCredentialFieldsIgnored) unrecognized credential field(s) were ignored by this app version.")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+                    if c.credentialsUnreadable {
+                        Text("\(displayNameRaw(c.category)): credential section could not be read; no credentials from it were restored.")
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
                 }
             }
             if !r.rolledBack.isEmpty {
@@ -552,32 +571,20 @@ struct BackupRestoreView: View {
             Text("Restore Complete")
         } footer: {
             if let prov = r.categories.first(where: { $0.category == BackupCategory.providers.rawValue }) {
-                if prov.credentialsRestored > 0 {
+                if prov.providerAPIKeysSkippedByPolicy > 0 {
+                    Text("Provider API keys from app backups are not restored. Configure models through Morde instead. OAuth credentials remain eligible for restore.")
+                } else if prov.credentialsUnreadable {
+                    Text("The app backup's credential section could not be read. Provider settings may have been restored without their credentials.")
+                } else if prov.credentialsRestored > 0 {
                     // Credentials now always travel with Providers, so this is
                     // the normal outcome rather than a bonus.
-                    Text("API keys were restored for \(prov.credentialsRestored) provider(s) along with their settings. Existing keys on this device were kept. OAuth logins may still need to be renewed if their tokens have expired.")
+                    Text("Provider credentials were restored for \(prov.credentialsRestored) provider(s) along with their settings. Existing credentials on this device were kept. OAuth logins may still need to be renewed if their tokens have expired.")
                 } else if prov.credentialsKept > 0 {
-                    // [T-backup-credentials-message-inverted] Nothing was
-                    // WRITTEN, but only because every key in the package is
-                    // already on this device — `credentialsRestored` counts
-                    // keys actually written (BackupSecretsImporter increments
-                    // it only `if wrote`), while an existing key increments
-                    // `providersSkippedExisting` instead.
-                    //
-                    // This is the normal outcome when restoring onto the device
-                    // that made the backup, and it used to fall into the branch
-                    // below — telling the user "this backup was created without
-                    // API keys… enter each API key again" on a fully
-                    // credentialed device, which is exactly backwards.
-                    // `credentialsKept` was already being computed for this and
-                    // simply never read by any view.
-                    Text("Your existing API keys were kept — the backup's keys matched credentials already on this device, so nothing needed to be overwritten.")
+                    // Existing credentials win during merge; the restore report
+                    // counts credentials left untouched separately from writes.
+                    Text("Your existing provider credentials were kept — nothing needed to be overwritten.")
                 } else {
-                    // Reachable for OLDER packages: exports used to offer a
-                    // credential-free "share copy", and those must keep
-                    // restoring. Says why nothing arrived instead of implying
-                    // the restore misbehaved.
-                    Text("This backup was created without API keys, so restored providers have no credentials — enter each API key or sign in again before use.")
+                    Text("This backup contains no restorable provider credentials. Configure models through Morde, or sign in again for OAuth providers.")
                 }
             }
         }

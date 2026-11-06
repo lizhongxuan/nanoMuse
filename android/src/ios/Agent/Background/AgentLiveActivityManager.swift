@@ -287,7 +287,8 @@ final class AgentLiveActivityManager {
 
     static func currentSoulName() -> String {
         let name = SoulStore.cachedMetadata.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        return name.isEmpty ? "nanoMuse" : name
+        // nanoMuse: use the product name when no custom agent name is set.
+        return name.isEmpty ? "morde" : name
     }
 
     /// SF Symbol for the most-recently-invoked tool across all active sessions,

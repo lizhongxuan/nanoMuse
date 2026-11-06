@@ -11,8 +11,8 @@
 | 聊天 | 手机和网页版都是单色胶囊：你的消息是深色底上的白色胶囊、黑色文字（浅色下白底黑胶囊），智能体的胶囊比底色略浅或略深一级，发送按钮和回到最新的按钮用同一种墨色，顶栏是一层渐隐，对话从它下面滚过去、融进底色。工具的使用不藏着：每个动作一个小标签（「正在查价格」），点开是工具调用；审批请求是对话里的卡片，上面是哨兵（Sentinel）写的摘要、一字不差写出来的动作和范围按钮（一次、本次对话、总是；手机上是一次、本聊天、总是）；智能体做出来的文件显示成带预览的方块 | `web/src/screens/ChatScreen.tsx`、`web/src/components/`、`android/…/ui/chat/ChatScreen.kt` |
 | 形象 | 内置的**小龙**，每种状态（空闲、工作中、等待、开心、出错）一张静态图，除出错以外每种状态还有一段短循环短片，所以脸会跟着智能体正在做的事变，而不是一动不动；在形象工作室里画的一张脸，或色块上的一个 emoji 作为备选（早期版本的小熊猫见下文的历史） | `web/src/components/Avatar.tsx`、`web/public/avatars/` |
 | 头部和面板 | 脸坐在聊天顶部的一个圆圈里，下面是智能体的名字，再下面是一行状态（「正在查价格」）。点它会打开面板：大图的形象、状态、正在跑的任务上的*停止*、四个按钮（审批、活动、权限、日程）以及记忆、技能、连接、设置几行 | `web/src/components/MuseHeader.tsx`、`web/src/screens/MuseSheet.tsx` |
-| 导航 | 五个图标，没有文字：聊天、动态、点子、目标、资源库，放在底边上方 12 px 的一枚毛玻璃胶囊里，半透明、带模糊和一圈细线边；当前标签页的填充图形垫在一块墨色指示块上（`ink`，图形用 `ink-fg`），其余的用 `muted` 描边。聊天是主页；智能体的其余一切（记忆、连接、设置）都在形象后面。宽窗口下由侧栏代替胶囊 | `web/src/App.tsx` |
-| 几个房间 | 动态：写给你的短文，还有一个地方可以说你想多看什么。点子：按领域分组的建议网格，点一下就发出去。目标：带进度的列表，每个点开是一份带步骤的计划和下一次跟进时间。资源库：智能体做出来的东西，最新的在前，带预览 | `web/src/screens/FeedScreen.tsx`、`IdeasScreen.tsx`、`GoalsScreen.tsx`、`LibraryScreen.tsx` |
+| 导航 | Web 外壳有五个无文字图标：聊天、动态、点子、目标、资源库。iOS 的四个主标签是聊天、动态、点子和资源库，长期目标从点子页打开。原生底栏仍只显示图标，每个按钮向读屏提供已本地化的标签名和选中状态。两端都使用毛玻璃胶囊；宽窗口下 Web 侧栏代替胶囊 | `web/src/App.tsx`、`android/src/ios/NanoMuse/NanoMuseShell.swift` |
+| 几个房间 | 动态：写给你的短文，还有一个地方可以说你想多看什么。点子：按领域分组的建议网格，点一下就发出去。目标：带进度的列表，每个点开是一份带步骤的计划和下一次跟进时间；iOS 上长期目标从点子页打开。资源库：智能体做出来的东西，最新的在前，带预览 | `web/src/screens/FeedScreen.tsx`、`IdeasScreen.tsx`、`GoalsScreen.tsx`、`LibraryScreen.tsx`、`android/src/ios/NanoMuse/NanoMuseShell.swift` |
 | 动效 | 很少：状态行变一下，一个小标签冒出来，脸动一下。小龙和工作室脸的短片，emoji 的呼吸 / 摇摆 / 蹦跳；除了状态旁边一个小转圈，没有别的加载动画；`prefers-reduced-motion` 下全部关闭 | `web/src/index.css`、`web/src/components/Avatar.tsx` |
 
 ## 小熊猫 {#the-red-panda}

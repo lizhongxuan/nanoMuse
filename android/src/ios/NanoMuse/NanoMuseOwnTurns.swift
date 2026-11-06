@@ -179,7 +179,7 @@ enum NanoMuseOwnTurns {
                 do {
                     try await upload(g)
                 } catch {
-                    AppLogger(category: "NanoMuseOwnTurns").warning("a turn did not reach the record: \(NanoMuseCloud.describe(error))")
+                    AppLogger(category: "mordeOwnTurns").warning("a turn did not reach the record: \(NanoMuseCloud.describe(error))")
                 }
             }
         }
@@ -221,7 +221,7 @@ enum NanoMuseOwnTurns {
             if let error = g.error { turn["error"] = String(error.prefix(500)) }
             let encoded = try JSONSerialization.data(withJSONObject: turn)
             guard encoded.count <= NanoMuseOwnTurns.turnMaxChars else {
-                AppLogger(category: "NanoMuseOwnTurns").warning("a turn of \(encoded.count) bytes is past the relay's ceiling; it stays on this phone")
+                AppLogger(category: "mordeOwnTurns").warning("a turn of \(encoded.count) bytes is past the relay's ceiling; it stays on this phone")
                 return
             }
             for (sha, file) in files {

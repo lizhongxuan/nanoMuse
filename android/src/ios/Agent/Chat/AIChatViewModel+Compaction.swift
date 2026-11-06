@@ -43,6 +43,16 @@ extension AIChatViewModel {
 
     /// Compact then send the pending message.
     func compactAndSend() {
+        // nanoMuse: Preserve the pending draft if local summarization is disabled.
+        guard requireLocalExecution() else {
+            if let pendingSendText {
+                inputText = pendingSendText
+                attachments = pendingSendAttachments
+            }
+            pendingSendText = nil
+            pendingSendAttachments = []
+            return
+        }
         showCompactBeforeSendPrompt = false
         let text = pendingSendText ?? ""
         let atts = pendingSendAttachments
@@ -478,6 +488,8 @@ extension AIChatViewModel {
     ///   handoff is needed.
     func compactBefore(_ chatMessageId: UUID, includesBoundary: Bool = false,
                         allowDuringProcessing: Bool = false) async {
+        // nanoMuse: Block local compaction before changing conversation history.
+        guard requireLocalExecution() else { return }
         guard allowDuringProcessing || !isProcessing else {
             logger.info("[Compact] Cannot compact while processing")
             appendSystemInfo("Cannot compact while processing.", icon: "arrow.down.right.and.arrow.up.left")
@@ -1068,6 +1080,8 @@ extension AIChatViewModel {
 
     /// Call the current LLM to generate a compact summary.
     private func generateCompactSummary(conversationText: String, statusMsg: ChatMessage? = nil) async throws -> String {
+        // nanoMuse: Prevent any direct summarization provider call while local execution is disabled.
+        guard MordeLocalExecutionPolicy.isEnabled else { throw MordeLocalExecutionDisabledError() }
         // Resolve the model entry the same way the chat path does — this falls back to the
         // default group when the session has no binding (e.g. sessions synced from iCloud on
         // another device, whose provider binding doesn't travel with the CloudKit record).

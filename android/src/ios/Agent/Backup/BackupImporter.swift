@@ -57,6 +57,12 @@ actor BackupImporter {
         /// Credentials left alone because a local one already exists — an old
         /// backup must not clobber a key the user has since rotated.
         var credentialsKept = 0
+        /// Provider API keys intentionally omitted by the Morde app-backup policy.
+        var providerAPIKeysSkippedByPolicy = 0
+        /// Forward-compatible fields this build did not recognize or restore.
+        var unknownCredentialFieldsIgnored = 0
+        /// `secrets.json` existed but could not be read or decoded.
+        var credentialsUnreadable = false
         var failed: String?
     }
 

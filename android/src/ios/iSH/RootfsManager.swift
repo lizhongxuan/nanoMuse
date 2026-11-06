@@ -254,10 +254,13 @@ class RootfsManager {
         // cannot be re-mounted or un-booted in-process, so mark the session
         // poisoned; the terminal start path checks this and refuses to reuse the
         // stale mount (which would crash) until the app is relaunched.
+        // nanoMuse: Cloud-only Minis cannot have a live iSH terminal.
+#if !MINIS_CLOUD_ONLY
         if ISHKernel.shared.isBooted {
             didResetWhileBooted = true
             logger.warning("Rootfs reset while kernel booted; terminal disabled until app relaunch")
         }
+#endif
 
         logger.info("[Rootfs] reset complete — installIfNeeded() will reinstall")
 

@@ -5,8 +5,8 @@
 //  The free allowance as the chat sees it (docs/parity.md, item 33). Two things, kept here
 //  so the shell and the composer can show them without a link of their own on
 //  `AIChatView.body`: the card pinned under the header when a turn was refused for the
-//  allowance — spent, paused by the operator, or today's share — with the ways on and
-//  *Try again*; and the one-line heads-up above the composer when the relay says `warn`
+//  allowance — spent, paused by the operator, or today's share — with the ways on; and the
+//  one-line heads-up above the composer when the relay says `warn`
 //  (80 % spent), once per pool size. The relay's guidance for the region (`spend.guidance`,
 //  contract C11) is kept between runs so the ways on read the relay's list first, the
 //  bundled catalogue only when it sent none. Android: AllowanceSignal + AllowanceWaysCard.
@@ -57,12 +57,7 @@ final class NanoMuseAllowance: ObservableObject {
 
     func dismiss() { pending = nil }
 
-    /// *Try again* on the card: the open chat's last turn once more (the shell names it), and the card goes.
-    func retry(session: String?) {
-        pending = nil
-        guard let session, let vm = ViewModelCache.shared.get(for: session) else { return }
-        vm.retry()
-    }
+    // nanoMuse: Morde allowance cards keep relay state and dismissal; retries cannot target a local VM.
 
     // MARK: /v1/me
 
@@ -94,7 +89,7 @@ final class NanoMuseAllowance: ObservableObject {
             d.removeObject(forKey: Keys.warnHidden)
         }
         guard !d.bool(forKey: Keys.warnHidden) else { headsUp = nil; return }
-        headsUp = String(format: AppLocalized("Nearly used up: ¥%@ of ¥%@ of the free allowance left. A key of your own or a plan you already pay for keeps you going, under Settings → nanoMuse Cloud."), Self.money(left), Self.money(grant))
+        headsUp = String(format: AppLocalized("Nearly used up: ¥%@ of ¥%@ of the free allowance left. A key of your own or a plan you already pay for keeps you going, under Settings → morde Cloud."), Self.money(left), Self.money(grant))
     }
 
     /// The heads-up was waved away: not again for this pool size.

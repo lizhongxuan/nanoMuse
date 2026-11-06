@@ -19,9 +19,11 @@ import { CHATGPT_KEY_REF, CHATGPT_PROVIDER, waysOn } from '../lib/providers.js'
 process.env.NANOMUSE_PY = join(tmpdir(), 'nanomuse-runtime-that-does-not-exist')
 
 /** The slice of a dsh Context the cloud service touches, kept in memory. */
-function fakeContext({ defaultModel } = {}) {
-  const credentials = new Map()
-  const settings = { [LLM_ROW]: { providers: {} } }
+function fakeContext({ defaultModel, adapterProviders = {}, credentialValues = {} } = {}) {
+  const credentials = new Map(Object.entries(credentialValues))
+  const settings = { [LLM_ROW]: { providers: structuredClone(adapterProviders) } }
+  const failures = { credentialUnset: false, settingsMutate: false, settingsUpdate: false }
+  const credentialUnsetRefs = []
   const selection = { current: defaultModel ?? { provider: 'deepseek-official', model: 'deepseek-chat' } }
   const ctx = {
     reflect: { provide() {} },
@@ -29,14 +31,20 @@ function fakeContext({ defaultModel } = {}) {
     credentials: {
       async set(ref, value) { credentials.set(String(ref), value) },
       async resolve(ref) { return credentials.has(String(ref)) ? { value: credentials.get(String(ref)) } : undefined },
-      async unset(ref) { credentials.delete(String(ref)) },
+      async unset(ref) {
+        credentialUnsetRefs.push(String(ref))
+        if (failures.credentialUnset) throw new Error('simulated credential deletion failure')
+        credentials.delete(String(ref))
+      },
     },
     settings: {
       async update(ns, patch) {
+        if (failures.settingsUpdate) throw new Error('simulated settings update failure')
         const row = settings[ns] ?? (settings[ns] = {})
         for (const [k, v] of Object.entries(patch)) row[k] = k === 'providers' ? { ...row.providers, ...v } : v
       },
       async mutate(ns, ops) {
+        if (failures.settingsMutate) throw new Error('simulated settings mutation failure')
         for (const op of ops) if (op.op === 'unset' && op.path[0] === 'providers') delete settings[ns].providers[op.path[1]]
       },
       describe() { return Object.entries(settings).map(([ns, value]) => ({ ns, value })) },
@@ -50,7 +58,7 @@ function fakeContext({ defaultModel } = {}) {
     effect(fn) { fn() },
     on() { return () => undefined },
   }
-  return { ctx, credentials, settings, selection }
+  return { ctx, credentials, settings, selection, failures, credentialUnsetRefs }
 }
 
 /** A provider's `/models`, OpenAI's shape, on the loopback. */
@@ -74,22 +82,24 @@ const ACCOUNT_MODELS = [
 ]
 
 /** A cloud service in a fresh home; `signedIn` writes an account snapshot and its key first. */
-async function cloud({ signedIn = false, defaultModel } = {}) {
+async function cloud({ signedIn = false, defaultModel, stateSeed, adapterProviders = {}, credentialValues = {}, initialize = true } = {}) {
   const home = await mkdtemp(join(tmpdir(), 'nm-cloud-'))
   const statePath = join(home, 'cloud.json')
-  const fake = fakeContext({ defaultModel })
+  const fake = fakeContext({ defaultModel, adapterProviders, credentialValues })
   // `update.checkedAt` of now: the daily update check (the network) is not due during the test
+  const initialState = stateSeed ? structuredClone(stateSeed) : {}
   if (signedIn) {
     await fake.ctx.credentials.set(TOKEN_REF, 'account-key')
-    await writeFile(statePath, JSON.stringify({ account: { id: 'acct-1', channel: 'email', hint: 'a***@example.org', member: false, region: 'intl' }, models: ACCOUNT_MODELS, update: { checkedAt: Date.now() } }))
-  } else {
-    await writeFile(statePath, JSON.stringify({ update: { checkedAt: Date.now() } }))
+    initialState.account ??= { id: 'acct-1', channel: 'email', hint: 'a***@example.org', member: false, region: 'intl' }
+    initialState.models ??= ACCOUNT_MODELS
   }
+  initialState.update ??= { checkedAt: Date.now() }
+  await writeFile(statePath, JSON.stringify(initialState))
   const svc = new NanomuseCloud(fake.ctx, { baseURL: 'https://relay.invalid', deviceName: 'test-desktop', statePath })
   // the hub and the account refresh would reach the relay: not here
   svc.hub.start = () => undefined
   svc.refresh = async () => svc.status()
-  await svc[Service.init]()
+  if (initialize) await svc[Service.init]()
   const api = async (method, route, body) => {
     const req = Readable.from(body === undefined ? [] : [Buffer.from(JSON.stringify(body))])
     req.method = method
@@ -101,6 +111,14 @@ async function cloud({ signedIn = false, defaultModel } = {}) {
   }
   const state = async () => JSON.parse(await readFile(statePath, 'utf8'))
   return { svc, api, state, statePath, home, ...fake, done: () => rm(home, { recursive: true, force: true }) }
+}
+
+async function restartCloud(out) {
+  const svc = new NanomuseCloud(out.ctx, { baseURL: 'https://relay.invalid', deviceName: 'test-desktop', statePath: out.statePath })
+  svc.hub.start = () => undefined
+  svc.refresh = async () => svc.status()
+  await svc[Service.init]()
+  return svc
 }
 
 test('the rule: nothing configured has nothing; the account brings what the relay lists; a row adds its coverage; the ChatGPT sign-in is chat and vision only', async () => {
@@ -195,6 +213,122 @@ test('GET /providers: the catalogue grouped by region — Bailian first in mainl
   }
 })
 
+test('startup cleanup removes only persisted catalogue-owned own-provider rows and exact keys, once', async () => {
+  const provider = (id, providerId, keyRef, capabilities = ['chat']) => ({
+    id, provider: providerId, label: id, protocol: 'openai', baseURL: 'http://127.0.0.1:9/v1', keyRef,
+    capabilities, models: [{ id: `${id}-model`, name: `${id}-model`, vision: capabilities.includes('vision'), kind: 'chat' }], at: 1,
+  })
+  const providers = {
+    deepseek: provider('deepseek', 'deepseek', 'NANOMUSE_KEY_DEEPSEEK', ['chat', 'vision']),
+    'custom-2': provider('custom-2', 'custom', 'NANOMUSE_KEY_CUSTOM_2', ['chat', 'vision']),
+    custom: provider('custom', 'custom', ''),
+    chatgpt: provider('chatgpt', 'chatgpt', CHATGPT_KEY_REF, ['chat', 'vision']),
+    nanomuse: provider('nanomuse', 'nanomuse', TOKEN_REF),
+    morde: provider('morde', 'morde', 'NANOMUSE_KEY_MORDE'),
+    'custom-3': provider('custom-3', 'custom', 'OPENAI_API_KEY'),
+  }
+  const adapterProviders = Object.fromEntries(Object.entries(providers).map(([id, row]) => [id, {
+    displayName: row.label,
+    ...(row.keyRef ? { apiKeyEnv: row.keyRef } : {}),
+    models: [{ id: row.models[0].id, displayName: row.label, input: ['text'] }],
+  }]))
+  // Adapter settings are also persisted ownership evidence; catch a legacy row missing from cloud.json.
+  adapterProviders.openrouter = { displayName: 'OpenRouter', apiKeyEnv: 'NANOMUSE_KEY_OPENROUTER', models: [{ id: 'openrouter-model', displayName: 'OpenRouter', input: ['text'] }] }
+  const out = await cloud({
+    defaultModel: { provider: 'deepseek', model: 'deepseek-model' },
+    stateSeed: {
+      providers,
+      handsProvider: 'custom-2',
+      handsModel: 'custom-2-model',
+      media: { imageProvider: 'custom-2', imageModel: 'draw', videoProvider: 'deepseek', videoModel: 'clip' },
+    },
+    adapterProviders,
+    credentialValues: {
+      NANOMUSE_KEY_DEEPSEEK: 'synthetic-deepseek-key',
+      NANOMUSE_KEY_CUSTOM_2: 'synthetic-custom-key',
+      NANOMUSE_KEY_OPENROUTER: 'synthetic-openrouter-key',
+      NANOMUSE_KEY_CHATGPT: 'synthetic-chatgpt-token',
+      NANOMUSE_KEY_MORDE: 'synthetic-morde-key',
+      NANOMUSE_KEY_RUNTIME: 'synthetic-runtime-key',
+      NANOMUSE_KEY_NANOMUSE: 'synthetic-cloud-platform-key',
+      OPENAI_API_KEY: 'synthetic-platform-key',
+      [TOKEN_REF]: 'synthetic-cloud-account-token',
+    },
+  })
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    const state = await out.state()
+    assert.equal(out.credentials.has('NANOMUSE_KEY_DEEPSEEK'), false)
+    assert.equal(out.credentials.has('NANOMUSE_KEY_CUSTOM_2'), false)
+    assert.equal(out.credentials.has('NANOMUSE_KEY_OPENROUTER'), false)
+    assert.equal(out.credentials.get(CHATGPT_KEY_REF), 'synthetic-chatgpt-token')
+    assert.equal(out.credentials.get('NANOMUSE_KEY_MORDE'), 'synthetic-morde-key')
+    assert.equal(out.credentials.get('NANOMUSE_KEY_RUNTIME'), 'synthetic-runtime-key')
+    assert.equal(out.credentials.get('NANOMUSE_KEY_NANOMUSE'), 'synthetic-cloud-platform-key')
+    assert.equal(out.credentials.get('OPENAI_API_KEY'), 'synthetic-platform-key')
+    assert.equal(out.credentials.get(TOKEN_REF), 'synthetic-cloud-account-token')
+    assert.equal(out.settings[LLM_ROW].providers.deepseek, undefined)
+    assert.equal(out.settings[LLM_ROW].providers['custom-2'], undefined)
+    assert.equal(out.settings[LLM_ROW].providers.openrouter, undefined)
+    for (const id of ['custom', 'chatgpt', 'nanomuse', 'morde', 'custom-3']) assert.ok(out.settings[LLM_ROW].providers[id], `${id} row is retained`)
+    for (const id of ['deepseek', 'custom-2']) assert.equal(state.providers[id], undefined)
+    assert.equal(state.providers.openrouter, undefined)
+    for (const id of ['custom', 'chatgpt', 'nanomuse', 'morde', 'custom-3']) assert.ok(state.providers[id], `${id} state row is retained`)
+    assert.equal(state.handsProvider, undefined)
+    assert.equal(state.handsModel, undefined)
+    assert.equal(state.media.imageProvider, undefined)
+    assert.equal(state.media.imageModel, undefined)
+    assert.equal(state.media.videoProvider, undefined)
+    assert.equal(state.media.videoModel, undefined)
+    assert.deepEqual(state.ownProviderKeyCleanup, { version: 1, status: 'complete' })
+    assert.deepEqual(out.credentialUnsetRefs.sort(), ['NANOMUSE_KEY_CUSTOM_2', 'NANOMUSE_KEY_DEEPSEEK', 'NANOMUSE_KEY_OPENROUTER'].sort())
+    assert.notEqual(out.selection.current.provider, 'deepseek')
+
+    // A restart after completion does not sweep a newly present value or repeat deletion.
+    await out.ctx.credentials.set('NANOMUSE_KEY_DEEPSEEK', 'synthetic-late-value')
+    const callsBeforeRestart = out.credentialUnsetRefs.length
+    await restartCloud(out)
+    assert.equal(out.credentials.get('NANOMUSE_KEY_DEEPSEEK'), 'synthetic-late-value')
+    assert.equal(out.credentialUnsetRefs.length, callsBeforeRestart)
+  } finally {
+    await out.done()
+  }
+})
+
+test('startup cleanup persists row ownership before mutation, leaves failed keys retryable, and finishes on restart', async () => {
+  const own = { id: 'deepseek', provider: 'deepseek', label: 'DeepSeek', protocol: 'openai', baseURL: 'https://api.deepseek.com/v1', keyRef: 'NANOMUSE_KEY_DEEPSEEK', capabilities: ['chat'], models: [{ id: 'deepseek-flash', name: 'DeepSeek Flash', vision: false, kind: 'chat' }], at: 1 }
+  const out = await cloud({
+    initialize: false,
+    stateSeed: { providers: { deepseek: own } },
+    adapterProviders: { deepseek: { displayName: 'DeepSeek', apiKeyEnv: 'NANOMUSE_KEY_DEEPSEEK', models: [{ id: 'deepseek-flash', displayName: 'DeepSeek Flash', input: ['text'] }] } },
+    credentialValues: { NANOMUSE_KEY_DEEPSEEK: 'synthetic-deepseek-key', NANOMUSE_KEY_RUNTIME: 'synthetic-runtime-key' },
+  })
+  try {
+    out.failures.settingsMutate = true
+    await assert.rejects(out.svc[Service.init](), /routes could not be disabled/)
+    assert.equal(out.credentials.get('NANOMUSE_KEY_DEEPSEEK'), 'synthetic-deepseek-key')
+    assert.ok(out.settings[LLM_ROW].providers.deepseek)
+    assert.deepEqual((await out.state()).ownProviderKeyCleanup, { version: 1, status: 'pending', targets: [{ id: 'deepseek', provider: 'deepseek', keyRef: 'NANOMUSE_KEY_DEEPSEEK' }] })
+
+    out.failures.settingsMutate = false
+    out.failures.credentialUnset = true
+    await assert.rejects(restartCloud(out), /could not be deleted/)
+    assert.equal(out.settings[LLM_ROW].providers.deepseek, undefined)
+    assert.equal((await out.state()).providers.deepseek, undefined)
+    assert.equal(out.credentials.get('NANOMUSE_KEY_DEEPSEEK'), 'synthetic-deepseek-key')
+    assert.deepEqual((await out.state()).ownProviderKeyCleanup, { version: 1, status: 'pending', targets: [{ id: 'deepseek', provider: 'deepseek', keyRef: 'NANOMUSE_KEY_DEEPSEEK' }] })
+
+    out.failures.credentialUnset = false
+    await restartCloud(out)
+    assert.equal(out.credentials.has('NANOMUSE_KEY_DEEPSEEK'), false)
+    assert.equal(out.credentials.get('NANOMUSE_KEY_RUNTIME'), 'synthetic-runtime-key')
+    assert.deepEqual((await out.state()).ownProviderKeyCleanup, { version: 1, status: 'complete' })
+    assert.deepEqual(out.credentialUnsetRefs, ['NANOMUSE_KEY_DEEPSEEK', 'NANOMUSE_KEY_DEEPSEEK'])
+  } finally {
+    await out.done()
+  }
+})
+
 test('POST /providers/save: the key goes to the credential store under its name; cloud.json and the model row carry the name only; the models the endpoint lists are sorted by kind', async () => {
   const out = await cloud()
   const server = await modelsServer(['qwen3.8-27b', 'deepseek-v4.1-flash', 'qwen-image-3.0', 'wan2.2-i2v-flash'])
@@ -258,6 +392,7 @@ test('POST /providers/remove: the row, its credential and the choices that point
   const server = await modelsServer(['qwen3.8-27b', 'deepseek-v4.1-flash'])
   try {
     await out.api('POST', '/providers/save', { id: 'bailian', apiKey: 'sk-secret', baseURL: server.url })
+    await out.credentials.set('NANOMUSE_KEY_UNRELATED', 'unrelated-secret')
     await out.api('POST', '/hands-model', { model: 'qwen3.8-27b', provider: 'bailian' })
     assert.equal((await out.state()).handsProvider, 'bailian')
     assert.equal((await out.api('POST', '/providers/remove', { id: 'nobody' })).status, 404)
@@ -269,6 +404,7 @@ test('POST /providers/remove: the row, its credential and the choices that point
     assert.equal(state.handsProvider, undefined)
     assert.equal(state.handsModel, undefined)
     assert.equal(out.credentials.has('NANOMUSE_KEY_BAILIAN'), false)
+    assert.equal(out.credentials.get('NANOMUSE_KEY_UNRELATED'), 'unrelated-secret')
     assert.equal(out.settings[LLM_ROW].providers.bailian, undefined)
     assert.deepEqual(out.svc.handsChoice(), { provider: '', model: '' })
     assert.deepEqual(out.svc.capabilities(), [])
@@ -279,6 +415,61 @@ test('POST /providers/remove: the row, its credential and the choices that point
       assert.equal(refused.status, 400)
       assert.equal(refused.body.error.code, 'bad_provider')
     }
+  } finally {
+    await server.close()
+    await out.done()
+  }
+})
+
+test('POST /providers/remove: a persisted-row failure never deletes its credential; retry succeeds', async () => {
+  const out = await cloud()
+  const server = await modelsServer(['qwen3.8-27b'])
+  try {
+    await out.api('POST', '/providers/save', { id: 'bailian', apiKey: 'synthetic-own-key', baseURL: server.url })
+    out.failures.settingsMutate = true
+    const failed = await out.api('POST', '/providers/remove', { id: 'bailian' })
+    assert.equal(failed.status, 502)
+    assert.equal(failed.body.error.code, 'provider_remove_failed')
+    assert.equal(out.credentials.get('NANOMUSE_KEY_BAILIAN'), 'synthetic-own-key')
+    assert.ok(out.settings[LLM_ROW].providers.bailian)
+    assert.ok((await out.state()).providers.bailian)
+
+    out.failures.settingsMutate = false
+    const retried = await out.api('POST', '/providers/remove', { id: 'bailian' })
+    assert.equal(retried.status, 200)
+    assert.equal(out.credentials.has('NANOMUSE_KEY_BAILIAN'), false)
+    assert.equal(out.settings[LLM_ROW].providers.bailian, undefined)
+    assert.equal((await out.state()).providers.bailian, undefined)
+  } finally {
+    await server.close()
+    await out.done()
+  }
+})
+
+test('POST /providers/remove: credential deletion failure restores the exact provider row and can be retried without touching other keys', async () => {
+  const out = await cloud()
+  const server = await modelsServer(['qwen3.8-27b'])
+  try {
+    await out.api('POST', '/providers/save', { id: 'bailian', apiKey: 'synthetic-own-key', baseURL: server.url })
+    await out.credentials.set('NANOMUSE_KEY_UNRELATED', 'unrelated-secret')
+    const originalRow = structuredClone(out.settings[LLM_ROW].providers.bailian)
+    out.failures.credentialUnset = true
+
+    const failed = await out.api('POST', '/providers/remove', { id: 'bailian' })
+    assert.equal(failed.status, 502)
+    assert.equal(failed.body.error.code, 'credential_delete_failed')
+    assert.equal(out.credentials.get('NANOMUSE_KEY_BAILIAN'), 'synthetic-own-key')
+    assert.equal(out.credentials.get('NANOMUSE_KEY_UNRELATED'), 'unrelated-secret')
+    assert.deepEqual(out.settings[LLM_ROW].providers.bailian, originalRow)
+    assert.ok((await out.state()).providers.bailian)
+
+    out.failures.credentialUnset = false
+    const retried = await out.api('POST', '/providers/remove', { id: 'bailian' })
+    assert.equal(retried.status, 200)
+    assert.equal(out.credentials.has('NANOMUSE_KEY_BAILIAN'), false)
+    assert.equal(out.credentials.get('NANOMUSE_KEY_UNRELATED'), 'unrelated-secret')
+    assert.equal(out.settings[LLM_ROW].providers.bailian, undefined)
+    assert.equal((await out.state()).providers.bailian, undefined)
   } finally {
     await server.close()
     await out.done()
@@ -516,7 +707,7 @@ test('a row written before the endpoint list (#294) carries no id of its own: it
   const statePath = join(home, 'cloud.json')
   const fake = fakeContext()
   const row = { provider: 'custom', label: 'Gateway', protocol: 'openai', baseURL: 'http://127.0.0.1:9/v1', keyRef: 'NANOMUSE_KEY_CUSTOM', capabilities: ['chat', 'vision'], models: [{ id: 'gw-vl', name: 'gw-vl', vision: true, kind: 'chat' }], at: 1 }
-  await writeFile(statePath, JSON.stringify({ providers: { custom: row }, handsProvider: 'custom', handsModel: 'gw-vl', update: { checkedAt: Date.now() } }))
+  await writeFile(statePath, JSON.stringify({ providers: { custom: row }, handsProvider: 'custom', handsModel: 'gw-vl', ownProviderKeyCleanup: { version: 1, status: 'complete' }, update: { checkedAt: Date.now() } }))
   await fake.ctx.credentials.set('NANOMUSE_KEY_CUSTOM', 'sk-old')
   const svc = new NanomuseCloud(fake.ctx, { baseURL: 'https://relay.invalid', deviceName: 'test-desktop', statePath })
   svc.hub.start = () => undefined

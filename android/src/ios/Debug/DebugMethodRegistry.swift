@@ -124,7 +124,7 @@ enum DebugMethodRegistry {
         ),
         MethodSpec(
             name: "debug.writeFile",
-            description: "Write a file into the app sandbox (and register it in the iSH fakefs meta.db so the guest can see it). Intended for automated test harnesses to stage test fixtures before running shell commands via debug.shellExecute.",
+            description: "Write a file into the app sandbox, optionally registering it in the legacy iSH filesystem metadata.",
             params: [
                 ParamSpec(name: "path", type: "string", required: true, default: nil, description: "Sandbox-relative file path. Paths under /tmp, /usr/..., etc. map into the iSH rootfs data/ directory so the guest sees the file at that exact path."),
                 ParamSpec(name: "content", type: "string", required: true, default: nil, description: "File content. Encoded per the 'encoding' field."),
@@ -161,19 +161,7 @@ enum DebugMethodRegistry {
             returns: "{ok, deleted, id, allServerIds}",
             example: ["id": "blender-mcp"]
         ),
-        MethodSpec(
-            name: "debug.shellExecute",
-            description: "Run a shell command inside the iSH guest and return captured stdout/stderr + exit code. Synchronous: blocks until the process exits or the timeout fires. Intended for automated debugging — not interactive use. Set stdinScript=true to mirror the agent's shell_execute tool path (sh with no argv, script fed via stdin pipe) for comparison testing.",
-            params: [
-                ParamSpec(name: "command", type: "string", required: true, default: nil, description: "Shell command passed to /bin/sh -c (default) or fed via stdin pipe when stdinScript=true."),
-                ParamSpec(name: "timeout", type: "number", required: false, default: 60, description: "Max wait time in seconds. Clamped to [1, 600]."),
-                ParamSpec(name: "stdinScript", type: "bool", required: false, default: false, description: "When true, run /bin/sh with no argv and feed command via stdin pipe. Mirrors ISHExecutionCoordinator.runCommand path used by the LLM agent. Required for sessionId routing."),
-                ParamSpec(name: "env", type: "object", required: false, default: nil, description: "Optional map of environment overrides passed to the child process."),
-                ParamSpec(name: "sessionId", type: "string", required: false, default: nil, description: "Stamp the spawned shell's task group with this session's fs_context, so /var/minis/{offloads,attachments,workspace,browser} route to that session's host bucket. Requires stdinScript=true. Omit for the default global view (fs_context=0)."),
-            ],
-            returns: "{exitCode, pid, error, stdout, stderr, duration, timedOut}",
-            example: ["command": "ls /var/minis/workspace", "timeout": 30, "stdinScript": true, "sessionId": "ABC123..."]
-        ),
+        // nanoMuse: Local shell execution is blocked and omitted from RPC discovery.
         MethodSpec(
             name: "debug.scrollMetrics",
             description: "In-memory scroll diagnostics ring buffer (DEBUG builds only, OFF by default). Call with enabled=true to arm recording, then scroll, then call without 'enabled' to dump: every cell self-size (measure), layout height correction (inv), settle flush (flush), settle anchor shift (settle), full re-flow (prepare) and per-frame offset sample (scroll). No thresholds — complete data.",
@@ -206,7 +194,7 @@ enum DebugMethodRegistry {
                 ParamSpec(name: "passphrase", type: "string", required: false, default: nil,
                           description: "Encrypt the package (minisbak-enc/1). REQUIRED when credentials are included."),
                 ParamSpec(name: "deliver", type: "boolean", required: false, default: false,
-                          description: "Move the package into Files-visible shared storage (nanoMuse ▸ Backups), the path the Backup UI uses."),
+                          description: "Move the package into Files-visible shared storage (morde ▸ Backups), the path the Backup UI uses."),
             ],
             returns: "{backupId, path, bytes, durationMs, categories, skippedFiles, skippedBytes, skippedPaths}",
             example: ["keep": true]

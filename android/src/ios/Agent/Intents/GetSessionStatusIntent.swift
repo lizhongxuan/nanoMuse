@@ -59,7 +59,7 @@ struct SessionStatusQuery: EntityQuery {
 /// the latest message text, last tool summary, etc. Use after SendPrompt to poll.
 struct GetSessionStatusIntent: AppIntent {
     static var title: LocalizedStringResource = "Get Session Status"
-    static var description = IntentDescription("Gets the current status of a nanoMuse session, including whether the agent is still running, the latest message, and last tool call.")
+    static var description = IntentDescription("Gets the current status of a morde session, including whether the agent is still running, the latest message, and last tool call.")
     static var openAppWhenRun = false
 
     @Parameter(title: "Session ID")
@@ -67,11 +67,19 @@ struct GetSessionStatusIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<SessionStatus> {
-        let isRunning = SessionActivityTracker.shared.isActive(sessionID)
-
+        let unavailable = SessionStatus(
+            sessionId: "", title: "Untitled", modelName: "unknown", isRunning: false,
+            lastMessage: "", lastTool: "", updatedAt: .distantPast)
+        let visibleSessions = await NanoMuseSync.shared.visible(await ChatStore.shared.listSessions())
+        // nanoMuse: C12 prevents a guessed session ID from exposing another account's status.
+        guard let preview = visibleSessions.first(where: { $0.id == sessionID }) else {
+            return .result(value: unavailable)
+        }
         let session = await ChatStore.shared.getSession(sessionID)
-        let title = session?.title ?? "Untitled"
-        let updatedAt = session?.updatedAt ?? Date()
+        guard NanoMuseSync.shared.shows(sessionID) else { return .result(value: unavailable) }
+        let isRunning = SessionActivityTracker.shared.isActive(sessionID)
+        let title = session?.title ?? preview.title ?? "Untitled"
+        let updatedAt = session?.updatedAt ?? preview.updatedAt
 
         // Resolve model name from binding
         var modelName = session?.modelId ?? "unknown"
@@ -89,30 +97,9 @@ struct GetSessionStatusIntent: AppIntent {
             }
         }
 
-        // Extract latest assistant text and tool summary from cached VM
-        var lastMessage = ""
-        var lastTool = ""
-        if let vm = ViewModelCache.shared.get(for: sessionID) {
-            // [T-bgnotif-internal-text-leak] Internal bridge turns are
-            // model-facing instructions, never a reportable status.
-            if let lastAssistant = vm.messages.last(where: { $0.role == .assistant && !$0.isInternalBridge }) {
-                // Last text content
-                let textBlocks = lastAssistant.blocks
-                    .filter { $0.kind == .text }
-                    .map { $0.content }
-                let text = textBlocks.joined(separator: "\n")
-                lastMessage = text.isEmpty ? lastAssistant.content : text
-
-                // Last tool call summary (e.g. "shell: ls -la" or "browser: navigate")
-                if let lastToolBlock = lastAssistant.blocks.last(where: { $0.toolStatus != nil }) {
-                    lastTool = lastToolBlock.toolSummary ?? lastToolBlock.toolDescription
-                }
-            }
-        } else {
-            // VM not cached — fall back to DB
-            let sessions = await ChatStore.shared.listSessions()
-            lastMessage = sessions.first(where: { $0.id == sessionID })?.lastMessage ?? ""
-        }
+        // nanoMuse: Use the persisted preview; live VM/tool state is not required for this read-only intent.
+        let lastMessage = preview.lastMessage ?? ""
+        let lastTool = ""
 
         let status = SessionStatus(
             sessionId: sessionID,

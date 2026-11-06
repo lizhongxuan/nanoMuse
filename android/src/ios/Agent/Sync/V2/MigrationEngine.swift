@@ -136,6 +136,7 @@ final class MigrationEngine {
     /// server (no zone-level cleanup — irreversible deletion isn't worth
     /// the round trips for an opt-in cancel).
     func cancelMigration() async {
+        guard MordeCloudKitSyncPolicy.isEnabled else { return }
         let dropped = await ChatStore.shared.clearMigrationBacklog()
         SyncV2Bootstrap.setMigrationRequested(false)
         UserDefaults.standard.set(dropped, forKey: "cloudSync.v2.migrationCanceledRemaining")
@@ -171,6 +172,7 @@ final class MigrationEngine {
     /// (UI) is expected to schedule MigrationEngine.runIfNeeded()
     /// afterward.
     func requestMigration() {
+        guard MordeCloudKitSyncPolicy.isEnabled else { return }
         SyncV2Bootstrap.setMigrationRequested(true)
         UserDefaults.standard.removeObject(forKey: "cloudSync.v2.migrationCanceledRemaining")
         // Clear the cancel-scan flag so the historical backlog scan
@@ -239,6 +241,7 @@ final class MigrationEngine {
     ///
     /// Does not start a migration — the caller decides whether to re-request.
     func resetMigrationProgress() async {
+        guard MordeCloudKitSyncPolicy.isEnabled else { return }
         let clearedBacklog = await ChatStore.shared.clearMigrationBacklog()
         let clearedPushed = await ChatStore.shared.clearAllPushedRecords()
 
@@ -409,11 +412,13 @@ final class MigrationEngine {
     /// No-op once migration is fully complete (v1 zone is gone) or
     /// failed (zone state is unknown / unsafe to query).
     func refreshV1ZoneCount() async {
+        guard MordeCloudKitSyncPolicy.isEnabled else { return }
         let status = currentStatus()
         if status == .completed || status == .failed { return }
         if #available(iOS 17.0, *) {
             do {
                 let count = try await V1FetcherShim.countOwnZone()
+                guard MordeCloudKitSyncPolicy.isEnabled else { return }
                 if var s = loadState() {
                     s.progress["v1Zone.liveCount"] = count
                     s.lastUpdatedAt = Date()
@@ -430,6 +435,10 @@ final class MigrationEngine {
     /// completed or failed, returns immediately. Caller is expected to
     /// ensure v1 sync is paused before calling.
     func runIfNeeded() async {
+        guard MordeCloudKitSyncPolicy.isEnabled else {
+            logger.info("[SyncMigration] runIfNeeded skipped — CloudKit sync is disabled")
+            return
+        }
         // Re-entrancy guard. Launch (startIfEnabled) and the Sync-sheet
         // "Start / Retry Migration" button can both call this; overlapping
         // runs corrupt migration-state.json. If one is already driving the
@@ -469,9 +478,11 @@ final class MigrationEngine {
             // window to come up so the push phase doesn't immediately warn.
             var waited = 0
             while !SyncCore.shared.isRunning && waited < 30 {
+                guard MordeCloudKitSyncPolicy.isEnabled else { return }
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
                 waited += 1
             }
+            guard MordeCloudKitSyncPolicy.isEnabled else { return }
             logger.info("[SyncMigration] runIfNeeded: post-bootstrap SyncCore.isRunning=\(SyncCore.shared.isRunning) waited=\(waited)s")
         }
 
@@ -525,14 +536,17 @@ final class MigrationEngine {
 
         // Drive the state machine forward.
         while state.phase != .completed {
+            guard MordeCloudKitSyncPolicy.isEnabled else { return }
             do {
                 state = try await runPhase(state)
+                guard MordeCloudKitSyncPolicy.isEnabled else { return }
                 state.phaseFailureCount = 0
                 saveState(state)
                 // A phase completed — the migration is demonstrably moving
                 // again, so drop any stale suspended marker.
                 UserDefaults.standard.set(false, forKey: Self.suspendedKey)
             } catch let mErr as MigrationError {
+                if case .cloudKitSyncDisabled = mErr { return }
                 if case .deferredUntilNextLaunch(let n) = mErr {
                     // Not a failure — phase made progress but didn't
                     // finish its window. Save state, exit the loop,
@@ -585,6 +599,7 @@ final class MigrationEngine {
 
     /// Reset state — used in dev to re-run migration. Not exposed in UI.
     func resetForTesting() {
+        guard MordeCloudKitSyncPolicy.isEnabled else { return }
         try? FileManager.default.removeItem(at: stateURL)
         UserDefaults.standard.removeObject(forKey: statusKey)
     }
@@ -597,6 +612,7 @@ final class MigrationEngine {
     // MARK: - Phase machine
 
     private func runPhase(_ state: MigrationState) async throws -> MigrationState {
+        guard MordeCloudKitSyncPolicy.isEnabled else { throw MigrationError.cloudKitSyncDisabled }
         var s = state
         switch s.phase {
         case .detect:
@@ -615,13 +631,16 @@ final class MigrationEngine {
         case .completed:
             break
         }
+        guard MordeCloudKitSyncPolicy.isEnabled else { throw MigrationError.cloudKitSyncDisabled }
         s.lastUpdatedAt = Date()
         return s
     }
 
     private func phaseV1FullFetch(_ s: inout MigrationState) async throws {
+        guard MordeCloudKitSyncPolicy.isEnabled else { throw MigrationError.cloudKitSyncDisabled }
         logger.info("[SyncMigration] phase=v1FullFetch start")
         let result = try await V1FetcherShim.fetchAll()
+        guard MordeCloudKitSyncPolicy.isEnabled else { throw MigrationError.cloudKitSyncDisabled }
         logger.info("[SyncMigration] phase=v1FullFetch end: zonesDone=\(result.zonesProcessed) records=\(result.recordsFetched)")
         s.phase = .v2ZonesCreate
         s.progress["v1FullFetch.zones"] = result.zonesProcessed
@@ -629,11 +648,13 @@ final class MigrationEngine {
     }
 
     private func phaseV2ZonesCreate(_ s: inout MigrationState) async throws {
+        guard MordeCloudKitSyncPolicy.isEnabled else { throw MigrationError.cloudKitSyncDisabled }
         logger.info("[SyncMigration] phase=v2ZonesCreate start: zones=[minis-shared,minis-devices,minis-secrets]")
         // Booting the transport queues the three zones via
         // pendingDatabaseChanges; sendChanges then materializes them.
         // SyncCore must already have ICloudSharedZoneTransport registered.
         await SyncCore.shared.start()
+        guard MordeCloudKitSyncPolicy.isEnabled else { throw MigrationError.cloudKitSyncDisabled }
         // No explicit "create zone" call — engine handles it on the
         // first send. Treat phase as done after start succeeds.
         logger.info("[SyncMigration] phase=v2ZonesCreate end: success")
@@ -641,12 +662,14 @@ final class MigrationEngine {
     }
 
     private func phaseV2InitialPush(_ s: inout MigrationState) async throws {
+        guard MordeCloudKitSyncPolicy.isEnabled else { throw MigrationError.cloudKitSyncDisabled }
         logger.info("[SyncMigration] phase=v2InitialPush start")
         // Authority is local SQLite — not whatever phase 1 fetched. If
         // phase 1 missed records due to v1 modificationDate bugs, those
         // records are still on this device's local DB and get pushed
         // here.
         let counts = try await V2InitialPusher.markAllLocalDirty()
+        guard MordeCloudKitSyncPolicy.isEnabled else { throw MigrationError.cloudKitSyncDisabled }
         logger.info("[SyncMigration] phase=v2InitialPush start: localCounts=\(counts)")
         for (k, v) in counts { s.progress["v2InitialPush.\(k)"] = v }
         // SyncCore may still be inside its 120s boot-delay window
@@ -656,6 +679,7 @@ final class MigrationEngine {
         // appears stuck for two minutes.
         var waited = 0
         while !SyncCore.shared.isRunning && waited < 180 {
+            guard MordeCloudKitSyncPolicy.isEnabled else { throw MigrationError.cloudKitSyncDisabled }
             try? await Task.sleep(nanoseconds: 2_000_000_000)
             waited += 2
         }
@@ -664,14 +688,17 @@ final class MigrationEngine {
         } else if waited > 0 {
             logger.info("[SyncMigration] phase=v2InitialPush: waited \(waited)s for SyncCore boot delay")
         }
+        guard MordeCloudKitSyncPolicy.isEnabled else { throw MigrationError.cloudKitSyncDisabled }
         // Trigger the send (transport-agnostic; broadcasts to whatever
         // is registered — ICloudSharedZoneTransport in this case).
         await SyncCore.shared.sendNow(trigger: .migration)
+        guard MordeCloudKitSyncPolicy.isEnabled else { throw MigrationError.cloudKitSyncDisabled }
         // Wait until dirty drains. We poll in the simplest possible way
         // (every 2s up to 30 minutes); real production would expose a
         // semaphore from SyncCore.
         let deadline = Date().addingTimeInterval(30 * 60)
         while Date() < deadline {
+            guard MordeCloudKitSyncPolicy.isEnabled else { throw MigrationError.cloudKitSyncDisabled }
             let summary = await SyncCore.shared.dirtySummary()
             if summary.total == 0 { break }
             try? await Task.sleep(nanoseconds: 2_000_000_000)
@@ -693,6 +720,7 @@ final class MigrationEngine {
     }
 
     private func phaseV1ZoneDelete(_ s: inout MigrationState) async throws {
+        guard MordeCloudKitSyncPolicy.isEnabled else { throw MigrationError.cloudKitSyncDisabled }
         let myDeviceId = DeviceIdentity.deviceId
         let myZoneName = "device-\(myDeviceId)"
         logger.info("[SyncMigration] phase=v1ZoneDelete start: zone=\(myZoneName)")
@@ -734,6 +762,7 @@ final class MigrationEngine {
                 throw MigrationError.deferredUntilNextLaunch(remaining: messageCount)
             }
             logger.info("[SyncMigration] phase=v1ZoneDelete: no local sessions or messages — safeguard threshold is 0, skipping cloud count and proceeding")
+            guard MordeCloudKitSyncPolicy.isEnabled else { throw MigrationError.cloudKitSyncDisabled }
             try await V1FetcherShim.deleteOwnZone(zoneName: myZoneName)
             logger.info("[SyncMigration] phase=v1ZoneDelete end: deleted (no-local-sessions path)")
             s.phase = .lock
@@ -756,6 +785,7 @@ final class MigrationEngine {
         } else {
             cloudCount = 0
         }
+        guard MordeCloudKitSyncPolicy.isEnabled else { throw MigrationError.cloudKitSyncDisabled }
         guard let actualCloud = cloudCount else {
             // [T-icloud-v1delete-count-deadlock] Deferral, NOT a failure.
             //
@@ -782,6 +812,7 @@ final class MigrationEngine {
         }
         logger.info("[SyncMigration] phase=v1ZoneDelete safeguard OK: localSessions=\(localSessions) cloudSessions=\(actualCloud)")
 
+        guard MordeCloudKitSyncPolicy.isEnabled else { throw MigrationError.cloudKitSyncDisabled }
         try await V1FetcherShim.deleteOwnZone(zoneName: myZoneName)
         logger.info("[SyncMigration] phase=v1ZoneDelete end: deleted")
         s.phase = .lock
@@ -798,6 +829,7 @@ final class MigrationEngine {
     /// permanent failure. [T-ios-icloud-v1v2-migration-fails]
     @available(iOS 17.0, *)
     private static func countCloudSessionsV2() async -> Int? {
+        guard MordeCloudKitSyncPolicy.isEnabled else { return nil }
         let container = CKContainer(identifier: ICloudSharedZoneTransport.containerIdentifier)
         let zoneID = CKRecordZone.ID(zoneName: ICloudSharedZoneTransport.sharedZoneName)
         let query = CKQuery(recordType: "SessionV2", predicate: NSPredicate(value: true))
@@ -818,6 +850,7 @@ final class MigrationEngine {
     }
 
     private func phaseLock(_ s: inout MigrationState) async throws {
+        guard MordeCloudKitSyncPolicy.isEnabled else { throw MigrationError.cloudKitSyncDisabled }
         logger.info("[SyncMigration] phase=lock start")
         // Status flag is written by runIfNeeded after this returns;
         // here we also publish a SyncDeviceV2 record showing that this
@@ -832,6 +865,7 @@ final class MigrationEngine {
 // MARK: - Errors
 
 enum MigrationError: Error, LocalizedError {
+    case cloudKitSyncDisabled
     case pushDidNotDrain(remaining: Int)
     case v1FetchFailed(reason: String)
     case zoneDeleteFailed(zone: String, reason: String)
@@ -843,6 +877,8 @@ enum MigrationError: Error, LocalizedError {
 
     var errorDescription: String? {
         switch self {
+        case .cloudKitSyncDisabled:
+            return MordeCloudKitSyncPolicy.disabledMessage
         case .pushDidNotDrain(let n):
             return "Initial push did not drain (still \(n) dirty)"
         case .v1FetchFailed(let r):
@@ -887,6 +923,7 @@ enum V1FetcherShim {
     /// accept that the v2 push from local SQLite is the authoritative
     /// source and treat phase 1 as a no-op.
     static func fetchAll() async throws -> Result {
+        guard MordeCloudKitSyncPolicy.isEnabled else { throw MigrationError.cloudKitSyncDisabled }
         if #available(iOS 17.0, *) {
             // If v2 is enabled, shouldPauseV1 == true and v1 was never
             // started this launch — there's no v1 engine instance to
@@ -911,6 +948,7 @@ enum V1FetcherShim {
     /// stay on the server. Returns 0 if the zone is gone.
     @available(iOS 17.0, *)
     static func countOwnZone() async throws -> Int {
+        guard MordeCloudKitSyncPolicy.isEnabled else { throw MigrationError.cloudKitSyncDisabled }
         let myDeviceId = DeviceIdentity.deviceId
         let zoneID = CKRecordZone.ID(zoneName: "device-\(myDeviceId)")
         let container = CKContainer(identifier: ICloudSharedZoneTransport.containerIdentifier)
@@ -935,9 +973,11 @@ enum V1FetcherShim {
         ]
         var total = 0
         for (type, predicate) in queries {
+            guard MordeCloudKitSyncPolicy.isEnabled else { throw MigrationError.cloudKitSyncDisabled }
             do {
                 total += try await countRecords(of: type, predicate: predicate,
                                                 in: zoneID, db: db)
+                guard MordeCloudKitSyncPolicy.isEnabled else { throw MigrationError.cloudKitSyncDisabled }
             } catch let error as CKError where error.code == .zoneNotFound {
                 return 0  // entire zone gone — short-circuit
             } catch let error as CKError where error.code == .unknownItem
@@ -955,11 +995,13 @@ enum V1FetcherShim {
                                      predicate: NSPredicate,
                                      in zoneID: CKRecordZone.ID,
                                      db: CKDatabase) async throws -> Int {
+        guard MordeCloudKitSyncPolicy.isEnabled else { throw MigrationError.cloudKitSyncDisabled }
         let query = CKQuery(recordType: recordType, predicate: predicate)
         var cursor: CKQueryOperation.Cursor? = nil
         var count = 0
         // Cap pages so a runaway zone doesn't make us hang.
         for _ in 0..<200 {
+            guard MordeCloudKitSyncPolicy.isEnabled else { throw MigrationError.cloudKitSyncDisabled }
             let resp: (matchResults: [(CKRecord.ID, Swift.Result<CKRecord, Error>)],
                        queryCursor: CKQueryOperation.Cursor?)
             if let cur = cursor {
@@ -1000,6 +1042,7 @@ enum V1FetcherShim {
     }
 
     static func deleteOwnZone(zoneName: String) async throws {
+        guard MordeCloudKitSyncPolicy.isEnabled else { throw MigrationError.cloudKitSyncDisabled }
         if #available(iOS 17.0, *) {
             let container = CKContainer(identifier: ICloudSharedZoneTransport.containerIdentifier)
             let zoneID = CKRecordZone.ID(zoneName: zoneName)
@@ -1028,6 +1071,7 @@ enum V1FetcherShim {
     /// the "iCloud Zones" inventory + per-zone delete control.
     @available(iOS 17.0, *)
     static func listAllZones() async throws -> [ZoneInfo] {
+        guard MordeCloudKitSyncPolicy.isEnabled else { throw MigrationError.cloudKitSyncDisabled }
         let container = CKContainer(identifier: ICloudSharedZoneTransport.containerIdentifier)
         let zones = try await container.privateCloudDatabase.allRecordZones()
         let myDeviceId = DeviceIdentity.deviceId
@@ -1081,6 +1125,7 @@ enum V1FetcherShim {
 enum V2InitialPusher {
     /// Returns counts by recordType for diagnostic purposes.
     static func markAllLocalDirty() async throws -> [String: Int] {
+        guard MordeCloudKitSyncPolicy.isEnabled else { throw MigrationError.cloudKitSyncDisabled }
         // Implementation deferred to ChatStore / SkillStore / etc., each
         // of which exposes a "force markDirty all" helper. v1 already has
         // markAllLocalForReupload — we reuse it for sessions/messages/

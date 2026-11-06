@@ -208,7 +208,7 @@ enum NanoMuseMediaModels {
     static func imageLine() -> String {
         switch NanoMuseImageGen.route() {
         case .ownKey(let k): return "\(k.model) · \(k.label)"
-        case .relay: return NanoMuseCloud.modelsOn ? NanoMuseCloud.label : AppLocalized("Not set")
+        case .relay: return NanoMuseCloud.modelsOn ? NanoMuseCloud.displayLabel : AppLocalized("Not set")
         case .unavailable: return AppLocalized("Not set")
         }
     }
@@ -281,7 +281,7 @@ struct NanoMuseMediaModelsView: View {
                     Image(systemName: "bubble.left").foregroundStyle(.primary).frame(width: 24)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(defaultGroup?.name ?? AppLocalized("No model yet"))
-                        Text(subtitle.isEmpty ? AppLocalized("Sign in to nanoMuse Cloud or add a provider") : subtitle)
+                        Text(subtitle.isEmpty ? AppLocalized("Sign in to morde Cloud or add a provider") : subtitle)
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }
@@ -305,11 +305,11 @@ struct NanoMuseMediaModelsView: View {
             statusRow(
                 icon: "photo",
                 ready: ready,
-                line: imageInstance != nil ? "\(imageModel) · \(imageInstance?.label ?? "")" : (relayImageAvailable ? NanoMuseCloud.label : AppLocalized("Not set")),
+                line: imageInstance != nil ? "\(imageModel) · \(imageInstance?.label ?? "")" : (relayImageAvailable ? NanoMuseCloud.displayLabel : AppLocalized("Not set")),
                 offLine: AppLocalized("Until one is set, the avatar cannot be changed and no pictures can be drawn. The agent will say so if you ask.")
             )
             if relayImageAvailable {
-                choiceRow(title: NanoMuseCloud.label, selected: imageInstanceId == nil) {
+                choiceRow(title: NanoMuseCloud.displayLabel, selected: imageInstanceId == nil) {
                     imageInstanceId = nil
                     imageModel = ""
                     NanoMuseImageGen.useRelay()

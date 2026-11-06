@@ -1,10 +1,20 @@
 # iOS
 
-nanoMuse on the iPhone is the iOS half of OpenMinis 1.13 under nanoMuse's name, built by CI on a
-Mac runner and handed to TestFlight. This page says what is in the tree, how it is built, what
-the TestFlight pipeline needs, and what is still to be ported from the Android app.
+The iOS tree began as the iPhone half of OpenMinis 1.13 under the nanoMuse name. It now contains
+both the standalone Morde app and the original `Minis.xcodeproj` fusion target, whose displayed
+product name is `morde`. This page says what is in the tree, how it is built, what the TestFlight
+pipeline needs, and what is still to be ported from the Android app.
 
-**Status.** The tree, the branding, the nanoMuse Cloud sign-in, the hub client and the pipeline
+**Morde app target.** The standalone app is `android/src/ios/Morde.xcodeproj`, scheme `Morde`,
+with the iOS display name `morde`. It is separate from the legacy `Minis.xcodeproj` / `Minis`
+target described below. Morde signs in with an account and password through
+`POST /api/auth/client-login`; a fresh install starts with the configured HTTPS service origin,
+while an existing saved service address is kept. Use the `Morde` scheme in Xcode to run this app.
+The in-progress fusion target in `Minis.xcodeproj` also displays as `morde`. NanoMuse type and
+file names are internal source names; bundle and App Group IDs, URL scheme, persisted keys, the
+legacy Cloud model-group lookup and `X-NanoMuse-*` headers remain stable compatibility identifiers.
+
+**Status.** The tree, the branding, the morde Cloud sign-in, the hub client and the pipeline
 were written on a Linux machine. The app **builds, signs and is on TestFlight**: the first build,
 0.1.31 (2), went through the *iOS · TestFlight* workflow on 2026-10-03; 1.0.0 is build 16, which
 passed Apple's beta review, so the public link
@@ -172,6 +182,47 @@ Ours, in `NanoMuse/`:
   `coding.*` actions, a message to any of them), **Scheduled tasks**, **System files** (SOUL,
   GLOBAL, the diary, the feed's instruction, the routines' schedule, *Import memory* from another
   assistant), Connectors, Data controls, the two shell switches, *Show the welcome again*.
+- **One-time provider-key cleanup notice** (`MordeCredentialExpiry.swift`,
+  `ProviderConfigStore.swift`, `NanoMuseShell.swift`): the Morde migration removes keys from
+  known own-key provider entries and three fixed legacy services. As cleanup starts, a root alert
+  explains that deleting a synchronizable iCloud Keychain item may also remove it from other
+  devices on the same Apple Account. *Got it* dismisses the notice; it does not control deletion.
+  OAuth sign-ins, Morde credentials and other app data are kept. Failed deletions remain in the
+  ledger for the next launch to retry.
+- **Morde resources from the Resource Library** (`MordeApp.swift`, `NanoMuseShell.swift`): its
+  nested pages list the signed-in account's own and shared Hosts, show accessible Workspaces
+  read-only, and say that file download, checkpoint verification and preview are not connected yet.
+  Selecting a running Host uses a short-lived Gateway ticket in a WKWebView that stays on that
+  Host's HTTPS origin and has no native JavaScript bridge. Simulator interaction and expired-session
+  recovery still need device verification.
+- **Morde account from Settings** (`MordeApp.swift`, `NanoMuseSettings.swift`): the page shows the
+  signed-in name, account ID and normalized service origin. Signing out requires confirmation and
+  affects only the current Morde client session on this device. *Client installations* lists the
+  account's registered devices and asks before revoking another one; the current device is marked
+  and uses the account page's sign-out action. Model connections and API keys are not available in
+  this native page.
+- **Morde Task actions keep unresolved requests** (`MordeApp.swift`): if an action is accepted but
+  the following Task refresh fails, retrying reuses its idempotency key. A different action waits
+  until the Task state is refreshed; a definitive client rejection clears the pending attempt.
+- **Personal diary sync is explicit** (`NanoMuseSystemFiles.swift`): the Diary sync page compares
+  local entries with the signed-in account's paged Morde snapshot. It validates the date/body and
+  revision, keeps account-scoped copies out of the local files until the user chooses a draft, and
+  queues writes through the existing personal-data outbox. Conflicts do not silently overwrite a
+  local or cloud copy.
+- **Imported cloud routines stay read-only on the phone** (`NanoMuseScheduler.swift`,
+  `NanoMuseGoals.swift`, `NanoMuseSettings.swift`): the local source is preserved as a disabled
+  archive after import, without a second local reminder or run. Edit, enable and delete controls
+  are hidden; manage the schedule from Cloud schedules.
+- **Local Agent execution and direct model calls stay disabled** (`MordeCredentialExpiry.swift`,
+  `Agent/Intents/`, `CloudSyncSettingsV2View.swift`): the five shortcuts that start, continue or
+  retry local Agent work fail before creating a session, loading attachments, arming background
+  work or posting a notification. They direct the person to Morde cloud tasks. The legacy iCloud
+  sync page shows that business sync is paused and hides its old upload controls; local records are
+  kept.
+- **Morde does not offer personal model-provider setup** (`NanoMuseAccountView.swift`,
+  `NanoMuseAllowanceCard.swift`, `NanoMuseAvatarStudio.swift`): the Cloud account, allowance,
+  invite link and avatar page remain, but their legacy key, plan sign-in and image-model setup
+  routes are removed. The direct image route also stays closed while local execution is disabled.
 - **Models (0.1.34)** (`NanoMuseModels.swift`): the relay's menu opens on the model marked
   recommended *for chat*; the hosted relay currently recommends the same multimodal
   `Qwen/Qwen3.6-27B-FP8` for chat and screen operation. A pick made in the chat's picker moves to the front of the Cloud group so new chats
@@ -595,16 +646,16 @@ Ours, in `NanoMuse/`:
   nothing is left, says *No model configured. Add a provider in Settings.*
 - **The bottom bar is a floating pill** (`NanoMuseShell.swift` → `NanoMuseBottomBar`,
   `NanoMuseTones.tabIndicator` / `tabIndicatorGlyph` in `NanoMuseFaces.swift`; Android's
-  `MuseBottomBar`, #329 by @Ichiro786): the five tabs sit in a `Capsule` 12 pt above the bottom
+  `MuseBottomBar`, #329 by @Ichiro786): the four iOS root tabs sit in a `Capsule` 12 pt above the bottom
   safe area, as wide as the composer above it (the same 16 pt margins; 420 pt at most on a compact
   width, which no phone reaches; on a regular width, the iPad, it is the chat column's width less
-  the margins, 728 pt, as the composer is, see the column note below), icons only, with the five
-  tab shapes aligned to Android's `MuseBottomBar` (`bubble.left`, `doc.text`, `lightbulb`,
-  `checkmark.square`, and the three-shape `Category` glyph for Library) and the same accessibility
-  labels and selected trait as before. The pill is `.ultraThinMaterial` under the shell's surface tone at 55 percent opacity (the
+  the margins, 728 pt, as the composer is, see the column note below), icons only: Chat, Feed, Ideas
+  and Library. Long-term Goals opens inside Ideas. Each button still exposes its localized tab name
+  and selected trait to assistive technology. The tab shapes are `bubble.left`, `doc.text`,
+  `lightbulb` and the three-shape `Category` glyph for Library. The pill is `.ultraThinMaterial` under the shell's surface tone at 55 percent opacity (the
   tint carries the contrast, the material carries the blur, as Android's 55 percent surface over its
   backdrop blur) with a 1 pt `NanoMuseTones.hairline` edge; the old full-width strip and its hairline
-  on top are gone. The five tabs share the pill's width equally, each slot tappable across; the
+  on top are gone. The four tabs share the pill's width equally, each slot tappable across; the
   current one shows the filled symbol in `tabIndicatorGlyph` on a 60 by 46 pt capsule of
   `tabIndicator` (the chat's ink: black with a white symbol in light, white with a black symbol
   in dark, as Android's `MuseBottomBar`) that slides to the tab tapped next with a spring

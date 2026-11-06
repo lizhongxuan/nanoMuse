@@ -33,11 +33,6 @@ final class NanoMuseAccountData {
         var owners: [String: String] = [:]
     }
 
-    private enum Keys {
-        /// Set on the first launch of 0.1.40 or later; its absence with no data is a fresh install.
-        static let installed = "nanomuse.installed"
-    }
-
     /// The UserDefaults keys that are the account's rather than the phone's, by prefix: the
     /// main chat and first-conversation state, the feed's, the per-session addenda and routine
     /// wakes (keyed by the account's session and row ids), and the hub's conversation → session
@@ -85,13 +80,12 @@ final class NanoMuseAccountData {
 
     // MARK: - Lifecycle
 
-    /// Once, from the app root: the reinstall sweep, the relay key kept on this device, and every
+    /// Once, from the app root: the relay key kept on this device and every
     /// session given an owner.
     func start() {
         guard !started else { return }
         started = true
         Task { @MainActor [self] in
-            await sweepIfFreshInstall()
             Self.keepRelayKeyOnThisDevice()
             await reconcile()
         }
@@ -220,44 +214,6 @@ final class NanoMuseAccountData {
         prefPrefixes.contains { key.hasPrefix($0) }
     }
 
-    // MARK: - Reinstall
-
-    /// A reinstall keeps the Keychain: the items of ours that are this device's only (the
-    /// relay's key, OAuth tokens, environment variables) would outlive the data that used them.
-    /// On a launch with no marker and nothing on the phone — no provider, no chat — they go.
-    /// Items shared through iCloud Keychain are the person's other devices' and are left alone.
-    private func sweepIfFreshInstall() async {
-        let defaults = UserDefaults.standard
-        defer { defaults.set(true, forKey: Keys.installed) }
-        guard !defaults.bool(forKey: Keys.installed) else { return }
-        let hasProviders = !ProviderConfigStore.shared.instances.isEmpty
-        let hasSessions = !(await ChatStore.shared.listSessions()).isEmpty
-        guard !hasProviders, !hasSessions, NanoMuseCloud.instance == nil else { return }
-        Self.sweepDeviceKeychain()
-    }
-
-    nonisolated private static func sweepDeviceKeychain() {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecMatchLimit as String: kSecMatchLimitAll,
-            kSecReturnAttributes as String: true,
-        ]
-        var result: AnyObject?
-        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess, let items = result as? [[String: Any]] else { return }
-        var removed = 0
-        for item in items {
-            guard let service = item[kSecAttrService as String] as? String, service.hasPrefix("io.github.nanomuse.app."),
-                  service != "io.github.nanomuse.app.device" else { continue }
-            var delete: [String: Any] = [
-                kSecClass as String: kSecClassGenericPassword,
-                kSecAttrService as String: service,
-            ]
-            if let account = item[kSecAttrAccount as String] as? String { delete[kSecAttrAccount as String] = account }
-            if SecItemDelete(delete as CFDictionary) == errSecSuccess { removed += 1 }
-        }
-        AppLogger(category: "NanoMuseAccountData").info("fresh install: \(removed) device keychain item(s) of a previous install removed")
-    }
-
     /// The relay's key is this phone's alone: saved without iCloud Keychain, unlocked after the
     /// first unlock, on this device only. `ProviderKeychainHelper.loadAPIKey` reads it as the
     /// legacy entry. Called after every sign-in and once at start (the 0.1.39 entry moves).
@@ -295,7 +251,7 @@ final class NanoMuseAccountData {
         add[kSecAttrSynchronizable as String] = false
         let status = SecItemAdd(add as CFDictionary, nil)
         ProviderKeychainHelper.stampAPIKeySavedAt(Date(), instanceId: instanceId)
-        AppLogger(category: "NanoMuseAccountData").info("relay key saved on this device only, status=\(status)")
+        AppLogger(category: "mordeAccountData").info("relay key saved on this device only, status=\(status)")
     }
 
     // MARK: - Internals
@@ -304,7 +260,7 @@ final class NanoMuseAccountData {
     nonisolated private static var accountPaths: [(String, URL)] {
         [
             ("memory", NanoMuseDirs.memory),
-            ("shared", AIChatViewModel.minisSharedPersistentDir),
+            ("shared", MinisStoragePaths.minisSharedPersistentDir),
             ("feed", NanoMuseDirs.root.appendingPathComponent("feed", isDirectory: true)),
             ("feed-preferences.md", NanoMuseDirs.root.appendingPathComponent("feed-preferences.md")),
             ("goals.json", NanoMuseDirs.root.appendingPathComponent("goals.json")),
@@ -377,7 +333,7 @@ final class NanoMuseAccountData {
         }
         save()
         if !ids.isEmpty {
-            AppLogger(category: "NanoMuseAccountData").info("removed \(ids.count) chat(s) of the account that left")
+            AppLogger(category: "mordeAccountData").info("removed \(ids.count) chat(s) of the account that left")
             NotificationCenter.default.post(name: .sessionDidUpdate, object: nil)
         }
     }

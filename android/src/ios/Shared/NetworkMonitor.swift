@@ -1,8 +1,7 @@
 import Network
 import CFNetwork
 
-/// Monitors network path changes and updates iSH's /etc/resolv.conf
-/// so DNS resolution stays current when switching between WiFi/cellular/etc.
+/// Monitors network paths, refreshing iSH DNS when local execution is enabled.
 final class NetworkMonitor {
     static let shared = NetworkMonitor()
 
@@ -19,14 +18,15 @@ final class NetworkMonitor {
         guard !isStarted else { return }
         isStarted = true
 
-        // Capture initial state and do an immediate DNS write so resolv.conf is
-        // populated before the first NWPathMonitor callback fires (which can be
-        // delayed by several hundred milliseconds).
+        // Capture the initial state before the first NWPathMonitor callback.
         let initialPath = monitor.currentPath
         lastInterfaceTypes = activeInterfaceTypes(initialPath)
-        logger.info("[Network] Monitor started — writing initial DNS config")
-        NSLog("NetworkMonitor: about to refreshDns + dump proxy")
-        ISHKernel.shared.refreshDns()
+        logger.info("[Network] Monitor started")
+        NSLog("NetworkMonitor: about to inspect proxy settings")
+        // nanoMuse: The Morde target does not include iSH guest networking.
+#if !MINIS_CLOUD_ONLY
+        if MordeLocalExecutionPolicy.isEnabled { ISHKernel.shared.refreshDns() }
+#endif
         dumpSystemProxySettings(reason: "monitor-start")
 
         monitor.pathUpdateHandler = { [weak self] path in
@@ -51,17 +51,19 @@ final class NetworkMonitor {
         let typesChanged = currentTypes != lastInterfaceTypes
         lastInterfaceTypes = currentTypes
 
-        // Always refresh DNS on any path update — even when unsatisfied, refreshDns
-        // will write the public-DNS fallback so resolv.conf is never left empty.
+        // Keep the local shell's DNS current when execution is enabled.
         if !satisfied {
-            logger.info("[Network] Network unsatisfied — writing fallback DNS")
+            logger.info("[Network] Network unsatisfied")
         } else if typesChanged {
-            logger.info("[Network] Interface change detected — refreshing DNS")
+            logger.info("[Network] Interface change detected")
         } else {
-            logger.info("[Network] Path updated — refreshing DNS")
+            logger.info("[Network] Path updated")
         }
 
-        ISHKernel.shared.refreshDns()
+        // nanoMuse: The Morde target does not include iSH guest networking.
+#if !MINIS_CLOUD_ONLY
+        if MordeLocalExecutionPolicy.isEnabled { ISHKernel.shared.refreshDns() }
+#endif
         dumpSystemProxySettings(reason: typesChanged ? "interface-change" : "path-update")
 
         // Evict LLM provider connection pools ONLY when the active interface

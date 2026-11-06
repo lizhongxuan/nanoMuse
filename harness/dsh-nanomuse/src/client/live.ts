@@ -7,6 +7,7 @@
  */
 import { useSyncExternalStore } from 'react'
 import type { Grant, Hold, PendingApproval, SharedConnector, UpdateInfo } from '../desk.ts'
+import type { MordeHubStatus } from './api.ts'
 
 export type { Grant, Hold, PendingApproval, SharedConnector, UpdateInfo }
 
@@ -87,6 +88,7 @@ export interface LiveAsk {
   action: string
   text: string
   at: number
+  onceOnly?: boolean
 }
 
 /** The last thing the hands did, for the capsule's caption, the glow's marker and the trajectory. */
@@ -127,6 +129,8 @@ export interface Live {
   cloud: { signedIn: boolean; hint: string }
   profile: LiveProfile
   hub: LiveHub
+  /** The separate Morde Client Installation login, streamed by newer hosts. */
+  mordeHub?: MordeHubStatus | undefined
   /** The calls in flight, the step count, and the run that has this screen (`run`; absent on an older host, null between runs). */
   hands: { calls: LiveCall[]; steps: number; run?: LiveScreenRun | null }
   stage: LiveStage

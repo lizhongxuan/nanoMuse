@@ -10,7 +10,7 @@
         <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
     </dependencies>
     <scenes>
-        <!--nanoMuse launch: the blue mark, nothing else, on the system background (light and dark)-->
+        <!--morde launch: the blue mark, nothing else, on the system background (light and dark)-->
         <scene sceneID="nmL-sc-001">
             <objects>
                 <viewController id="nmL-vc-001" sceneMemberID="viewController">
@@ -18,7 +18,7 @@
                         <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                         <subviews>
-                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="NanoMuseLaunchMark" translatesAutoresizingMaskIntoConstraints="NO" id="nmL-im-001" userLabel="Mark">
+                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="MordeLaunchMark" translatesAutoresizingMaskIntoConstraints="NO" id="nmL-im-001" userLabel="Mark">
                                 <rect key="frame" x="136.66666666666666" y="366" width="120" height="120"/>
                                 <constraints>
                                     <constraint firstAttribute="width" constant="120" id="nmL-cw-001"/>
@@ -40,7 +40,7 @@
         </scene>
     </scenes>
     <resources>
-        <image name="NanoMuseLaunchMark" width="120" height="120"/>
+        <image name="MordeLaunchMark" width="120" height="120"/>
         <systemColor name="systemBackgroundColor">
             <color white="1" alpha="1" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
         </systemColor>

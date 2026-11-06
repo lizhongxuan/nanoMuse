@@ -131,9 +131,8 @@ final class OffloadPermissionManager: ObservableObject {
         .init(name: "apple-homekit", displayLabel: "HomeKit", description: "Smart home devices, rooms, and scenes", category: .privacy, showInSettings: true),
         .init(name: "apple-clipboard", displayLabel: "Clipboard", description: "Text and images copied to the clipboard", category: .privacy, showInSettings: true),
         // Media — no personal data, always bypass
-        .init(name: "apple-speak", displayLabel: "Speak", description: "", category: .media, showInSettings: false),
         .init(name: "apple-speech", displayLabel: "Speech", description: "", category: .media, showInSettings: false),
-        .init(name: "apple-player", displayLabel: "Player", description: "", category: .media, showInSettings: false),
+        // nanoMuse: Morde has no local shell player; app speech playback uses VoiceOutputPlayer.
         .init(name: "apple-media", displayLabel: "Media", description: "", category: .media, showInSettings: false),
         // System — no personal data, always bypass
         .init(name: "apple-device", displayLabel: "Device", description: "", category: .system, showInSettings: false),

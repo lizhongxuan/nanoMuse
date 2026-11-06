@@ -30,31 +30,39 @@ struct CloudSyncSettingsV2View: View {
 
     var body: some View {
         Form {
-            Section {
-                Toggle(isOn: Binding(
-                    get: { v2Enabled },
-                    set: { newValue in
-                        if #available(iOS 17.0, *) { SyncV2Bootstrap.setEnabled(newValue) }
-                        v2Enabled = newValue
+            // nanoMuse: Keep the retired CloudKit controls inaccessible while this path is paused.
+            if MordeCloudKitSyncPolicy.isEnabled {
+                Section {
+                    Toggle(isOn: Binding(
+                        get: { v2Enabled },
+                        set: { newValue in
+                            if #available(iOS 17.0, *) { SyncV2Bootstrap.setEnabled(newValue) }
+                            v2Enabled = newValue
+                        }
+                    )) {
+                        Text("Enable iCloud Sync")
                     }
-                )) {
-                    Text("Enable iCloud Sync")
-                }
-                if !statusText.isEmpty {
-                    NavigationLink {
-                        SyncMigrationDetailView()
-                    } label: {
-                        LabeledContent("Status") {
-                            Text(statusText).foregroundStyle(.secondary)
+                    if !statusText.isEmpty {
+                        NavigationLink {
+                            SyncMigrationDetailView()
+                        } label: {
+                            LabeledContent("Status") {
+                                Text(statusText).foregroundStyle(.secondary)
+                            }
                         }
                     }
+                } footer: {
+                    Text("Toggle takes effect on next app launch.")
+                        .font(.caption)
                 }
-            } footer: {
-                Text("Toggle takes effect on next app launch.")
-                    .font(.caption)
+            } else {
+                Section {
+                    Text(MordeCloudKitSyncPolicy.disabledMessage)
+                        .foregroundStyle(.secondary)
+                }
             }
 
-            if v2Enabled {
+            if MordeCloudKitSyncPolicy.isEnabled && v2Enabled {
                 Section {
                     Button {
                         deviceNameDraft = deviceName
@@ -162,7 +170,10 @@ struct CloudSyncSettingsV2View: View {
         // there is no graph-bound Combine sink to be released mid-transaction (the crash
         // that pattern caused — see refreshIntervalSeconds). SwiftUI cancels this Task
         // on teardown.
-        .task { await refreshLoop() }
+        .task {
+            guard MordeCloudKitSyncPolicy.isEnabled else { return }
+            await refreshLoop()
+        }
         .alert("Device Name", isPresented: $showDeviceNameEditor) {
             TextField("Device name", text: $deviceNameDraft)
             Button("Save") {
@@ -178,7 +189,7 @@ struct CloudSyncSettingsV2View: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Friendly name shown to your other nanoMuse devices.")
+            Text("Friendly name shown to your other morde devices.")
         }
     }
 

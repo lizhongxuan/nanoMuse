@@ -82,14 +82,17 @@ enum NanoMuseHubTasks {
     /// Runs `args.text` on this phone's Muse for the device in `from`; `event` carries progress.
     /// `callId` is the task frame's id, what a `stop {call}` from the same device names.
     static func run(callId: String, args: [String: Any], from: [String: Any], event: @escaping ([String: Any]) -> Void) async -> Outcome {
+        guard MordeLocalExecutionPolicy.isEnabled else {
+            return .failure(code: "local_execution_disabled", message: MordeLocalExecutionPolicy.disabledMessage)
+        }
         let text = (args["text"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return .failure(code: "usage", message: "text is required") }
         guard RootfsManager.shared.isInstalled else {
-            return .failure(code: "not_ready", message: "nanoMuse on the iPhone is still starting")
+            return .failure(code: "not_ready", message: "morde on the iPhone is still starting")
         }
         let store = ProviderConfigStore.shared
         guard store.defaultPrimaryGroupId != nil || !store.modelEntries.isEmpty else {
-            return .failure(code: "no_model", message: "this iPhone has no model to think with; sign in to nanoMuse Cloud there")
+            return .failure(code: "no_model", message: "this iPhone has no model to think with; sign in to morde Cloud there")
         }
 
         let senderId = (from["id"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "unknown"

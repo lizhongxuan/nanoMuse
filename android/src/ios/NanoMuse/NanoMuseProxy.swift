@@ -51,8 +51,7 @@ enum NanoMuseProxy {
         static let credentialSpace = "nanomuse.proxy.credential_space"
     }
 
-    /// The Keychain item: the sweep on a fresh install removes every `io.github.nanomuse.app.*`
-    /// service, this one with them (NanoMuseAccountData.sweepDeviceKeychain).
+    /// Device-only proxy credentials stay outside the model API-key migration cleanup.
     private enum KeychainItem {
         static let service = "io.github.nanomuse.app.proxy"
         static let account = "password"
@@ -419,7 +418,7 @@ enum NanoMuseProxy {
         defer { session.finishTasksAndInvalidate() }
         guard let u = URL(string: url) else { return Probe(ok: false, status: 0, millis: 0, host: host, failure: nil) }
         var request = URLRequest(url: u)
-        request.setValue("nanoMuse", forHTTPHeaderField: "User-Agent")
+        request.setValue("morde", forHTTPHeaderField: "User-Agent")
         do {
             let (data, response) = try await session.data(for: request)
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0

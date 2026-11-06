@@ -186,6 +186,7 @@ export interface Rooms {
   goals: Goal[]
   library: LibraryItem[]
   memory: MemoryItem[]
+  mordeProfile?: { revision: number; body: { name: string; avatar: 'dragon'; description: string; style: string } | { name: string; avatar: 'emoji'; emoji: string; color: string; description: string; style: string } }
   docs: { identity: string; soul: string; identityAt: number; soulAt: number }
   activity: ActivityRecord[]
   introducedAt: number

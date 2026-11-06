@@ -200,6 +200,8 @@ extension AgentProvider {
         maxTokens: Int,
         thinkingLevel: ThinkingLevel
     ) async throws -> AsyncThrowingStream<AgentStreamEvent, Error> {
+        // nanoMuse: Fail closed at the shared Agent provider entry point.
+        guard MordeLocalExecutionPolicy.isEnabled else { throw MordeLocalExecutionDisabledError() }
         let clamped = min(thinkingLevel, model.catalogMaxThinkingLevel)
         return try await streamAgentMessageClamped(
             messages: messages, systemPrompt: systemPrompt,

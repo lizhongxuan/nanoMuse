@@ -1,5 +1,212 @@
 import Foundation
 import AVFoundation
+import Combine
+
+private let audioPlaybackLogger = AppLogger(category: "AudioPlayback")
+
+// MARK: - Global Audio Player (Singleton)
+
+@MainActor
+class GlobalAudioPlayer: ObservableObject {
+    static let shared = GlobalAudioPlayer()
+    private init() {
+        // Observe AVAudioSession interruptions so we can log when playback
+        // is paused by an external audio source (call, Siri, another media
+        // app). The actual decision to resume lives elsewhere — this is a
+        // diagnostic hook for the silent-audio keep-alive investigation.
+        NotificationCenter.default.addObserver(
+            forName: AVAudioSession.interruptionNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            guard let typeRaw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+                  let type = AVAudioSession.InterruptionType(rawValue: typeRaw) else { return }
+            let optionsRaw = note.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
+            let shouldResume = AVAudioSession.InterruptionOptions(rawValue: optionsRaw)
+                .contains(.shouldResume)
+            let label = type == .began ? "began" : "ended"
+            let isPlaying = self?.isPlaying ?? false
+            audioPlaybackLogger.info("[AudioPlayback] interruption: type=\(label) shouldResume=\(shouldResume) wasPlaying=\(isPlaying)")
+        }
+        // [T-ios-live-activity-audio-toggle] The Live Activity play/pause toggle
+        // is handled by VoiceOutputState (read-aloud engine), NOT here — see
+        // VoiceOutputState.registerLiveActivityToggleObserver (b0f3f884 fix).
+    }
+
+    @Published var isPlaying = false
+    @Published var currentTime: TimeInterval = 0
+    @Published var duration: TimeInterval = 0
+    @Published var rate: Float = 1.0
+    @Published var isLoaded = false
+    @Published var activeFileURL: URL?
+    @Published var fileName: String = ""
+    /// Set to true when user taps capsule to re-open the full preview.
+    @Published var showFullPreview = false
+
+    /// Capsule is shown whenever an audio file is loaded. The only way to hide
+    /// it is to call `stop()` (e.g. via the capsule's close button), which
+    /// resets `isLoaded`. The capsule view itself further hides when the full
+    /// preview sheet is open to avoid overlapping UI.
+    var isPiPActive: Bool { isLoaded }
+
+    private var player: AVAudioPlayer?
+    private var timer: Timer?
+    private var seekWorkItem: DispatchWorkItem?
+
+    /// Whether the given URL is the currently active audio file.
+    func isActive(url: URL) -> Bool {
+        activeFileURL == url
+    }
+
+    /// Load and play a URL. If already playing this URL, just ensures playback. If a different URL, stops current and loads new.
+    func play(url: URL) {
+        if activeFileURL == url {
+            // Same file — restart from beginning if finished, otherwise resume
+            if !isPlaying {
+                if duration > 0 && currentTime >= duration - 0.1 {
+                    seek(to: 0)
+                }
+                togglePlayPause()
+            }
+            return
+        }
+        // Stop any current playback
+        stopInternal()
+        // Suspend silent audio so media gets full volume
+        let preCount = BackgroundKeepAliveManager.shared.silentAudioSuspendCount
+        audioPlaybackLogger.info("[AudioPlayback] play: url=\(url.lastPathComponent) suspendSilentAudio → count will be \(preCount + 1)")
+        BackgroundKeepAliveManager.shared.suspendSilentAudioForMedia()
+        // Load new file
+        let loadURL = url
+        Task.detached(priority: .userInitiated) {
+            guard let p = try? AVAudioPlayer(contentsOf: loadURL) else {
+                await MainActor.run {
+                    BackgroundKeepAliveManager.shared.resumeSilentAudioForMedia()
+                }
+                return
+            }
+            p.prepareToPlay()
+            p.enableRate = true
+            let dur = p.duration
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                self.player = p
+                self.activeFileURL = loadURL
+                self.fileName = loadURL.deletingPathExtension().lastPathComponent
+                self.duration = dur
+                self.currentTime = 0
+                self.isLoaded = true
+                self.rate = 1.0
+                // Start playing immediately. Declaring `.mediaAttachment` preempts
+                // reply TTS (mutually exclusive) and applies the playback profile.
+                AudioSessionCoordinator.shared.begin(.mediaAttachment)
+                p.play()
+                self.isPlaying = true
+                self.startTimer()
+            }
+        }
+    }
+
+    func togglePlayPause() {
+        guard let p = player else { return }
+        if p.isPlaying {
+            p.pause()
+            isPlaying = false
+            timer?.invalidate()
+        } else {
+            AudioSessionCoordinator.shared.begin(.mediaAttachment)
+            p.play()
+            p.rate = rate
+            isPlaying = true
+            startTimer()
+        }
+    }
+
+    func seek(to time: TimeInterval) {
+        player?.currentTime = time
+        currentTime = time
+    }
+
+    /// Debounced seek — updates the displayed time immediately but delays the actual
+    /// AVAudioPlayer seek by 100 ms, coalescing rapid slider/drag movements.
+    func debouncedSeek(to time: TimeInterval) {
+        currentTime = time
+        seekWorkItem?.cancel()
+        let item = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.player?.currentTime = time
+        }
+        seekWorkItem = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: item)
+    }
+
+    func setRate(_ r: Float) {
+        rate = r
+        if let p = player, p.isPlaying {
+            p.rate = r
+        }
+    }
+
+    func skip(by seconds: TimeInterval) {
+        let newTime = max(0, min(currentTime + seconds, duration))
+        seek(to: newTime)
+    }
+
+    /// Deprecated: capsule visibility is now derived from `isLoaded`. Kept as a
+    /// no-op so existing callers that minimize the full preview into PiP keep
+    /// compiling — minimization now happens by simply dismissing the sheet.
+    func activatePiP() {}
+
+    /// Deprecated: capsule visibility is now derived from `isLoaded`. Use
+    /// `stop()` to fully hide the capsule.
+    func deactivatePiP() {}
+
+    /// Stop all playback and reset state. This is the only way to hide the
+    /// PiP capsule (driven by `isLoaded` flipping to false in `stopInternal`).
+    func stop() {
+        stopInternal()
+        showFullPreview = false
+    }
+
+    private func stopInternal() {
+        let wasLoaded = isLoaded
+        timer?.invalidate()
+        timer = nil
+        player?.stop()
+        player = nil
+        activeFileURL = nil
+        fileName = ""
+        isPlaying = false
+        currentTime = 0
+        duration = 0
+        isLoaded = false
+        // End the media-attachment intent — coordinator re-applies the next intent
+        // or deactivates. Note: TTS is NOT auto-resumed (per plan scenario 1).
+        AudioSessionCoordinator.shared.end(.mediaAttachment)
+        // Resume silent audio keep-alive if we had suspended it
+        if wasLoaded {
+            let preCount = BackgroundKeepAliveManager.shared.silentAudioSuspendCount
+            audioPlaybackLogger.info("[AudioPlayback] stopInternal: resumeSilentAudio → count will be \(max(0, preCount - 1))")
+            BackgroundKeepAliveManager.shared.resumeSilentAudioForMedia()
+        }
+    }
+
+    private func startTimer() {
+        timer?.invalidate()
+        timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            guard let self, let p = self.player else { return }
+            DispatchQueue.main.async {
+                self.currentTime = p.currentTime
+                if !p.isPlaying {
+                    self.isPlaying = false
+                    self.timer?.invalidate()
+                    // Natural end → release the media-attachment intent.
+                    AudioSessionCoordinator.shared.end(.mediaAttachment)
+                }
+            }
+        }
+    }
+}
 
 // MARK: - Voice-output preference (persisted)
 
@@ -70,9 +277,100 @@ enum VoiceOutputPreferences {
 // (pipelined, up to `maxPrefetch` concurrent synthesize requests) but PLAYED
 // strictly in enqueue order, so playback stays gapless and correctly sequenced.
 //
-// The offline System provider is NOT handled here — the AIChatViewModel keeps its
-// existing AVSpeechSynthesizer path for System (it already carries voice/rate/
-// pitch/volume + background keep-alive). This player is the cloud-model path.
+// The offline System provider stays in the speech resolver's AVSpeechSynthesizer path.
+
+// nanoMuse: Cloud TTS owns its segmenting without the excluded local chat VM.
+private enum VoiceSpeechSegmenter {
+    private static let enders: Set<Character> = ["。", "！", "？", ".", "!", "?", "\n", "；", ";"]
+    private static let pauses: Set<Character> = ["，", ",", "、", "：", ":"]
+    private static let softLimit = 60
+
+    static func split(_ text: String) -> [String] {
+        let (segments, _) = extract(from: text)
+        return segments.isEmpty ? [text] : segments
+    }
+
+    private static func extract(from text: String) -> ([String], Int) {
+        let remaining = Array(text)
+        var units: [String] = []
+        var consumed = 0
+        var unitStart = 0
+        var lastPause = -1
+
+        func isFence(at idx: Int) -> Bool {
+            idx + 2 < remaining.count && remaining[idx] == "`"
+                && remaining[idx + 1] == "`" && remaining[idx + 2] == "`"
+        }
+
+        func isIntraNumberSeparator(at idx: Int) -> Bool {
+            let ch = remaining[idx]
+            guard ch == "." || ch == ",", idx > 0, idx + 1 < remaining.count else { return false }
+            return remaining[idx - 1].isNumber && remaining[idx + 1].isNumber
+        }
+
+        var i = 0
+        while i < remaining.count {
+            if isFence(at: i) {
+                var j = i + 3
+                while j < remaining.count && !isFence(at: j) { j += 1 }
+                guard j < remaining.count else { break }
+                if i > unitStart { append(remaining[unitStart..<i], into: &units) }
+                let afterClose = j + 3
+                unitStart = afterClose
+                consumed = afterClose
+                i = afterClose
+                lastPause = -1
+                continue
+            }
+
+            let ch = remaining[i]
+            if isIntraNumberSeparator(at: i) {
+                i += 1
+                continue
+            }
+            if i == remaining.count - 1, (ch == "." || ch == ","), i > 0, remaining[i - 1].isNumber {
+                break
+            }
+            if pauses.contains(ch) { lastPause = i }
+
+            let runLen = i - unitStart + 1
+            let isEnder = enders.contains(ch)
+            let forceCut = !isEnder && runLen >= softLimit && lastPause >= unitStart
+
+            if isEnder {
+                append(remaining[unitStart...i], into: &units)
+                i += 1
+                unitStart = i
+                consumed = i
+                lastPause = -1
+            } else if forceCut {
+                append(remaining[unitStart...lastPause], into: &units)
+                unitStart = lastPause + 1
+                consumed = unitStart
+                i += 1
+                lastPause = -1
+            } else {
+                i += 1
+            }
+        }
+        return (units, consumed)
+    }
+
+    private static func append(_ slice: ArraySlice<Character>, into units: inout [String]) {
+        var text = String(slice).trimmingCharacters(in: .whitespacesAndNewlines)
+        while let first = text.first, "#>-*".contains(first) {
+            text.removeFirst()
+            text = text.trimmingCharacters(in: .whitespaces)
+        }
+        if let marker = text.range(of: "^\\d+[.)]\\s+", options: .regularExpression) {
+            text.removeSubrange(marker)
+        }
+        guard !text.isEmpty,
+              text.range(of: "[\\p{L}\\p{N}]", options: .regularExpression) != nil,
+              text.range(of: "^https?://\\S+$", options: .regularExpression) == nil else { return }
+        units.append(text)
+    }
+}
 
 @MainActor
 final class VoiceOutputPlayer: NSObject, ObservableObject {
@@ -253,7 +551,7 @@ final class VoiceOutputPlayer: NSObject, ObservableObject {
     func enqueueSegmented(_ rawText: String, sessionId: String) {
         let sanitized = VoiceTextSanitizer.sanitize(rawText)
         guard !sanitized.isEmpty else { return }
-        let segments = AIChatViewModel.splitIntoSpeechSegments(sanitized)
+        let segments = VoiceSpeechSegmenter.split(sanitized)
         for s in segments { enqueue(s, sessionId: sessionId) }
     }
 
@@ -580,7 +878,7 @@ final class VoiceOutputPlayer: NSObject, ObservableObject {
 
     private func activatePlaybackSession() throws {
         // Session is owned by AudioSessionCoordinator — declare the reply-TTS intent
-        // (idempotent; AIChatViewModel.speak* already did). It applies the
+        // (idempotent; a caller may already have begun reply TTS). It applies the
         // `.playback/.spokenAudio/.duckOthers` profile.
         AudioSessionCoordinator.shared.begin(.replyTTS)
     }

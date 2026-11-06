@@ -637,13 +637,10 @@ extension AIChatViewModel {
         logger.info("Migrated offloads for session \(sid) to new minis path")
     }
 
-    /// Bind-mount a session's minis directories into iSH-visible /var/minis/.
-    /// Delegates to ISHExecutionCoordinator for serialized mount management.
+    /// Ensure the selected session's minis symlinks exist for FileBrowser.
     func mountMinis(for sid: String) {
-        // Always ensure symlinks exist in data/ for the file browser,
-        // even when the iSH kernel isn't booted yet.
+        // nanoMuse: Keep persistent user files reachable from FileBrowser without mounting them into a local shell.
         ensureMinisSymlinks(for: sid)
-        Task { await ISHExecutionCoordinator.shared.mountForSession(sid) }
     }
 
     /// [T-ish-container-identity GH#99] One-shot per launch: detect an iOS

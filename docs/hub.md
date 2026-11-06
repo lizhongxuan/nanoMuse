@@ -116,6 +116,10 @@ hears `not_allowed` when the card expires. `info` and `notify` never ask; a
 caller as before. A device may `approve` only cards of its own runs that were
 sent to it, never the card asking whether it may run something.
 
+## Morde Hub on desktop {#morde-hub-on-desktop}
+
+The desktop app can also sign in to a Morde Client Installation for Morde Hub. This sign-in and its credential are separate from nanoMuse Cloud. In the Morde Hub card, a person can grant screen capture and file access independently. File requests use relative paths beneath the folder selected in the native picker. The helper skips symbolic links and checks the selected folder's identity on every request. The desktop advertises `screenshot`, `files` and `file.get` only while the matching grant and local capability are available. Morde Task calls require a current Task fence and target grant version. Revoking a grant changes that version; calls with an older version are rejected, and in-flight work is checked again before a result is returned. Command execution stays unavailable until the operating system sandbox has been verified. Existing `open` requests still ask the person at the target for one-time approval.
+
 ### Proposed `proxy_fetch`: the phone uses the computer's connection
 
 Not built yet; written down here so the three implementations agree before

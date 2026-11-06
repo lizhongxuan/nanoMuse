@@ -202,6 +202,8 @@ final class GeminiOAuthManager: NSObject, ObservableObject {
 
     /// Discover GCP project if authenticated but missing project ID.
     func discoverProjectIfNeeded(instanceId: String) async {
+        // nanoMuse: This background probe exists only for local provider execution.
+        guard MordeLocalExecutionPolicy.isEnabled else { return }
         guard gcpProjectID(instanceId: instanceId) == nil else { return }
         guard let storage = ProviderKeychainHelper.loadOAuthToken(instanceId: instanceId, as: GeminiTokenStorage.self) else { return }
         logger.info("Auto-discovering GCP project (instance: \(instanceId))...")

@@ -232,7 +232,7 @@ func resolveMinisFileURL(url: URL) -> URL? {
     // Primary: resolve via active session → persistent directory
     if let sid = AIChatViewModel.activeSessionId {
         for subPath in subPaths {
-            let persistURL = AIChatViewModel.minisPersistentBase
+            let persistURL = MinisStoragePaths.minisPersistentBase
                 .appendingPathComponent(sid, isDirectory: true)
                 .appendingPathComponent(host, isDirectory: true)
                 .appendingPathComponent(subPath)
@@ -245,9 +245,9 @@ func resolveMinisFileURL(url: URL) -> URL? {
 
     // Fallback: global directories (skills, memory) are not per-session
     let globalDirs: [(subdir: String, url: URL)] = [
-        ("skills", AIChatViewModel.minisSkillsPersistentDir),
-        ("memory", AIChatViewModel.minisMemoryPersistentDir),
-        ("shared", AIChatViewModel.minisSharedPersistentDir),
+        ("skills", MinisStoragePaths.minisSkillsPersistentDir),
+        ("memory", MinisStoragePaths.minisMemoryPersistentDir),
+        ("shared", MinisStoragePaths.minisSharedPersistentDir),
     ]
     for (subdir, globalDir) in globalDirs where host == subdir {
         for subPath in subPaths {
@@ -959,23 +959,6 @@ private struct MinisTextView: UIViewRepresentable {
 }
 
 // MARK: - minis:// Markdown Preview
-
-/// On iPad the default `.sheet` presents as a ~540pt-wide form sheet which
-/// wastes most of the screen for long-form markdown. iOS 18 introduced
-/// `presentationSizing(.page)` to widen the form sheet to a more readable
-/// page-style width. iPhone keeps the default behavior either way.
-// Non-private so cross-file preview sheets (e.g. MinisLinkPreviewView in
-// WebPreviewSheet.swift) can reuse the same wide-sizing logic.
-// [T-ios-html-preview-wide-sheet]
-struct WideSheetSizingModifier: ViewModifier {
-    func body(content: Content) -> some View {
-        if #available(iOS 18.0, *) {
-            content.presentationSizing(.page)
-        } else {
-            content
-        }
-    }
-}
 
 struct MinisMarkdownPreviewView: View {
     let fileURL: URL

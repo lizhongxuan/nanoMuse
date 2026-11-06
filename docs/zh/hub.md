@@ -37,6 +37,10 @@ hub 上传递两类请求：
 
 每台设备自己决定允许别人做什么。手机上，「允许其他设备操作这台手机」（*设置 → nanoMuse Cloud → 设备*）关着时，这台手机只回答 `info`，别的一概不答；它仍然能看见并操纵其他设备。运行时这时的 `info` 只报电脑的名字和系统（没有账号名、主目录、工作目录和 shell），动作列表里只有 `info`。开着时，任何*对*这台设备做事的原始动作（`shell`、`files`、`file.get`、`file.put`、`open`、`screen`、`coding.send`、`coding.stop`）都要先经这台设备旁的人同意：惯常的审批卡片，「允许一次」或「对这台设备总是允许」；后一种长期有效的回答是「权限」下的一条授权（`remote_control:<device id>`）。nanoMuse 桌面版默认用同一张卡片询问；它的「免询问远程控制」（设置 → 设备）让账号下的每台设备都能不经卡片在那里做事。旁边没人，卡片过期后发起方听到的是 `not_allowed`。`info` 和 `notify` 从不询问；`task` 在设备自己的哨兵（Sentinel）之下运行，它的卡片照旧传回发起方。一台设备只能 `approve` 发给它的、属于它自己发起的运行的卡片，绝不能回答「是否允许它运行某事」的那张卡片。
 
+## 桌面版接入 Morde Hub {#morde-hub-on-desktop}
+
+桌面版还可以登录 Morde Client Installation 来接入 Morde Hub。这个登录和凭据独立于 nanoMuse Cloud。在 Morde Hub 卡片中，可以分别允许截图和文件访问。文件请求使用所选目录下的相对路径；helper 会跳过符号链接，并在每次请求时检查目录身份。桌面版只有在对应授权和本机能力都可用时，才会宣告 `screenshot`、`files` 和 `file.get`。Morde Task 调用必须带当前 Task 围栏和目标授权版本；撤销授权会递增版本，旧版本调用会被拒绝，正在处理的操作也会在返回结果前重新检查。各平台的操作系统沙箱验证完成前，命令执行保持不可用。现有 `open` 请求仍会在目标设备上征求一次性确认。
+
 ### 提案 `proxy_fetch`：手机借用电脑的网络 {#proposed-proxy-fetch-the-phone-uses-the-computer-s-connection}
 
 还没做；先写在这里，让三个实现在有人动手之前先取得一致。场景：手机的网络连不上 `chatgpt.com` 或某个服务商的主机（[own-key.md](own-key.md#when-the-provider-cannot-be-reached) 里的那张卡片），而这个人的电脑连得上。电脑的运行时通过 hub 转发那次服务商调用（只转发那个），像代理一样。

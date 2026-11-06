@@ -2,8 +2,10 @@ import Foundation
 
 private let logger = AppLogger(category: "Backup")
 
-/// Writes a package's credential section back into the Keychain
-/// (docs/backup-restore-design.md §5.4).
+/// Restores eligible fields from a recognized app backup's credential section
+/// (docs/backup-restore-design.md §5.4). Provider API keys are deliberately
+/// omitted by the Morde migration policy; OAuth and other supported fields keep
+/// the existing merge behavior.
 ///
 /// [T-ios-backup-credential-restore] Before this existed, `secrets.json` was
 /// collected, base64'd, encrypted, decrypted on restore — and then **discarded**,
@@ -13,15 +15,18 @@ private let logger = AppLogger(category: "Backup")
 /// half-restored state design §3.3 merged Providers+Credentials to prevent, and
 /// it made device migration — the feature's primary purpose — silently fail.
 ///
-/// Merge semantics match every other category (§8.2): a credential already
-/// present locally is NOT overwritten. Restoring an old backup must not clobber
-/// a key the user has since rotated; the local value is the newer one by
-/// definition, since the backup is a snapshot of the past.
+/// Merge semantics match every other category (§8.2): a supported credential
+/// already present locally is NOT overwritten. This importer is only called
+/// for the app's `.minisbak` format; standalone provider exports use their own
+/// explicit import flow and do not pass through this migration policy.
 enum BackupSecretsImporter {
 
     struct Result {
         var providersRestored = 0
         var providersSkippedExisting = 0
+        var providerAPIKeysSkippedByPolicy = 0
+        var unknownFieldsIgnored = 0
+        var credentialSectionUnreadable = false
         var envVarsRestored = 0
         var envVarsSkippedExisting = 0
         var mcpOAuthRestored = 0
@@ -37,25 +42,37 @@ enum BackupSecretsImporter {
     @MainActor
     static func restore(from root: URL) -> Result? {
         let url = root.appendingPathComponent("secrets.json")
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        guard let secrets = try? JSONDecoder().decode(BackupSecrets.self, from: data) else {
-            logger.error("[Restore] secrets.json present but unreadable — credentials NOT restored")
-            return nil
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        let data: Data
+        do {
+            data = try Data(contentsOf: url)
+        } catch {
+            logger.error("[Restore] secrets.json could not be read — credentials NOT restored: \(error.localizedDescription)")
+            return Result(credentialSectionUnreadable: true)
+        }
+        let secrets: BackupSecrets
+        do {
+            secrets = try JSONDecoder().decode(BackupSecrets.self, from: data)
+        } catch {
+            logger.error("[Restore] secrets.json could not be decoded — credentials NOT restored: \(error.localizedDescription)")
+            return Result(credentialSectionUnreadable: true)
         }
 
         var result = Result()
+        result.unknownFieldsIgnored = MordeBackupAPIKeyRestorePolicy.unknownFieldCount(in: data)
+        if result.unknownFieldsIgnored > 0 {
+            logger.warning("[Restore] secrets.json contained \(result.unknownFieldsIgnored) unrecognized field(s); this app version ignored them")
+        }
 
         for p in secrets.providers {
             var wrote = false
-            // Each field is independent: an instance may carry an apiKey, an
-            // OAuth blob, or both, and a missing one must not block the others.
-            if let b64 = p.apiKey, let value = decode(b64) {
-                if ProviderKeychainHelper.loadAPIKey(instanceId: p.instanceId) == nil {
-                    ProviderKeychainHelper.saveAPIKey(value, instanceId: p.instanceId)
-                    wrote = true
-                } else {
-                    result.providersSkippedExisting += 1
-                }
+            // Provider API keys from app backups must not resurrect credentials
+            // removed during migration. Other supported fields restore independently.
+            switch MordeBackupAPIKeyRestorePolicy.disposition(hasAPIKey: p.apiKey != nil) {
+            case .absent:
+                break
+            case .removedByMigration:
+                result.providerAPIKeysSkippedByPolicy += 1
             }
             if let b64 = p.manualOAuthToken, let value = decode(b64),
                ProviderKeychainHelper.loadOAuthString(
@@ -117,7 +134,7 @@ enum BackupSecretsImporter {
             }
         }
 
-        logger.info("[Restore] credentials: providers=\(result.providersRestored) (kept \(result.providersSkippedExisting)) envVars=\(result.envVarsRestored) mcpOAuth=\(result.mcpOAuthRestored)")
+        logger.info("[Restore] credentials: providers=\(result.providersRestored) (kept \(result.providersSkippedExisting)) providerAPIKeysSkipped=\(result.providerAPIKeysSkippedByPolicy) unknownFieldsIgnored=\(result.unknownFieldsIgnored) envVars=\(result.envVarsRestored) mcpOAuth=\(result.mcpOAuthRestored)")
         return result
     }
 

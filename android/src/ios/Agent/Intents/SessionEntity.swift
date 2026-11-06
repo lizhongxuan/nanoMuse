@@ -29,13 +29,11 @@ struct SessionEntity: AppEntity {
 
 struct SessionEntityQuery: EntityQuery {
     func entities(for identifiers: [String]) async throws -> [SessionEntity] {
-        var results: [SessionEntity] = []
-        for id in identifiers {
-            if let session = await ChatStore.shared.getSession(id) {
-                results.append(SessionEntity(from: session))
-            }
+        let sessions = await NanoMuseSync.shared.visible(await ChatStore.shared.listSessions())
+        // nanoMuse: C12 filters explicit ID resolution as well as suggested sessions.
+        return identifiers.compactMap { id in
+            sessions.first(where: { $0.id == id }).map(SessionEntity.init(from:))
         }
-        return results
     }
 
     func suggestedEntities() async throws -> [SessionEntity] {

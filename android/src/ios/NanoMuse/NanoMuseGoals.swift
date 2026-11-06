@@ -221,7 +221,7 @@ enum NanoMuseGoalFlow {
 
     static func creationAddendum(_ category: NanoMuseGoalCategory) -> String {
         """
-        ## Creating a goal (nanoMuse)
+        ## Creating a goal (morde)
         The user just chose to create a goal in the "\(category.rawValue)" category from the Goals tab.
         Shape it together: ask at most three short questions, ONE message at a time,
         in the user's language: (1) what exactly they want to achieve, (2) why it matters and by
@@ -240,6 +240,7 @@ enum NanoMuseGoalFlow {
     /// After every finished turn: goal blocks become goals, update blocks update them.
     @MainActor
     static func afterTurn(session: String, assistantText: String?) {
+        guard MordeLocalExecutionPolicy.isEnabled else { return }
         guard let text = assistantText, !text.isEmpty else { return }
         let store = NanoMuseGoalStore.shared
         if NanoMuseFences.contains(text, kind: blockGoal), let o = NanoMuseFences.lastObject(blockGoal, in: text) {
@@ -267,35 +268,10 @@ enum NanoMuseGoalFlow {
         return NanoMuseGoalStore.shared.goals.contains { $0.title == title }
     }
 
-    /// The goal's own conversation and its hidden check-in routine.
+    // nanoMuse: Goal data remains readable; Morde does not create local check-in sessions.
     @MainActor
     static func setUp(_ goal: NanoMuseGoal, firstCheck: String) async {
-        let store = NanoMuseGoalStore.shared
-        var g = store.goal(id: goal.id) ?? goal
-        if g.sessionId == nil {
-            let vm = ViewModelCache.shared.createDraft()
-            vm.sessionSource = "nanomuse-goal"
-            let sid = await vm.ensureSessionReturningId()
-            await ChatStore.shared.updateSessionTitle(sid, title: String(g.title.prefix(60)))
-            ViewModelCache.shared.cacheDraft(vm, sessionId: sid)
-            g.sessionId = sid
-        }
-        if g.routineId == nil {
-            var routine = NanoMuseRoutine(
-                label: String(format: AppLocalized("Goal check: %@"), g.title),
-                prompt: checkPrompt(g, firstCheck: firstCheck),
-                hour: g.checkHour,
-                minute: g.checkMinute
-            )
-            routine.hidden = true
-            routine.goalId = g.id
-            routine.sessionId = g.sessionId
-            routine.intervalHours = g.checkEveryHours > 0 ? g.checkEveryHours : nil
-            NanoMuseScheduler.shared.create(routine)
-            g.routineId = routine.id
-        }
-        store.upsert(g)
-        NanoMuseScheduler.shared.requestNotificationPermission()
+        return
     }
 
     /// The one line each check sends into the goal's conversation.
@@ -313,7 +289,7 @@ enum NanoMuseGoalFlow {
         guard let goal = NanoMuseGoalStore.shared.forSession(session) else { return nil }
         let cadence = goal.checkEveryHours > 0 ? "every \(goal.checkEveryHours) hour(s)" : "daily at \(NanoMuseDay.clock(hour: goal.checkHour, minute: goal.checkMinute))"
         let steps = goal.steps.isEmpty ? "(none yet)" : goal.steps.enumerated().map { "\($0.offset + 1). \($0.element.text)" }.joined(separator: "\n")
-        var s = "## This conversation tracks a goal (nanoMuse)\n"
+        var s = "## This conversation tracks a goal (morde)\n"
         s += "Goal: \(goal.title)\n"
         if !goal.why.isEmpty { s += "Why: \(goal.why)\n" }
         s += "Steps:\n\(steps)\n"
@@ -373,6 +349,352 @@ enum NanoMuseGoalFlow {
 
 // MARK: - Goals room
 
+struct NanoMuseMordeGoalRecord: Identifiable, Equatable {
+    let id: String
+    let revision: Int64
+    let body: MordePersonalGoalBody
+
+    var progress: Int {
+        if body.status == "done" { return 100 }
+        guard !body.steps.isEmpty else { return 0 }
+        let done = body.steps.filter { $0.status == "done" }.count
+        return (done * 100 + body.steps.count / 2) / body.steps.count
+    }
+}
+
+enum NanoMuseMordeGoalMapper {
+    static func body(title: String, description: String, status: String = "active",
+                     steps: [MordePersonalGoalStep] = [], relatedMaterialIDs: [String] = []) -> MordePersonalGoalBody {
+        MordePersonalGoalBody(title: title.trimmingCharacters(in: .whitespacesAndNewlines),
+                              description: description.trimmingCharacters(in: .whitespacesAndNewlines),
+                              status: status, steps: steps, related_material_ids: relatedMaterialIDs)
+    }
+}
+
+enum NanoMuseMordeScheduleRunHistoryPolicy {
+    static func canAppend(existingIDs: [String], page: [MordeScheduleRunDTO], scheduleID: String) -> Bool {
+        let ids = existingIDs + page.map(\.id)
+        return page.allSatisfy { $0.schedule_id == scheduleID } && Set(ids).count == ids.count
+    }
+}
+
+@MainActor
+final class NanoMuseMordeGoalsCloud: ObservableObject {
+    static let shared = NanoMuseMordeGoalsCloud()
+
+    @Published private(set) var goals: [NanoMuseMordeGoalRecord] = []
+    @Published private(set) var schedules: [NanoMuseScheduleDTO] = []
+    @Published private(set) var scheduleRuns: [String: [MordeScheduleRunDTO]] = [:]
+    @Published private(set) var scheduleRunCursors: [String: String] = [:]
+    @Published private(set) var scheduleRunErrors: [String: String] = [:]
+    @Published private(set) var scheduleRunLoadingIDs: Set<String> = []
+    @Published private(set) var scheduleTargets: MordeScheduleTargets?
+    @Published private(set) var pending: MordePersonalDataMutation?
+    @Published private(set) var syncEnabled = true
+    @Published private(set) var isLoading = false
+    @Published private(set) var isSaving = false
+    @Published private(set) var isAuthorizingSchedules = false
+    @Published private(set) var error: String?
+
+    private var loadedScope: String?
+    private var scheduleError: String?
+    private var requestGeneration = UUID()
+
+    private func requestIsCurrent(scope: String?, generation: UUID) -> Bool {
+        MordeScopedRequestPolicy.isCurrent(scope: scope, generation: generation,
+                                            activeScope: MordeShellAuthorization.shared.personalDataScopeKey,
+                                            activeGeneration: requestGeneration)
+    }
+
+    private init() {}
+
+    func refresh() async {
+        let auth = MordeShellAuthorization.shared
+        let scope = auth.personalDataScopeKey
+        if loadedScope != scope {
+            loadedScope = scope
+            requestGeneration = UUID()
+            goals = []
+            schedules = []
+            scheduleRuns = [:]
+            scheduleRunCursors = [:]
+            scheduleRunErrors = [:]
+            scheduleRunLoadingIDs = []
+            scheduleTargets = nil
+            scheduleError = nil
+            pending = nil
+            error = nil
+            isLoading = false
+            isAuthorizingSchedules = false
+        }
+        let generation = requestGeneration
+        guard let scope else { return }
+        syncEnabled = NanoMuseMordeProfileSyncPreference.isEnabled(scopeKey: scope)
+        do {
+            pending = try NanoMuseMordePersonalDataOutbox.load(scopeKey: scope, root: NanoMuseDirs.root)
+            if syncEnabled, pending != nil {
+                do { try await flush(scope: scope) }
+                catch is MordePersonalRevisionConflict { /* Keep reading the cloud snapshot while the user resolves it. */ }
+            }
+            guard requestIsCurrent(scope: scope, generation: generation) else { return }
+            guard syncEnabled else { return }
+            isLoading = true
+            defer { if requestGeneration == generation { isLoading = false } }
+            let values = try await readCloudGoals(scope: scope)
+            guard requestIsCurrent(scope: scope, generation: generation) else { return }
+            goals = values
+            if error == nil || pending == nil { error = nil }
+        } catch {
+            if requestIsCurrent(scope: scope, generation: generation) { self.error = error.localizedDescription }
+        }
+    }
+
+    func save(_ body: MordePersonalGoalBody, id: String? = nil, revision: Int64 = 0) async throws {
+        guard let scope = MordeShellAuthorization.shared.personalDataScopeKey,
+              body.isValidForWrite else { throw URLError(.userAuthenticationRequired) }
+        do {
+            let objectID = id ?? "g_\(UUID().uuidString.lowercased().replacingOccurrences(of: "-", with: ""))"
+            let encoded = try JSONEncoder().encode(body)
+            let value = try JSONDecoder().decode(MordePersonalJSONValue.self, from: encoded)
+            let mutation = MordePersonalDataMutation(scopeKey: scope, mutationID: UUID().uuidString,
+                objectType: "goal", objectID: objectID, baseRevision: revision, body: value, isDelete: false)
+            try NanoMuseMordePersonalDataOutbox.enqueue(mutation, scopeKey: scope, root: NanoMuseDirs.root)
+            pending = mutation
+            error = nil
+            syncEnabled = NanoMuseMordeProfileSyncPreference.isEnabled(scopeKey: scope)
+            if syncEnabled { try await flush(scope: scope); await refreshGoals(scope: scope) }
+        } catch {
+            if MordeShellAuthorization.shared.personalDataScopeKey == scope { self.error = error.localizedDescription }
+            throw error
+        }
+    }
+
+    func delete(_ goal: NanoMuseMordeGoalRecord) async throws {
+        guard let scope = MordeShellAuthorization.shared.personalDataScopeKey else { throw URLError(.userAuthenticationRequired) }
+        do {
+            let mutation = MordePersonalDataMutation(scopeKey: scope, mutationID: UUID().uuidString,
+                objectType: "goal", objectID: goal.id, baseRevision: goal.revision, body: nil, isDelete: true)
+            try NanoMuseMordePersonalDataOutbox.enqueue(mutation, scopeKey: scope, root: NanoMuseDirs.root)
+            pending = mutation
+            error = nil
+            syncEnabled = NanoMuseMordeProfileSyncPreference.isEnabled(scopeKey: scope)
+            if syncEnabled { try await flush(scope: scope); await refreshGoals(scope: scope) }
+        } catch {
+            if MordeShellAuthorization.shared.personalDataScopeKey == scope { self.error = error.localizedDescription }
+            throw error
+        }
+    }
+
+    func retry() async {
+        if NanoMuseMordePersonalConflictResolution.shared.hasConflict {
+            NanoMuseMordePersonalConflictResolution.shared.present()
+            return
+        }
+        await refresh()
+    }
+
+    private func flush(scope: String) async throws {
+        guard !isSaving, MordeShellAuthorization.shared.personalDataScopeKey == scope,
+              NanoMuseMordeProfileSyncPreference.isEnabled(scopeKey: scope),
+              let mutation = try NanoMuseMordePersonalDataOutbox.load(scopeKey: scope, root: NanoMuseDirs.root) else { return }
+        pending = mutation
+        if NanoMuseMordePersonalConflictResolution.shared.isBlocked(mutation.mutationID) {
+            NanoMuseMordePersonalConflictResolution.shared.present()
+            return
+        }
+        isSaving = true
+        defer { isSaving = false }
+        do {
+            if mutation.isDelete {
+                _ = try await MordeShellAuthorization.shared.deletePersonalObject(
+                    objectType: mutation.objectType, objectID: mutation.objectID,
+                    baseRevision: mutation.baseRevision, idempotencyKey: mutation.mutationID)
+            } else if let body = mutation.body {
+                _ = try await MordeShellAuthorization.shared.replacePersonalObject(
+                    objectType: mutation.objectType, objectID: mutation.objectID,
+                    baseRevision: mutation.baseRevision, body: body, idempotencyKey: mutation.mutationID)
+            } else {
+                throw NanoMuseMordePersonalDataOutboxError.invalidMutation
+            }
+            guard MordeShellAuthorization.shared.personalDataScopeKey == scope else { return }
+            try NanoMuseMordePersonalDataOutbox.acknowledge(scopeKey: scope, mutationID: mutation.mutationID,
+                                                            root: NanoMuseDirs.root)
+            pending = nil
+            error = nil
+        } catch let conflict as MordePersonalRevisionConflict {
+            NanoMuseMordePersonalConflictResolution.shared.record(mutation, conflict: conflict, root: NanoMuseDirs.root)
+            if MordeShellAuthorization.shared.personalDataScopeKey == scope { self.error = conflict.localizedDescription }
+            throw conflict
+        } catch {
+            if MordeShellAuthorization.shared.personalDataScopeKey == scope { self.error = error.localizedDescription }
+            throw error
+        }
+    }
+
+    private func readCloudGoals(scope: String) async throws -> [NanoMuseMordeGoalRecord] {
+        let auth = MordeShellAuthorization.shared
+        var values: [NanoMuseMordeGoalRecord] = []
+        var cursor: String?
+        var seen = Set<String>()
+        repeat {
+            guard auth.personalDataScopeKey == scope else { throw CancellationError() }
+            let page = try await auth.personalSnapshot(cursor: cursor)
+            guard auth.personalDataScopeKey == scope else { throw CancellationError() }
+            for item in page.items where item.object_type == "goal" {
+                let body = try item.decodeBody(MordePersonalGoalBody.self)
+                guard body.isValidForWrite else { throw URLError(.cannotParseResponse) }
+                values.append(NanoMuseMordeGoalRecord(id: item.object_id, revision: item.revision, body: body))
+            }
+            cursor = page.next_cursor
+            if MordePersonalSnapshotCursorPolicy.repeats(cursor, seen: &seen) {
+                throw URLError(.cannotParseResponse)
+            }
+        } while cursor?.isEmpty == false
+        return values.sorted { $0.body.title.localizedCaseInsensitiveCompare($1.body.title) == .orderedAscending }
+    }
+
+    private func refreshGoals(scope: String) async {
+        let generation = requestGeneration
+        guard requestIsCurrent(scope: scope, generation: generation),
+              NanoMuseMordeProfileSyncPreference.isEnabled(scopeKey: scope) else { return }
+        do {
+            let values = try await readCloudGoals(scope: scope)
+            guard requestIsCurrent(scope: scope, generation: generation) else { return }
+            goals = values
+        } catch {
+            if requestIsCurrent(scope: scope, generation: generation) { self.error = error.localizedDescription }
+        }
+    }
+
+    func refreshSchedules() async {
+        let auth = MordeShellAuthorization.shared
+        guard let scope = auth.personalDataScopeKey else {
+            schedules = []
+            scheduleRuns = [:]
+            scheduleRunCursors = [:]
+            scheduleRunErrors = [:]
+            scheduleTargets = nil
+            scheduleError = nil
+            return
+        }
+        if loadedScope != scope { await refresh() }
+        guard auth.personalDataScopeKey == scope else { return }
+        let generation = requestGeneration
+        guard auth.scheduleAuthorizationState.enabled else {
+            guard requestIsCurrent(scope: scope, generation: generation) else { return }
+            schedules = []
+            scheduleRuns = [:]
+            scheduleRunCursors = [:]
+            scheduleRunErrors = [:]
+            scheduleTargets = nil
+            scheduleError = nil
+            return
+        }
+        do {
+            let page = try await auth.schedules(limit: 100)
+            guard requestIsCurrent(scope: scope, generation: generation) else { return }
+            schedules = page.items
+            scheduleError = nil
+        } catch {
+            guard requestIsCurrent(scope: scope, generation: generation) else { return }
+            scheduleError = error.localizedDescription
+        }
+    }
+
+    func setScheduleAuthorization(_ enabled: Bool, for expectedScope: String?) async {
+        let auth = MordeShellAuthorization.shared
+        guard let expectedScope, auth.personalDataScopeKey == expectedScope else { return }
+        if loadedScope != expectedScope { await refresh() }
+        guard auth.personalDataScopeKey == expectedScope else { return }
+        let generation = requestGeneration
+        isAuthorizingSchedules = true
+        defer { if requestGeneration == generation { isAuthorizingSchedules = false } }
+        do {
+            if enabled { _ = try await auth.enableCloudSchedules() }
+            else { _ = try await auth.disableCloudSchedules() }
+            guard requestIsCurrent(scope: expectedScope, generation: generation) else { return }
+            scheduleError = nil
+            await refreshSchedules()
+        } catch {
+            guard requestIsCurrent(scope: expectedScope, generation: generation) else { return }
+            scheduleError = error.localizedDescription
+        }
+    }
+
+    func refreshScheduleTargets() async {
+        let auth = MordeShellAuthorization.shared
+        guard let scope = auth.personalDataScopeKey else {
+            scheduleTargets = nil
+            return
+        }
+        if loadedScope != scope { await refresh() }
+        guard auth.personalDataScopeKey == scope, auth.scheduleAuthorizationState.enabled else {
+            scheduleTargets = nil
+            return
+        }
+        let generation = requestGeneration
+        do {
+            let targets = try await auth.scheduleTargets()
+            guard requestIsCurrent(scope: scope, generation: generation) else { return }
+            scheduleTargets = targets
+            scheduleError = nil
+        } catch {
+            guard requestIsCurrent(scope: scope, generation: generation) else { return }
+            scheduleError = error.localizedDescription
+        }
+    }
+
+    func toggle(_ schedule: NanoMuseScheduleDTO, for expectedScope: String?) async {
+        guard let expectedScope,
+              loadedScope == expectedScope,
+              requestIsCurrent(scope: expectedScope, generation: requestGeneration),
+              MordeShellAuthorization.shared.scheduleAuthorizationState.enabled else { return }
+        let generation = requestGeneration
+        do {
+            let action = schedule.status == "enabled" ? "disable" : "enable"
+            _ = try await MordeShellAuthorization.shared.scheduleAction(id: schedule.id,
+                request: MordeScheduleActionRequest(action: action, expected_version: schedule.version,
+                    current_run_action: schedule.current_run == nil ? nil : "continue"),
+                idempotencyKey: UUID().uuidString)
+            guard requestIsCurrent(scope: expectedScope, generation: generation) else { return }
+            await refreshSchedules()
+        } catch {
+            guard requestIsCurrent(scope: expectedScope, generation: generation) else { return }
+            scheduleError = error.localizedDescription
+        }
+    }
+
+    func loadScheduleRuns(id: String, cursor: String? = nil) async {
+        let auth = MordeShellAuthorization.shared
+        guard let scope = auth.personalDataScopeKey, auth.scheduleAuthorizationState.enabled else { return }
+        if loadedScope != scope { await refresh() }
+        guard auth.personalDataScopeKey == scope, schedules.contains(where: { $0.id == id }),
+              !scheduleRunLoadingIDs.contains(id),
+              cursor.map({ scheduleRunCursors[id] == $0 }) ?? true else { return }
+        let generation = requestGeneration
+        scheduleRunLoadingIDs.insert(id)
+        defer { if requestGeneration == generation { scheduleRunLoadingIDs.remove(id) } }
+        do {
+            let page = try await auth.scheduleRuns(id: id, limit: 50, cursor: cursor)
+            guard requestIsCurrent(scope: scope, generation: generation) else { return }
+            let existing = cursor == nil ? [] : (scheduleRuns[id] ?? [])
+            guard NanoMuseMordeScheduleRunHistoryPolicy.canAppend(
+                existingIDs: existing.map(\.id), page: page.items, scheduleID: id),
+                  cursor.map({ page.next_cursor != $0 }) ?? true else {
+                throw URLError(.cannotParseResponse)
+            }
+            scheduleRuns[id] = existing + page.items
+            scheduleRunCursors[id] = page.next_cursor
+            scheduleRunErrors[id] = nil
+        } catch {
+            guard requestIsCurrent(scope: scope, generation: generation) else { return }
+            scheduleRunErrors[id] = error.localizedDescription
+        }
+    }
+
+    var schedulesError: String? { scheduleError }
+}
+
 struct NanoMuseGoalsRoom: View {
     var chrome: NanoMuseRoomChrome
     var onStartGoal: (NanoMuseGoalCategory) -> Void
@@ -380,11 +702,19 @@ struct NanoMuseGoalsRoom: View {
 
     @ObservedObject private var store = NanoMuseGoalStore.shared
     @ObservedObject private var scheduler = NanoMuseScheduler.shared
+    @ObservedObject private var cloud = NanoMuseMordeGoalsCloud.shared
+    @ObservedObject private var authorization = MordeShellAuthorization.shared
     @State private var pickedCategory: NanoMuseGoalCategory?
     @State private var deleting: NanoMuseGoal?
     @State private var editingRoutine: NanoMuseRoutine?
+    @State private var importingRoutine: NanoMuseRoutine?
+    @State private var editingCloudGoal: NanoMuseMordeGoalRecord?
+    @State private var showingCloudGoalEditor = false
+    @State private var deletingCloudGoal: NanoMuseMordeGoalRecord?
+    @State private var expandedScheduleRunIDs = Set<String>()
 
     var body: some View {
+        // Cloud Goals and Schedules remain server-backed; this room exposes no iOS management entry.
         VStack(spacing: 0) {
             // Android: the Goals room's ••• menu — all routines, then the shared rows.
             NanoMuseRoomHeader(chrome: chrome) {
@@ -396,7 +726,7 @@ struct NanoMuseGoalsRoom: View {
                 VStack(alignment: .leading, spacing: 18) {
                     trackingSection
                     routinesSection
-                    createSection
+                    if !authorization.signedIn { createSection }
                 }
                 .padding(16)
             }
@@ -414,12 +744,201 @@ struct NanoMuseGoalsRoom: View {
         .sheet(item: $editingRoutine) { routine in
             NanoMuseRoutineEditor(routine: routine)
         }
+        .sheet(item: $importingRoutine) { routine in
+            NanoMuseScheduleImportSheet(routine: routine) {
+                Task { await cloud.refreshSchedules() }
+            }
+        }
+        .sheet(isPresented: $showingCloudGoalEditor, onDismiss: { editingCloudGoal = nil }) {
+            NanoMuseMordeGoalEditor(goal: editingCloudGoal) { body in
+                try await cloud.save(body, id: editingCloudGoal?.id, revision: editingCloudGoal?.revision ?? 0)
+            }
+        }
         .confirmationDialog(AppLocalized("Delete this goal? Its conversation stays in your chats."), isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
             Button(AppLocalized("Delete goal"), role: .destructive) {
                 if let g = deleting { NanoMuseGoalFlow.delete(g) }
                 deleting = nil
             }
             Button(AppLocalized("Cancel"), role: .cancel) { deleting = nil }
+        }
+        .confirmationDialog("Delete this cloud goal?", isPresented: Binding(get: { deletingCloudGoal != nil }, set: { if !$0 { deletingCloudGoal = nil } }), titleVisibility: .visible) {
+            Button("Delete cloud goal", role: .destructive) {
+                guard let goal = deletingCloudGoal else { return }
+                Task { try? await cloud.delete(goal) }
+                deletingCloudGoal = nil
+            }
+            Button(AppLocalized("Cancel"), role: .cancel) { deletingCloudGoal = nil }
+        }
+    }
+
+    private var cloudGoalsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Circle().fill(Color.blue).frame(width: 8, height: 8)
+                Text("Cloud goals").font(.headline)
+                Spacer()
+                Button { Task { await cloud.refresh() } } label: { Image(systemName: "arrow.clockwise") }
+                    .buttonStyle(.plain).accessibilityLabel(Text(AppLocalized("Refresh")))
+                Button { editingCloudGoal = nil; showingCloudGoalEditor = true } label: { Image(systemName: "plus") }
+                    .buttonStyle(.plain).accessibilityLabel(Text("Create cloud goal"))
+                    .disabled(!authorization.signedIn)
+            }
+            if !authorization.signedIn {
+                card { Text("Sign in to Morde to view cloud goals.").font(.subheadline).foregroundStyle(.secondary) }
+            } else if let error = cloud.error {
+                card {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("Cloud goals could not be loaded: \(error)", systemImage: "exclamationmark.triangle")
+                            .font(.footnote).foregroundStyle(.red)
+                        Button("Retry") { Task { await cloud.refresh() } }
+                    }
+                }
+            } else if cloud.isLoading && cloud.goals.isEmpty {
+                card { ProgressView("Loading cloud goals…") }
+            } else if cloud.goals.isEmpty {
+                card { Text("No cloud goals yet.").font(.subheadline).foregroundStyle(.secondary) }
+            } else {
+                card {
+                    VStack(spacing: 0) {
+                        ForEach(cloud.goals) { goal in
+                            cloudGoalRow(goal)
+                            if goal.id != cloud.goals.last?.id { Divider().padding(.leading, 12) }
+                        }
+                    }
+                }
+            }
+            if let pending = cloud.pending {
+                Label(cloud.syncEnabled ? "A personal-data change is waiting to sync." : "Sync is paused; the pending change stays on this device.", systemImage: "clock")
+                    .font(.footnote).foregroundStyle(.secondary)
+                Button("Retry cloud goal sync") { Task { await cloud.retry() } }
+                    .font(.footnote).disabled(!cloud.syncEnabled || cloud.isSaving || pending.scopeKey != authorization.personalDataScopeKey)
+            }
+            cloudSchedulesSection
+        }
+    }
+
+    private func cloudGoalRow(_ goal: NanoMuseMordeGoalRecord) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: goal.body.status == "done" ? "checkmark.circle.fill" : "flag.circle")
+                .foregroundStyle(goal.body.status == "done" ? Color.green : NanoMuseTones.action)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(goal.body.title).font(.body.weight(.semibold))
+                if !goal.body.description.isEmpty {
+                    Text(goal.body.description).font(.footnote).foregroundStyle(.secondary).lineLimit(2)
+                }
+                Text("\(goal.progress)% · \(goal.body.status)").font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+            Menu {
+                Button { editingCloudGoal = goal; showingCloudGoalEditor = true } label: { Label(AppLocalized("Edit"), systemImage: "pencil") }
+                Button {
+                    let body = NanoMuseMordeGoalMapper.body(title: goal.body.title, description: goal.body.description,
+                        status: goal.body.status == "done" ? "active" : "done", steps: goal.body.steps,
+                        relatedMaterialIDs: goal.body.related_material_ids)
+                    Task { try? await cloud.save(body, id: goal.id, revision: goal.revision) }
+                } label: { Label(goal.body.status == "done" ? "Reopen" : "Mark done", systemImage: "checkmark") }
+                Button(role: .destructive) { deletingCloudGoal = goal } label: { Label("Delete", systemImage: "trash") }
+            } label: { Image(systemName: "ellipsis").foregroundStyle(.secondary).frame(width: 28, height: 32) }
+                .accessibilityLabel(Text(AppLocalized("More")))
+        }
+        .padding(.vertical, 10)
+    }
+
+    private var cloudSchedulesSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Cloud schedules").font(.headline)
+                Spacer()
+                if cloud.isAuthorizingSchedules { ProgressView().controlSize(.small) }
+                Toggle("Cloud schedule permission", isOn: Binding(
+                    get: { authorization.scheduleAuthorizationState.enabled },
+                    set: { enabled in
+                        let scope = authorization.personalDataScopeKey
+                        Task { await cloud.setScheduleAuthorization(enabled, for: scope) }
+                    }
+                ))
+                .labelsHidden()
+                .disabled(!authorization.signedIn || cloud.isAuthorizingSchedules)
+                .accessibilityLabel(Text("Enable cloud schedules for up to 12 hours"))
+                .accessibilityIdentifier("morde.schedule.permission")
+            }
+            card {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(authorization.scheduleAuthorizationState.enabled
+                         ? "Cloud schedules have separate authorization. Revoking it does not cancel schedules or accepted tasks."
+                         : "Enable the separate 12-hour permission to manage cloud schedules.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                    if authorization.scheduleAuthorizationState.enabled {
+                        if cloud.schedules.isEmpty {
+                            Text("No cloud schedules.").font(.subheadline).foregroundStyle(.secondary)
+                        }
+                        ForEach(cloud.schedules) { schedule in
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack(alignment: .top, spacing: 8) {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(schedule.objective).font(.subheadline.weight(.medium)).lineLimit(2)
+                                        Text("\(schedule.status) · \(schedule.timing.kind)").font(.caption).foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    Toggle("Schedule enabled", isOn: Binding(
+                                        get: { schedule.status == "enabled" },
+                                        set: { _ in
+                                            let scope = authorization.personalDataScopeKey
+                                            Task { await cloud.toggle(schedule, for: scope) }
+                                        }
+                                    )).labelsHidden()
+                                        .accessibilityIdentifier("morde.schedule.\(schedule.id).enabled")
+                                }
+                                Button(expandedScheduleRunIDs.contains(schedule.id) ? "隐藏运行记录" : "查看运行记录") {
+                                    if expandedScheduleRunIDs.remove(schedule.id) == nil {
+                                        expandedScheduleRunIDs.insert(schedule.id)
+                                        if cloud.scheduleRuns[schedule.id] == nil {
+                                            Task { await cloud.loadScheduleRuns(id: schedule.id) }
+                                        }
+                                    }
+                                }
+                                .font(.caption)
+                                if expandedScheduleRunIDs.contains(schedule.id) {
+                                    if let error = cloud.scheduleRunErrors[schedule.id] {
+                                        Text("运行记录读取失败：\(error)").font(.caption).foregroundStyle(.red)
+                                        Button("重试") { Task { await cloud.loadScheduleRuns(id: schedule.id) } }
+                                            .font(.caption)
+                                    } else if cloud.scheduleRunLoadingIDs.contains(schedule.id) {
+                                        ProgressView("正在读取运行记录…").font(.caption)
+                                    } else if let runs = cloud.scheduleRuns[schedule.id], runs.isEmpty {
+                                        Text("此 Schedule 暂无运行记录。")
+                                            .font(.caption).foregroundStyle(.secondary)
+                                    } else if let runs = cloud.scheduleRuns[schedule.id] {
+                                        ForEach(runs) { run in
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text("\(run.status) · \(run.scheduled_at ?? run.created_at)")
+                                                    .font(.caption)
+                                                if let reason = run.skip_reason, !reason.isEmpty {
+                                                    Text(reason).font(.caption2).foregroundStyle(.secondary)
+                                                }
+                                                if let taskID = run.task_id {
+                                                    Text("Task \(taskID)").font(.caption2).foregroundStyle(.secondary)
+                                                }
+                                            }
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                        }
+                                        if let cursor = cloud.scheduleRunCursors[schedule.id], !cursor.isEmpty {
+                                            Button("读取更多运行记录") {
+                                                Task { await cloud.loadScheduleRuns(id: schedule.id, cursor: cursor) }
+                                            }
+                                            .font(.caption)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if let error = cloud.schedulesError {
+                        Label(error, systemImage: "exclamationmark.triangle").font(.footnote).foregroundStyle(.red)
+                        Button("Retry cloud schedules") { Task { await cloud.refreshSchedules() } }
+                    }
+                }
+            }
         }
     }
 
@@ -429,7 +948,7 @@ struct NanoMuseGoalsRoom: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Circle().fill(Color.green).frame(width: 8, height: 8)
-                Text(AppLocalized("Tracking")).font(.headline)
+                Text(authorization.signedIn ? "On this iPhone" : AppLocalized("Tracking")).font(.headline)
                 Spacer()
                 Button { pickedCategory = .other } label: { Image(systemName: "plus").font(.body.weight(.semibold)) }
                     .buttonStyle(.plain)
@@ -488,7 +1007,9 @@ struct NanoMuseGoalsRoom: View {
                     Button { onOpenSession(sid) } label: { Label(AppLocalized("Open conversation"), systemImage: "bubble.left") }
                 }
                 if goal.status != .done {
-                    Button { NanoMuseGoalFlow.checkNow(goal) } label: { Label(AppLocalized("Check now"), systemImage: "arrow.clockwise") }
+                    if MordeLocalExecutionPolicy.isEnabled {
+                        Button { NanoMuseGoalFlow.checkNow(goal) } label: { Label(AppLocalized("Check now"), systemImage: "arrow.clockwise") }
+                    }
                     Button { NanoMuseGoalFlow.setPaused(goal, goal.status != .paused) } label: {
                         Label(goal.status == .paused ? AppLocalized("Resume checks") : AppLocalized("Pause checks"), systemImage: goal.status == .paused ? "play" : "pause")
                     }
@@ -523,11 +1044,15 @@ struct NanoMuseGoalsRoom: View {
     private var routinesSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(AppLocalized("Routines")).font(.headline)
+                Text(authorization.signedIn ? "On this iPhone" : AppLocalized("Routines")).font(.headline)
                 Spacer()
                 Button { editingRoutine = NanoMuseRoutine(label: "", prompt: "", hour: 9, minute: 0) } label: { Image(systemName: "plus").font(.body.weight(.semibold)) }
                     .buttonStyle(.plain)
                     .accessibilityLabel(Text(AppLocalized("New routine")))
+            }
+            if authorization.signedIn {
+                Text("Local plans stay on this iPhone. Import a plan explicitly to create a cloud schedule; local agent runs are unavailable in Morde.")
+                    .font(.footnote).foregroundStyle(.secondary)
             }
             let visible = scheduler.visible
             if visible.isEmpty {
@@ -558,7 +1083,7 @@ struct NanoMuseGoalsRoom: View {
                 Text(routine.label.isEmpty ? AppLocalized("Routine") : routine.label)
                     .font(.body.weight(.semibold))
                     .foregroundStyle(routine.enabled ? .primary : .secondary)
-                Text(routine.enabled ? routine.cadence : AppLocalized("Off"))
+            Text(routine.isCloudArchive ? "Imported to cloud" : (routine.enabled ? routine.cadence : AppLocalized("Off")))
                     .font(.caption).foregroundStyle(.secondary)
                 if let last = routine.runs.first {
                     Text(String(format: last.ok ? AppLocalized("last run %@") : AppLocalized("last run %@, failed"), NanoMuseDay.relative(last.at)))
@@ -566,7 +1091,11 @@ struct NanoMuseGoalsRoom: View {
                 }
             }
             Spacer()
-            if scheduler.running.contains(routine.id) {
+            if routine.isCloudArchive {
+                Image(systemName: "icloud")
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel(Text("Managed in Cloud schedules"))
+            } else if scheduler.running.contains(routine.id) {
                 ProgressView()
             } else {
                 Toggle("", isOn: Binding(get: { routine.enabled }, set: { scheduler.setEnabled(routine.id, $0) }))
@@ -575,12 +1104,20 @@ struct NanoMuseGoalsRoom: View {
                     .accessibilityLabel(Text(routine.label.isEmpty ? AppLocalized("Routine") : routine.label))
             }
             Menu {
-                Button { editingRoutine = routine } label: { Label(AppLocalized("Edit"), systemImage: "pencil") }
-                Button { Task { @MainActor in await scheduler.run(routine.id) } } label: { Label(AppLocalized("Run now"), systemImage: "play") }
+                if routine.isCloudArchive {
+                    Label("Imported to cloud", systemImage: "checkmark.icloud")
+                } else {
+                    Button { editingRoutine = routine } label: { Label(AppLocalized("Edit"), systemImage: "pencil") }
+                }
+                if MordeLocalExecutionPolicy.isEnabled {
+                    Button { Task { @MainActor in await scheduler.run(routine.id) } } label: { Label(AppLocalized("Run now"), systemImage: "play") }
+                }
                 if let sid = routine.sessionId {
                     Button { onOpenSession(sid) } label: { Label(AppLocalized("Open conversation"), systemImage: "bubble.left") }
                 }
-                Button(role: .destructive) { scheduler.delete(routine.id) } label: { Label(AppLocalized("Delete"), systemImage: "trash") }
+                if !routine.isCloudArchive {
+                    Button(role: .destructive) { scheduler.delete(routine.id) } label: { Label(AppLocalized("Delete"), systemImage: "trash") }
+                }
             } label: {
                 Image(systemName: "ellipsis")
                     .font(.body)
@@ -589,6 +1126,7 @@ struct NanoMuseGoalsRoom: View {
                     .contentShape(Rectangle())
             }
             .accessibilityLabel(Text(AppLocalized("More")))
+            .accessibilityIdentifier("morde.routine.\(routine.label).more")
         }
         .padding(.vertical, 10)
     }
@@ -635,6 +1173,194 @@ struct NanoMuseGoalsRoom: View {
     }
 }
 
+struct NanoMuseMordeGoalEditor: View {
+    let goal: NanoMuseMordeGoalRecord?
+    let onSave: (MordePersonalGoalBody) async throws -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var title: String
+    @State private var description: String
+    @State private var status: String
+    @State private var stepText: String
+    @State private var isSaving = false
+    @State private var error: String?
+
+    init(goal: NanoMuseMordeGoalRecord?, onSave: @escaping (MordePersonalGoalBody) async throws -> Void) {
+        self.goal = goal
+        self.onSave = onSave
+        _title = State(initialValue: goal?.body.title ?? "")
+        _description = State(initialValue: goal?.body.description ?? "")
+        _status = State(initialValue: goal?.body.status ?? "active")
+        _stepText = State(initialValue: goal?.body.steps.map(\.title).joined(separator: "\n") ?? "")
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Goal") {
+                    TextField("Title", text: $title)
+                        .accessibilityIdentifier("morde.goal.title")
+                    TextField("Description", text: $description, axis: .vertical)
+                        .lineLimit(2...5)
+                    Picker("Status", selection: $status) {
+                        Text("Active").tag("active")
+                        Text("Paused").tag("paused")
+                        Text("Done").tag("done")
+                        Text("Cancelled").tag("cancelled")
+                    }
+                }
+                Section("Steps · one per line") {
+                    TextEditor(text: $stepText).frame(minHeight: 120)
+                }
+                if let error {
+                    Section { Text(error).foregroundStyle(.red) }
+                }
+            }
+            .navigationTitle(goal == nil ? "New cloud goal" : "Edit cloud goal")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button(AppLocalized("Cancel")) { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(AppLocalized("Save")) { save() }
+                        .disabled(isSaving || title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            .overlay { if isSaving { ProgressView().padding().background(.regularMaterial, in: Capsule()) } }
+        }
+    }
+
+    private func save() {
+        let lines = stepText.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        var oldSteps = goal?.body.steps ?? []
+        let steps = lines.map { line -> MordePersonalGoalStep in
+            if let index = oldSteps.firstIndex(where: { $0.title == line }) {
+                let old = oldSteps.remove(at: index)
+                return MordePersonalGoalStep(id: old.id, title: line, status: old.status, note: old.note)
+            }
+            return MordePersonalGoalStep(id: "s_\(UUID().uuidString.lowercased().replacingOccurrences(of: "-", with: ""))",
+                                         title: line, status: "pending")
+        }
+        let body = NanoMuseMordeGoalMapper.body(title: title, description: description, status: status,
+            steps: steps, relatedMaterialIDs: goal?.body.related_material_ids ?? [])
+        guard body.isValidForWrite else { error = "The goal is too long or contains too many steps."; return }
+        isSaving = true
+        error = nil
+        Task {
+            do { try await onSave(body); dismiss() }
+            catch { self.error = error.localizedDescription }
+            isSaving = false
+        }
+    }
+}
+
+struct NanoMuseScheduleImportSheet: View {
+    let routine: NanoMuseRoutine
+    let onImported: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var authorization = MordeShellAuthorization.shared
+    @State private var targets: MordeScheduleTargets?
+    @State private var hostID = ""
+    @State private var modelID = ""
+    @State private var isLoading = true
+    @State private var isSaving = false
+    @State private var error: String?
+
+    private var preview: NanoMuseScheduleImportPreview {
+        NanoMuseScheduleImportMapper.preview(routine, hostID: hostID, modelID: modelID)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Local plan") {
+                    LabeledContent("Name", value: routine.label.isEmpty ? "Routine" : routine.label)
+                    LabeledContent("Timing", value: routine.cadence)
+                    Text(routine.prompt.isEmpty ? "This plan has no instructions to send." : routine.prompt)
+                        .font(.footnote).foregroundStyle(.secondary)
+                    Text("The local plan is turned off only after the cloud confirms creation. Its source remains on this iPhone.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+                Section("Cloud authorization") {
+                    if authorization.scheduleAuthorizationState.enabled {
+                        Text("Separate cloud schedule permission is active. It expires within 12 hours.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    } else {
+                        Text("Turn on Cloud schedules in Goals before creating this schedule.")
+                            .font(.footnote).foregroundStyle(.orange)
+                    }
+                }
+                if isLoading {
+                    Section { ProgressView("Loading available Hosts and models…") }
+                } else if let targets {
+                    Section("Cloud target") {
+                        Picker("Host", selection: $hostID) {
+                            ForEach(targets.hosts) { Text($0.name).tag($0.id) }
+                        }
+                        Picker("Model", selection: $modelID) {
+                            ForEach(targets.models) { Text($0.name).tag($0.id) }
+                        }
+                    }
+                    if let reason = preview.unavailableReason {
+                        Section { Text(reason).font(.footnote).foregroundStyle(.orange) }
+                    } else if let request = preview.request {
+                        Section("Preview") {
+                            Text(request.objective).font(.footnote)
+                            LabeledContent("Schedule", value: "\(request.timing.kind) · \(request.timing.local_time ?? request.timing.run_at ?? "")")
+                        }
+                    }
+                } else {
+                    Section {
+                        Text(error ?? "No available cloud targets.").font(.footnote).foregroundStyle(.red)
+                        Button("Retry") { Task { await loadTargets() } }
+                    }
+                }
+                if let error { Section { Text(error).font(.footnote).foregroundStyle(.red) } }
+            }
+            .navigationTitle("Import to cloud")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button(AppLocalized("Cancel")) { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Create cloud schedule") { create() }
+                        .disabled(!authorization.scheduleAuthorizationState.enabled || !preview.isAvailable || isSaving || isLoading)
+                        .accessibilityIdentifier("morde.schedule.import.create")
+                }
+            }
+            .overlay { if isSaving { ProgressView().padding().background(.regularMaterial, in: Capsule()) } }
+        }
+        .task { await loadTargets() }
+    }
+
+    @MainActor
+    private func loadTargets() async {
+        isLoading = true
+        do {
+            let value = try await MordeShellAuthorization.shared.scheduleTargets()
+            targets = value
+            if hostID.isEmpty { hostID = value.hosts.first?.id ?? "" }
+            if modelID.isEmpty { modelID = value.models.first?.id ?? "" }
+            error = nil
+        } catch { self.error = error.localizedDescription }
+        isLoading = false
+    }
+
+    private func create() {
+        guard preview.isAvailable else { return }
+        isSaving = true
+        error = nil
+        Task { @MainActor in
+            do {
+                _ = try await NanoMuseScheduler.shared.importRoutineToCloud(routine.id, hostID: hostID, modelID: modelID)
+                onImported()
+                dismiss()
+            } catch { self.error = error.localizedDescription }
+            isSaving = false
+        }
+    }
+}
+
 /// "Create a Health goal" — what happens next, and the button that starts it.
 struct NanoMuseGoalCategorySheet: View {
     var category: NanoMuseGoalCategory
@@ -672,23 +1398,37 @@ struct NanoMuseRoutineEditor: View {
     @State private var time: Date = Date()
 
     private var isNew: Bool { NanoMuseScheduler.shared.routine(id: routine.id) == nil }
+    private var isCloudArchive: Bool { routine.isCloudArchive }
 
     var body: some View {
         NavigationStack {
             Form {
                 Section {
+                    if isCloudArchive {
+                        Label("Imported routines are read-only here. Manage the cloud schedule in Cloud schedules.",
+                              systemImage: "icloud")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
                     TextField(AppLocalized("Name"), text: $routine.label)
+                        .accessibilityIdentifier("morde.routine.name")
+                        .disabled(isCloudArchive)
                     DatePicker(AppLocalized("Time"), selection: $time, displayedComponents: .hourAndMinute)
+                        .disabled(isCloudArchive)
                     Picker(AppLocalized("Repeat"), selection: $routine.repeatMode) {
                         Text(AppLocalized("Every day")).tag(NanoMuseRoutine.Repeat.daily)
                         Text(AppLocalized("Weekdays")).tag(NanoMuseRoutine.Repeat.weekdays)
                         Text(AppLocalized("Once")).tag(NanoMuseRoutine.Repeat.once)
                     }
-                    Toggle(AppLocalized("On"), isOn: $routine.enabled).tint(NanoMuseTones.action)
+                    .disabled(isCloudArchive)
+                    Toggle(AppLocalized("On"), isOn: $routine.enabled)
+                        .tint(NanoMuseTones.action)
+                        .disabled(isCloudArchive)
                 }
                 Section {
                     TextEditor(text: $routine.prompt)
                         .frame(minHeight: 120)
+                        .accessibilityIdentifier("morde.routine.prompt")
+                        .disabled(isCloudArchive)
                 } header: {
                     Text(AppLocalized("What to do"))
                 } footer: {
@@ -713,9 +1453,11 @@ struct NanoMuseRoutineEditor: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button(AppLocalized("Cancel")) { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(AppLocalized("Save")) { save() }
-                        .disabled(routine.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                if !isCloudArchive {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button(AppLocalized("Save")) { save() }
+                            .disabled(routine.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
                 }
             }
             .onAppear {
@@ -733,7 +1475,11 @@ struct NanoMuseRoutineEditor: View {
         r.hour = c.hour ?? 9
         r.minute = c.minute ?? 0
         if r.label.trimmingCharacters(in: .whitespaces).isEmpty { r.label = String(r.prompt.prefix(40)) }
-        if isNew { NanoMuseScheduler.shared.create(r) } else { NanoMuseScheduler.shared.update(r) }
+        if isNew {
+            guard NanoMuseScheduler.shared.create(r) != nil else { return }
+        } else {
+            guard NanoMuseScheduler.shared.update(r) else { return }
+        }
         NanoMuseScheduler.shared.requestNotificationPermission()
         dismiss()
     }

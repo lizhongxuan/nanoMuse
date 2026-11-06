@@ -26,17 +26,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
-        if #available(iOS 17.0, *) {
+        // nanoMuse: Morde does not run local Agent background location tasks.
+        if MordeLocalExecutionPolicy.isEnabled, #available(iOS 17.0, *) {
             CLBackgroundActivitySession().invalidate()
         }
-
-        // [T-notification-tap-vs-launch-session] The UNUserNotificationCenter
-        // delegate must be in place BEFORE didFinishLaunching returns, or iOS
-        // never delivers a cold-launch notification tap to didReceive — the
-        // app then falls through to the Launch Session preference and opens
-        // the wrong (new) session. The .onAppear registration in MinisApp
-        // remains as an idempotent backstop.
-        ShortcutNotificationDelegate.shared.register()
 
         // Refresh the dynamic shortcut list every cold launch. The
         // items themselves are stable, but their localized titles

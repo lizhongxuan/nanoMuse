@@ -116,7 +116,7 @@ struct MemoryManagementView: View {
 
     private func loadFiles() {
         let fm = FileManager.default
-        let memDir = AIChatViewModel.minisMemoryPersistentDir
+        let memDir = MinisStoragePaths.minisMemoryPersistentDir
         try? fm.createDirectory(at: memDir, withIntermediateDirectories: true)
 
         // GLOBAL.md always first
@@ -150,7 +150,7 @@ struct MemoryManagementView: View {
 
     private func deleteFiles(at offsets: IndexSet) {
         let fm = FileManager.default
-        let memDir = AIChatViewModel.minisMemoryPersistentDir
+        let memDir = MinisStoragePaths.minisMemoryPersistentDir
         for idx in offsets {
             let file = memoryFiles[idx]
             if file.isGlobal { continue }
@@ -208,7 +208,7 @@ private struct MemoryFileEditView: View {
     @State private var suppressNextChange = false
 
     private var fileURL: URL {
-        AIChatViewModel.minisMemoryPersistentDir.appendingPathComponent(fileName)
+        MinisStoragePaths.minisMemoryPersistentDir.appendingPathComponent(fileName)
     }
 
     var body: some View {
@@ -295,7 +295,7 @@ private struct MemoryFileEditView: View {
 
     private func save() {
         let fm = FileManager.default
-        try? fm.createDirectory(at: AIChatViewModel.minisMemoryPersistentDir, withIntermediateDirectories: true)
+        try? fm.createDirectory(at: MinisStoragePaths.minisMemoryPersistentDir, withIntermediateDirectories: true)
         do {
             try content.data(using: .utf8)?.write(to: fileURL)
             hasChanges = false

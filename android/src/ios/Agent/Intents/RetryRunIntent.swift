@@ -29,6 +29,9 @@ struct RetryRunIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<SendPromptResult> & ProvidesDialog {
+        // nanoMuse: Reject local execution before intent side effects.
+        try MordeLocalExecutionPolicy.requireEnabled()
+
         BackgroundKeepAliveManager.shared.setup()
 
         // [T-shortcuts-eager-keepalive] Arm keep-alive BEFORE any await so
@@ -171,7 +174,7 @@ struct RetryRunIntent: AppIntent {
         if sendCompletionNotification {
             ShortcutNotification.post(
                 id: "shortcut-retry-\(sid)",
-                title: AppLocalized("nanoMuse: Retrying"),
+                title: AppLocalized("morde: Retrying"),
                 body: "\(modelName): \(promptPreview)\(targetMessage.content.count > 50 ? "…" : "")",
                 sessionId: sid
             )
@@ -192,7 +195,7 @@ struct RetryRunIntent: AppIntent {
             if sendCompletionNotification {
                 ShortcutNotification.post(
                     id: "shortcut-retry-done-\(sid)",
-                    title: AppLocalized("nanoMuse: Retry Done"),
+                    title: AppLocalized("morde: Retry Done"),
                     body: "\(modelName): \(String(responseText.prefix(200)))",
                     sessionId: sid
                 )
@@ -227,7 +230,7 @@ struct RetryRunIntent: AppIntent {
             if capturedSendCompletionNotification {
                 ShortcutNotification.post(
                     id: "shortcut-retry-done-\(capturedSid)",
-                    title: AppLocalized("nanoMuse: Retry Done"),
+                    title: AppLocalized("morde: Retry Done"),
                     body: "\(capturedModelName): \(summary)",
                     sessionId: capturedSid
                 )

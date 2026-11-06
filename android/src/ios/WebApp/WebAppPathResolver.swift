@@ -47,12 +47,12 @@ enum WebAppPathResolver {
         switch shortcut.pathScope {
         case .sessionAttachment:
             guard let sid = shortcut.scopeContext else { throw ResolveError.missingContext }
-            base = AIChatViewModel.minisAttachmentsPersistentDir(for: sid)
+            base = MinisStoragePaths.minisAttachmentsPersistentDir(for: sid)
         case .sessionWorkspace:
             guard let sid = shortcut.scopeContext else { throw ResolveError.missingContext }
-            base = AIChatViewModel.minisWorkspacePersistentDir(for: sid)
+            base = MinisStoragePaths.minisWorkspacePersistentDir(for: sid)
         case .shared:
-            base = AIChatViewModel.minisSharedPersistentDir
+            base = MinisStoragePaths.minisSharedPersistentDir
         case .mount:
             guard let raw = shortcut.scopeContext, let mountId = UUID(uuidString: raw) else {
                 throw ResolveError.missingContext

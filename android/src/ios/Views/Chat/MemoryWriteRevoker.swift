@@ -29,7 +29,7 @@ enum MemoryWriteRevoker {
         }
 
         let fm = FileManager.default
-        let memDir = AIChatViewModel.minisMemoryPersistentDir
+        let memDir = MinisStoragePaths.minisMemoryPersistentDir
 
         let dateFmt = DateFormatter()
         dateFmt.dateFormat = "yyyy-MM-dd"
