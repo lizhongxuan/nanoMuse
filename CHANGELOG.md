@@ -74,6 +74,7 @@ All notable changes to nanoMuse. The format follows [Keep a Changelog](https://k
 
 ### iOS
 
+- Morde chat accepts DOCX and XLSX attachments alongside images and PDFs, keeping Office files in their original format. Server-side Office parsing is required for the assistant to read them. 中文：Morde 聊天可添加 DOCX 和 XLSX 附件，保留文件原格式；助手读取内容需要服务端支持 Office 解析。
 - The original `Minis.xcodeproj` fusion target now uses `morde` throughout the user-visible product copy, including the chat header, session fallback, Cloud labels, File Provider, Share extension, Live Activity, Siri/Shortcuts, User-Agent and provider catalogue notes. Bundle IDs, URL schemes, storage keys and service contract names remain stable for existing installs.
 - MIF pages now give file and artifact preview buttons descriptive VoiceOver names, allow long work-item titles to wrap, and localize the legacy chat-file archive states in all nine supported languages.
 - The standalone Morde iOS app now displays as `morde` and starts with the configured HTTPS service origin; existing custom server addresses are kept. Use the `Morde` scheme to run it instead of the legacy `Minis` scheme.

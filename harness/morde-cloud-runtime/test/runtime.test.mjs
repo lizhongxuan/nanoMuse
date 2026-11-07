@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { spawn } from 'node:child_process'
+import { readFile } from 'node:fs/promises'
 import { once } from 'node:events'
 import { createInterface } from 'node:readline'
 import { PassThrough } from 'node:stream'
 import test from 'node:test'
 import { AccountRuntime } from '../src/account-runtime.mjs'
-import { modelCallID, validMessageDelivery } from '../src/engine.mjs'
+import { ENGINE_VERSION, modelCallID, validMessageDelivery, validStart } from '../src/engine.mjs'
 import { WorkerIPC } from '../src/ipc.mjs'
 
 const start = {
@@ -77,8 +78,8 @@ function taskFence(frame) {
     .map(key => [key, frame[key]]))
 }
 
-function messageDelivery(identity, messageID = 'm1234567', content = 'Please check this update.') {
-  return { type: 'message_delivery', version: 1, ...taskFence(identity), message_id: messageID, content }
+function messageDelivery(identity, messageID = 'm1234567', content = 'Please check this update.', attachmentIDs = []) {
+  return { type: 'message_delivery', version: 2, ...taskFence(identity), message_id: messageID, content, attachment_ids: attachmentIDs }
 }
 
 function acknowledgeCheckpoint(proc, frame) {
@@ -169,15 +170,68 @@ test('model ID has a stable cross-language test vector', () => {
   assert.throws(() => modelCallID('task\n123', 'session_456', 7))
 })
 
+test('keeps Morde checkpoint compatibility version independent of the upstream DSH release', () => {
+  assert.equal(ENGINE_VERSION, '0.2.0-rc.2')
+})
+
 test('validates message delivery Unicode characters and rejects NUL or invalid Unicode', () => {
   const delivery = messageDelivery(start, 'm1234567', '😀'.repeat(32_768))
   assert.equal(Buffer.byteLength(delivery.content, 'utf8'), 128 * 1024)
   assert.equal(validMessageDelivery(delivery, start), true)
+  assert.equal(validMessageDelivery({ ...delivery, content: '', attachment_ids: [] }, start), false)
   assert.equal(validMessageDelivery({ ...delivery, content: `${delivery.content}😀` }, start), false)
   assert.equal(validMessageDelivery({ ...delivery, content: 'contains\0nul' }, start), false)
   assert.equal(validMessageDelivery({ ...delivery, content: '\ud800' }, start), false)
   assert.equal(validMessageDelivery({ ...delivery, message_id: 'M1234567' }, start), false)
   assert.equal(validMessageDelivery({ ...delivery, owner_id: 'other_owner' }, start), false)
+})
+
+test('validates queued personal and project attachment IDs, order, and count', () => {
+  const first = 'pa_0123456789abcdef0123456789abcdef'
+  const second = 'pa_1123456789abcdef0123456789abcdef'
+  const delivery = messageDelivery(start, 'm1234567', 'inspect these files', [first, second])
+  assert.equal(validMessageDelivery(delivery, start), true)
+  assert.equal(validMessageDelivery({ ...delivery, content: '' }, start), true)
+  assert.equal(validMessageDelivery({ ...delivery, attachment_ids: [second, first] }, start), false)
+  assert.equal(validMessageDelivery({ ...delivery, attachment_ids: [first, first] }, start), false)
+  assert.equal(validMessageDelivery({ ...delivery, attachment_ids: ['pu_0123456789abcdef0123456789abcdef'] }, start), false)
+  const project = 'pca_0123456789abcdef0123456789abcdef'
+  assert.equal(validMessageDelivery({ ...delivery, attachment_ids: [project] }, start), true)
+  assert.equal(validMessageDelivery({ ...delivery, attachment_ids: ['pca_0123456789abcdef0123456789abcdeF'] }, start), false)
+  assert.equal(validMessageDelivery({ ...delivery, attachment_ids: Array(17).fill(first) }, start), false)
+})
+
+test('uses Morde SOUL as the system persona across conversation turns', async () => {
+  const personalSoul = 'The user prefers concise answers.'
+  const prompt = `Who are you?\n\nAuthorized personal SOUL: ${personalSoul}`
+  const delivery = messageDelivery(start, 'm1234567', 'Please continue.')
+  let modelCalls = 0
+  const { child, frames } = launch((frame, proc) => {
+    if (frame.type === 'ready') {
+      send(proc, { ...start, model: 'deepseek-chat', prompt })
+      send(proc, delivery)
+    }
+    if (frame.type === 'checkpoint') acknowledgeCheckpoint(proc, frame)
+    if (frame.type === 'model') {
+      modelCalls++
+      assert.equal(frame.request.model, 'deepseek-chat')
+      const system = frame.request.messages.filter(message => message.role === 'system')
+      assert.equal(system.length, 1)
+      const text = system[0].content.map(block => block.text ?? '').join('')
+      assert.match(text, /You are Morde, the user's AI assistant\./)
+      assert.match(text, /Be resourceful before asking/)
+      assert.match(text, /When the user asks for recent news, current facts, or an explicit web search/)
+      assert.match(text, /If you change it, tell the user/)
+      assert.doesNotMatch(text, /You are an AI agent powered by DeepSeek Harness/)
+      assert.ok(frame.request.messages.some(message => message.role === 'user' &&
+        message.content.some(block => block.text?.includes(personalSoul))))
+      replyWithText(proc, frame, '我是 Morde。')
+    }
+  })
+  const [code] = await once(child, 'close')
+  assert.equal(code, 0, `frames: ${frames.map(frame => frame.type).join(', ')}`)
+  assert.equal(modelCalls, 2)
+  assert.equal(frames.find(frame => frame.type === 'settled')?.state, 'completed_candidate')
 })
 
 test('queues running message delivery once with its database id for the next turn', async () => {
@@ -211,6 +265,42 @@ test('queues running message delivery once with its database id for the next tur
   assert.equal(frames.find(frame => frame.type === 'settled')?.state, 'completed_candidate')
 })
 
+test('queues running image and PDF attachment references and deduplicates the full delivery', async () => {
+  const attachmentIDs = ['pa_0123456789abcdef0123456789abcdef', 'pa_1123456789abcdef0123456789abcdef']
+  const delivery = messageDelivery(start, 'm1234567', 'Please inspect the attached image and PDF.', attachmentIDs)
+  let modelCalls = 0
+  const { child, frames } = launch((frame, proc) => {
+    if (frame.type === 'ready') {
+      send(proc, start)
+      send(proc, delivery)
+      send(proc, delivery)
+    }
+    if (frame.type === 'checkpoint') acknowledgeCheckpoint(proc, frame)
+    if (frame.type === 'model') {
+      if (modelCalls++ === 0) {
+        replyWithText(proc, frame, 'I will inspect both attachments.')
+      } else {
+        const delivered = frame.request.messages.filter(message => message.id === delivery.message_id)
+        assert.equal(delivered.length, 1)
+        assert.deepEqual(delivered[0].content.map(block => block.text), [
+          delivery.content,
+          `[MORDE_TASK_ATTACHMENT_IDS_V1:${attachmentIDs.join(',')}]`,
+        ])
+        replyWithText(proc, frame, 'I inspected the image and PDF.')
+      }
+    }
+  })
+  const [code] = await once(child, 'close')
+  assert.equal(code, 0, `frames: ${frames.map(frame => frame.type).join(', ')}`)
+  assert.equal(modelCalls, 2)
+  const events = frames.filter(frame => frame.type === 'checkpoint').flatMap(frame => JSON.parse(frame.payload).events)
+  const saved = events.find(event => event.type === 'user/message' && event.data.id === delivery.message_id)
+  assert.deepEqual(saved?.data.content.map(block => block.text), [
+    delivery.content,
+    `[MORDE_TASK_ATTACHMENT_IDS_V1:${attachmentIDs.join(',')}]`,
+  ])
+})
+
 test('conflicting content for a delivered message id fails the worker closed', () => {
   const input = new PassThrough()
   const output = new PassThrough()
@@ -219,6 +309,21 @@ test('conflicting content for a delivered message id fails the worker closed', (
   ipc.setMessageDeliveryHandler(delivery => deliveries.push(delivery))
   const original = messageDelivery(start)
   input.write(`${JSON.stringify(start)}\n${JSON.stringify(original)}\n${JSON.stringify({ ...original, content: 'different content' })}\n`)
+  assert.equal(deliveries.length, 1)
+  assert.equal(ipc.failed, true)
+  input.destroy()
+  output.destroy()
+})
+
+test('conflicting attachment IDs for a delivered message id fail the worker closed', () => {
+  const input = new PassThrough()
+  const output = new PassThrough()
+  const ipc = new WorkerIPC(input, output)
+  const deliveries = []
+  ipc.setMessageDeliveryHandler(delivery => deliveries.push(delivery))
+  const original = messageDelivery(start, 'm1234567', 'same text', ['pa_0123456789abcdef0123456789abcdef'])
+  const changed = messageDelivery(start, 'm1234567', 'same text', ['pa_1123456789abcdef0123456789abcdef'])
+  input.write(`${JSON.stringify(start)}\n${JSON.stringify(original)}\n${JSON.stringify(changed)}\n`)
   assert.equal(deliveries.length, 1)
   assert.equal(ipc.failed, true)
   input.destroy()
@@ -253,6 +358,22 @@ test('checkpoint acknowledgements must match the requesting session fence', asyn
   })}\n`)
   await rejected
   assert.equal(ipc.pending.has(request.id), false)
+  input.destroy()
+  output.destroy()
+})
+
+test('child settlement acknowledgements must match the complete task fence', async () => {
+  const input = new PassThrough()
+  const output = new PassThrough()
+  const ipc = new WorkerIPC(input, output)
+  input.write(`${JSON.stringify(start)}\n`)
+  const sentFrame = once(output, 'data')
+  const settlement = ipc.settleChild(taskFence(start), 'child-call', 'succeeded', -1, '', 'done')
+  const rejected = assert.rejects(settlement, /child settlement was not confirmed/)
+  await sentFrame
+  input.write(`${JSON.stringify({ type: 'child_settle_ack', ...taskFence(start), task_id: 'task_other', call_id: 'child-call', ok: true })}\n`)
+  await rejected
+  assert.equal(ipc.failed, true)
   input.destroy()
   output.destroy()
 })
@@ -373,6 +494,65 @@ test('real dsh runs only after worker confirms its events', async () => {
   assert.ok(frames.some(frame => frame.type === 'checkpoint' && JSON.parse(frame.payload).events.some(event => event.type === 'assistant/message')))
 })
 
+test('starts a first attachment message once with its authorized context', async t => {
+  const attachmentIDs = ['pa_0123456789abcdef0123456789abcdef']
+  const initial = { message_id: 'm1234567', content: 'Please inspect this file: ' + 'a'.repeat(40 * 1024), attachment_ids: attachmentIDs }
+  const initialStart = { ...start, initial_message: initial, initial_context: 'Earlier authorized context: a draft report.' }
+  delete initialStart.prompt
+  assert.equal(validStart(initialStart), true)
+  let calls = 0
+  const { child, frames } = launch((frame, proc) => {
+    if (frame.type === 'ready') {
+      send(proc, initialStart)
+      send(proc, messageDelivery(initialStart, initial.message_id, initial.content, initial.attachment_ids))
+    }
+    if (frame.type === 'checkpoint') acknowledgeCheckpoint(proc, frame)
+    if (frame.type === 'model') {
+      calls++
+      const all = frame.request.messages.flatMap(message => message.content ?? [])
+      assert.equal(all.filter(block => block.text === initial.content).length, 1)
+      assert.equal(all.filter(block => block.text === `[MORDE_TASK_ATTACHMENT_IDS_V1:${attachmentIDs.join(',')}]`).length, 1)
+      assert.equal(all.filter(block => block.text === initialStart.initial_context).length, 1)
+      replyWithText(proc, frame, 'I can see the attachment reference.')
+    }
+  })
+  t.after(() => child.kill())
+  const [code] = await once(child, 'close')
+  assert.equal(code, 0, `frames: ${frames.map(frame => frame.type).join(', ')}`)
+  assert.equal(calls, 1)
+  const events = frames.filter(frame => frame.type === 'checkpoint').flatMap(frame => JSON.parse(frame.payload).events)
+  assert.equal(events.filter(event => event.type === 'user/message' && event.data.id === initial.message_id).length, 1)
+})
+
+test('delivers a project attachment-only first message once', async t => {
+  const initial = { message_id: 'm1234567', content: '', attachment_ids: ['pca_0123456789abcdef0123456789abcdef'] }
+  const initialStart = { ...start, initial_message: initial }
+  delete initialStart.prompt
+  assert.equal(validStart(initialStart), true)
+  let calls = 0
+  const { child, frames } = launch((frame, proc) => {
+    if (frame.type === 'ready') {
+      send(proc, initialStart)
+      send(proc, messageDelivery(initialStart, initial.message_id, initial.content, initial.attachment_ids))
+    }
+    if (frame.type === 'checkpoint') acknowledgeCheckpoint(proc, frame)
+    if (frame.type === 'model') {
+      calls++
+      const marker = `[MORDE_TASK_ATTACHMENT_IDS_V1:${initial.attachment_ids[0]}]`
+      const messages = frame.request.messages.filter(message => message.id === initial.message_id)
+      assert.equal(messages.length, 1)
+      assert.equal(messages[0].content.filter(block => block.text === marker).length, 1)
+      replyWithText(proc, frame, 'I can inspect the project attachment.')
+    }
+  })
+  t.after(() => child.kill())
+  const [code] = await once(child, 'close')
+  assert.equal(code, 0, `frames: ${frames.map(frame => frame.type).join(', ')}`)
+  assert.equal(calls, 1)
+  const events = frames.filter(frame => frame.type === 'checkpoint').flatMap(frame => JSON.parse(frame.payload).events)
+  assert.equal(events.filter(event => event.type === 'user/message' && event.data.id === initial.message_id).length, 1)
+})
+
 test('a refused checkpoint prevents a model call', async () => {
   const { child, frames } = launch((frame, proc) => {
     if (frame.type === 'ready') send(proc, start)
@@ -449,6 +629,45 @@ test('rejects a start tool with an open parameter schema', async () => {
   const [code] = await once(child, 'close')
   assert.equal(code, 1)
   assert.equal(frames.some(frame => frame.type === 'checkpoint' || frame.type === 'model'), false)
+})
+
+test('accepts strict Morde tool schemas with nullable JSON Schema types', () => {
+  const tools = [
+    {
+      name: 'nullable_integer', description: 'Accept an integer or null.',
+      parameters: {
+        type: 'object', properties: { value: { type: ['integer', 'null'], minimum: 1 } },
+        required: ['value'], additionalProperties: false,
+      },
+    },
+    {
+      name: 'nullable_object', description: 'Accept an object or null.',
+      parameters: {
+        type: 'object', properties: {
+          timing: {
+            type: ['object', 'null'], properties: { time_zone: { type: 'string', minLength: 1 } },
+            required: ['time_zone'], additionalProperties: false,
+          },
+        }, required: ['timing'], additionalProperties: false,
+      },
+    },
+    {
+      name: 'nullable_enum', description: 'Accept an enum value or null.',
+      parameters: {
+        type: 'object', properties: { status: { type: ['string', 'null'], enum: ['active', 'paused', null] } },
+        required: ['status'], additionalProperties: false,
+      },
+    },
+  ]
+  assert.equal(validStart({ ...start, tools }), true)
+  assert.equal(validStart({ ...start, tools: [{
+    name: 'invalid_union', description: 'Has an unsupported type.',
+    parameters: { type: 'object', properties: { value: { type: ['integer', 'unsupported'] } }, additionalProperties: false },
+  }] }), false)
+  assert.equal(validStart({ ...start, tools: [{
+    name: 'duplicate_union', description: 'Has a duplicate type.',
+    parameters: { type: 'object', properties: { value: { type: ['integer', 'integer'] } }, additionalProperties: false },
+  }] }), false)
 })
 
 test('runs an authorized dsh tool through the parent and persists its result before the next model call', async () => {
@@ -557,6 +776,145 @@ test('runs an authorized dsh tool through the parent and persists its result bef
   assert.equal(mismatch.emitted.length, 0)
 })
 
+test('routes Morde MCP tools through the official DSH MCP adapter and reconciles its durable result', async () => {
+  const tool = {
+    name: 'mcp_k1234567_0123456789ab',
+    description: 'Search through a task-authorized Morde connector.',
+    parameters: {
+      type: 'object', properties: { query: { type: 'string' } },
+      required: ['query'], additionalProperties: false,
+    },
+  }
+  const output = '{"is_error":false,"structured_content":{"count":1},"text":["one result"]}'
+  let through = -1
+  let modelCalls = 0
+  let brokerCalls = 0
+  const checkpointPages = []
+  const { child, frames } = launch((frame, proc) => {
+    if (frame.type === 'ready') send(proc, { ...start, tools: [tool] })
+    if (frame.type === 'checkpoint') {
+      const page = JSON.parse(frame.payload)
+      checkpointPages.push({ from_seq: frame.from_seq, through_seq: frame.through_seq, payload: frame.payload, sha256: frame.sha256 })
+      assert.equal(frame.from_seq, through + 1)
+      through = frame.through_seq
+      assert.equal(page.events.at(-1).seq, through)
+      send(proc, { type: 'checkpoint_ack', id: frame.id, ok: true, through_seq: through, sha256: frame.sha256 })
+    }
+    if (frame.type === 'model') {
+      modelCalls++
+      assert.deepEqual(frame.request.tools, [tool])
+      if (modelCalls === 1) {
+        const chunks = [
+          { type: 'tool-call-delta', index: 0, id: 'call_mcp_1', name: tool.name, argumentsDelta: '{"query":"agent"}' },
+          { type: 'usage', usage: { inputTokens: 3, outputTokens: 2 } },
+          { type: 'finish', reason: { kind: 'tool-calls' } },
+        ]
+        chunks.forEach((chunk, index) => send(proc, { type: 'model_chunk', id: frame.id, index, chunk }))
+        send(proc, { type: 'model_end', id: frame.id, ok: true })
+      } else {
+        const resultMessage = frame.request.messages.find(message => message.role === 'tool' && message.toolCallId === 'call_mcp_1')
+        assert.equal(resultMessage?.content[0]?.text, output, 'structured MCP output remains available to the model')
+        const chunks = [
+          { type: 'block-start', index: 0, blockType: 'text' },
+          { type: 'text-delta', index: 0, text: 'Found one result.' },
+          { type: 'block-end', index: 0, block: { type: 'text', text: 'Found one result.' } },
+          { type: 'usage', usage: { inputTokens: 4, outputTokens: 2 } },
+          { type: 'finish', reason: { kind: 'stop' } },
+        ]
+        chunks.forEach((chunk, index) => send(proc, { type: 'model_chunk', id: frame.id, index, chunk }))
+        send(proc, { type: 'model_end', id: frame.id, ok: true })
+      }
+    }
+    if (frame.type === 'tool_call') {
+      brokerCalls++
+      assert.equal(frame.name, tool.name)
+      assert.deepEqual(frame.arguments, { query: 'agent' })
+      send(proc, {
+        type: 'tool_result', id: frame.id, ...taskFence(frame), call_id: frame.call_id,
+        status: 'succeeded', output,
+      })
+    }
+  })
+  const [code] = await once(child, 'close')
+  assert.equal(code, 0, `frames: ${frames.map(frame => frame.type).join(', ')}`)
+  assert.equal(modelCalls, 2)
+  assert.equal(brokerCalls, 1)
+  const toolResult = checkpointPages.flatMap(page => JSON.parse(page.payload).events)
+    .find(event => event.type === 'tool/result' && event.data.message?.toolCallId === 'call_mcp_1')
+  assert.equal(toolResult?.data.message.content[0].text, output)
+
+  const resumed = await resumeSession(checkpointPages, {
+    tools: [tool],
+    onToolCall: frame => {
+      assert.equal(frame.call_id, 'call_mcp_1')
+      assert.equal(frame.name, tool.name)
+      return { status: 'succeeded', output }
+    },
+  })
+  assert.equal(resumed.code, 0, `resume frames: ${resumed.frames.map(frame => frame.type).join(', ')}`)
+  assert.equal(resumed.modelCalls, 0)
+  const duplicateResults = resumed.emitted.flatMap(frame => JSON.parse(frame.payload).events)
+    .filter(event => event.type === 'tool/result' && event.data.message?.toolCallId === 'call_mcp_1')
+  assert.equal(duplicateResults.length, 0, 'verified recovery does not append a duplicate tool result')
+})
+
+test('returns failed Morde MCP broker results to the DSH model as tool errors and completes the turn', async () => {
+  const tool = {
+    name: 'mcp_k1234567_0123456789ab',
+    description: 'Search through a task-authorized Morde connector.',
+    parameters: {
+      type: 'object', properties: { query: { type: 'string' } },
+      required: ['query'], additionalProperties: false,
+    },
+  }
+  const brokerFailure = 'connector temporarily unavailable'
+  const expectedToolError = `Tool failed: ${brokerFailure}`
+  let modelCalls = 0
+  let brokerCalls = 0
+  const checkpointEvents = []
+  const { child, frames } = launch((frame, proc) => {
+    if (frame.type === 'ready') send(proc, { ...start, tools: [tool] })
+    if (frame.type === 'checkpoint') {
+      checkpointEvents.push(...JSON.parse(frame.payload).events)
+      acknowledgeCheckpoint(proc, frame)
+    }
+    if (frame.type === 'model') {
+      modelCalls++
+      assert.deepEqual(frame.request.tools, [tool])
+      if (modelCalls === 1) {
+        const chunks = [
+          { type: 'tool-call-delta', index: 0, id: 'call_mcp_failed_1', name: tool.name, argumentsDelta: '{"query":"agent"}' },
+          { type: 'finish', reason: { kind: 'tool-calls' } },
+        ]
+        chunks.forEach((chunk, index) => send(proc, { type: 'model_chunk', id: frame.id, index, chunk }))
+        send(proc, { type: 'model_end', id: frame.id, ok: true })
+      } else {
+        const resultMessage = frame.request.messages.find(message => message.role === 'tool' && message.toolCallId === 'call_mcp_failed_1')
+        assert.equal(resultMessage?.content[0]?.text, expectedToolError)
+        replyWithText(proc, frame, 'The search service is temporarily unavailable, so I could not retrieve results.')
+      }
+    }
+    if (frame.type === 'tool_call') {
+      brokerCalls++
+      assert.equal(frame.name, tool.name)
+      assert.deepEqual(frame.arguments, { query: 'agent' })
+      send(proc, {
+        type: 'tool_result', id: frame.id, ...taskFence(frame), call_id: frame.call_id,
+        status: 'failed', output: brokerFailure,
+      })
+    }
+  })
+  const [code] = await once(child, 'close')
+  assert.equal(code, 0, `frames: ${frames.map(frame => frame.type).join(', ')}`)
+  assert.equal(modelCalls, 2, 'the model receives the broker failure and gets a chance to finish')
+  assert.equal(brokerCalls, 1)
+  assert.equal(frames.find(frame => frame.type === 'settled')?.state, 'completed_candidate')
+  const toolResult = checkpointEvents.find(event => event.type === 'tool/result' && event.data.message?.toolCallId === 'call_mcp_failed_1')
+  assert.equal(toolResult?.data.message.content[0].text, expectedToolError)
+  assert.ok(checkpointEvents.some(event => event.type === 'assistant/message' && event.data.message.content
+    .some(block => block.type === 'text' && block.text === 'The search service is temporarily unavailable, so I could not retrieve results.')))
+})
+
 test('runs dsh_delegate in an isolated child session and waits for settlement before resuming the parent', async () => {
   const fileRead = fileReadTool
   const delegate = delegateTool
@@ -583,6 +941,8 @@ test('runs dsh_delegate in an isolated child session and waits for settlement be
       send(proc, { type: 'checkpoint_ack', id: frame.id, ok: true, through_seq: frame.through_seq, sha256: frame.sha256 })
     }
     if (frame.type === 'model') {
+      assert.ok(frame.request.messages.some(message => message.role === 'system' &&
+        message.content.some(block => block.text?.includes("You are Morde, the user's AI assistant."))))
       if (frame.session_id === start.session_id) {
         parentModels += 1
         assert.deepEqual(frame.request.tools, [delegate, fileRead])
@@ -663,7 +1023,7 @@ test('runs dsh_delegate in an isolated child session and waits for settlement be
       assert.equal(frame.summary, 'Notes say hello.')
       assert.ok(frame.through_seq >= 0)
       assert.equal(frame.sha256, pagesBySession.get(childIdentity.session_id).at(-1).sha256)
-      send(proc, { type: 'child_settle_ack', call_id: frame.call_id, session_id: frame.session_id, ok: true })
+      send(proc, { type: 'child_settle_ack', ...taskFence(frame), call_id: frame.call_id, ok: true })
       childSettled = true
     }
   })
@@ -752,7 +1112,7 @@ test('runs a background child beside the parent and exposes durable job status t
       assert.equal(frame.session_id, childIdentity.session_id)
       assert.equal(frame.status, 'succeeded')
       assert.equal(frame.summary, 'Background task finished.')
-      send(proc, { type: 'child_settle_ack', call_id: frame.call_id, session_id: frame.session_id, ok: true })
+      send(proc, { type: 'child_settle_ack', ...taskFence(frame), call_id: frame.call_id, ok: true })
       childSettled = true
     }
     if (frame.type === 'model' && frame.session_id === start.session_id && parentModels === 3 && pendingChildModel) {
@@ -807,7 +1167,7 @@ test('does not settle the parent while a background child outcome is unknown', a
       tools: [fileReadTool], checkpoint_through_seq: -1, checkpoint_sha256: '',
       step_status: 'running', summary: '',
     })
-    if (frame.type === 'child_settle') send(proc, { type: 'child_settle_ack', call_id: frame.call_id, session_id: frame.session_id, ok: false })
+    if (frame.type === 'child_settle') send(proc, { type: 'child_settle_ack', ...taskFence(frame), call_id: frame.call_id, ok: false })
   })
   const close = once(child, 'close').then(([code]) => code)
   const timeout = setTimeout(() => child.kill('SIGKILL'), 5000)
@@ -876,7 +1236,7 @@ test('cancels a persisted background job and reports only after child settlement
     if (frame.type === 'child_settle') {
       assert.equal(frame.status, 'failed')
       assert.equal(frame.summary, 'Background job cancelled.')
-      send(proc, { type: 'child_settle_ack', call_id: frame.call_id, session_id: frame.session_id, ok: true })
+      send(proc, { type: 'child_settle_ack', ...taskFence(frame), call_id: frame.call_id, ok: true })
       childSettled = true
     }
     if (frame.type === 'job_cancel_result') {
@@ -1176,7 +1536,7 @@ test('refuses invalid UTF-8 in a worker frame', async () => {
       proc.stdin.write(Buffer.concat([Buffer.from(prefix), Buffer.from([0xc3, 0x28]), Buffer.from(`${suffix}\n`)]))
     }
   })
-  const timer = setTimeout(() => child.kill('SIGKILL'), 1500)
+  const timer = setTimeout(() => child.kill('SIGKILL'), 5000)
   const [code] = await once(child, 'close')
   clearTimeout(timer)
   assert.equal(code, 1)
@@ -1535,7 +1895,7 @@ function checkpointPage(request, page) {
     from_seq: page.from_seq, through_seq: page.through_seq, payload: page.payload, sha256: page.sha256 }
 }
 
-async function resumeSession(pages, { alterStart = value => value, alterPage = value => value, stopRead = false, refuseCheckpoint = false, onToolCall, onChildCreate, checkpointPagesBySession, tools = [], deliveries = [] } = {}) {
+async function resumeSession(pages, { alterStart = value => value, alterPage = value => value, stopRead = false, refuseCheckpoint = false, withholdToolResult = false, onToolCall, onChildCreate, checkpointPagesBySession, tools = [], deliveries = [] } = {}) {
   const emitted = []
   const offsets = []
   const modelRequests = []
@@ -1565,6 +1925,10 @@ async function resumeSession(pages, { alterStart = value => value, alterPage = v
       send(proc, { type: 'checkpoint_ack', id: frame.id, ok: !refuseCheckpoint, through_seq: frame.through_seq, sha256: frame.sha256 })
     }
     if (frame.type === 'tool_call') {
+      if (withholdToolResult) {
+        proc.stdin.end()
+        return
+      }
       const result = onToolCall?.(frame) ?? { status: 'succeeded', output: 'reconciled output' }
       send(proc, {
         type: 'tool_result', id: frame.id, task_id: frame.task_id, owner_id: frame.owner_id,
@@ -1578,7 +1942,7 @@ async function resumeSession(pages, { alterStart = value => value, alterPage = v
       if (result) send(proc, result)
     }
     if (frame.type === 'child_settle') {
-      send(proc, { type: 'child_settle_ack', call_id: frame.call_id, session_id: frame.session_id, ok: true })
+      send(proc, { type: 'child_settle_ack', ...taskFence(frame), call_id: frame.call_id, ok: true })
     }
     if (frame.type === 'model') {
       modelCalls += 1
@@ -1607,6 +1971,62 @@ test('restores a completed dsh session from verified pages without replaying the
   assert.equal(result.frames.find(frame => frame.type === 'settled')?.session_id, start.session_id)
   assert.equal(result.frames.some(frame => frame.type === 'model'), false)
 })
+
+test('restores a completed 0.2.0-rc.2 checkpoint on the upgraded DSH runtime', async () => {
+  const fixture = JSON.parse(await readFile(new URL('./fixtures/dsh-session-0.2.0-rc.2-complete.json', import.meta.url), 'utf8'))
+  assert.equal(fixture.sourceEngine, '0.2.0-rc.2')
+  const result = await resumeSession(fixture.pages)
+  assert.equal(result.code, 0, `frames: ${result.frames.map(frame => frame.type).join(', ')}`)
+  assert.equal(result.frames.find(frame => frame.type === 'settled')?.state, 'completed_candidate')
+  assert.deepEqual(result.offsets, fixture.pages.map(page => page.from_seq))
+  assert.equal(result.modelCalls, 0)
+})
+
+test('reconciles an old pending MCP call from Morde ledger without redispatching it', async () => {
+  const fixture = JSON.parse(await readFile(new URL('./fixtures/dsh-session-0.2.0-rc.2-pending-mcp.json', import.meta.url), 'utf8'))
+  const ledgerLookups = []
+  const result = await resumeSession(fixture.pages, {
+    tools: [fixture.tool],
+    onToolCall(frame) {
+      ledgerLookups.push(frame.call_id)
+      assert.equal(frame.name, fixture.tool.name)
+      assert.deepEqual(frame.arguments, { message: 'write once' })
+      return { status: 'succeeded', output: 'committed once' }
+    },
+  })
+  assert.equal(result.code, 0, `frames: ${result.frames.map(frame => frame.type).join(', ')}`)
+  assert.deepEqual(ledgerLookups, ['call_migration_1'])
+  assert.equal(result.frames.filter(frame => frame.type === 'tool_call').length, 1)
+  assert.equal(result.modelCalls, 1)
+  const toolResult = result.modelRequests[0].messages.find(message => message.role === 'tool' && message.toolCallId === 'call_migration_1')
+  assert.equal(toolResult.content[0].text, 'committed once')
+})
+
+test('does not resume an old pending MCP call when its side effect outcome is unknown', async () => {
+  const fixture = JSON.parse(await readFile(new URL('./fixtures/dsh-session-0.2.0-rc.2-pending-mcp.json', import.meta.url), 'utf8'))
+  const result = await resumeSession(fixture.pages, { tools: [fixture.tool], withholdToolResult: true })
+  assert.notEqual(result.code, 0)
+  assert.equal(result.frames.some(frame => frame.type === 'settled'), false)
+  assert.equal(result.modelCalls, 0)
+})
+
+test('passes an approval denial from the Morde ledger to an old pending DSH tool call', async () => {
+  const fixture = JSON.parse(await readFile(new URL('./fixtures/dsh-session-0.2.0-rc.2-pending-mcp.json', import.meta.url), 'utf8'))
+  let approvalResults = 0
+  const result = await resumeSession(fixture.pages, {
+    tools: [fixture.tool],
+    onToolCall() {
+      approvalResults += 1
+      return { status: 'failed', output: 'Approval was denied by the user.' }
+    },
+  })
+  assert.equal(result.code, 0, `frames: ${result.frames.map(frame => frame.type).join(', ')}`)
+  assert.equal(approvalResults, 1)
+  assert.equal(result.modelCalls, 1)
+  const toolResult = result.modelRequests[0].messages.find(message => message.role === 'tool' && message.toolCallId === 'call_migration_1')
+  assert.match(toolResult.content[0].text, /Approval was denied/)
+})
+
 test('persists dsh interrupted-turn closers before reporting a restored session', async () => {
   const pages = await captureSession({ interrupt: true })
   const result = await resumeSession(pages)
@@ -1616,6 +2036,31 @@ test('persists dsh interrupted-turn closers before reporting a restored session'
   const events = result.emitted.flatMap(frame => JSON.parse(frame.payload).events)
   assert.ok(events.some(event => event.type === 'turn/end' && event.data.reason.kind === 'interrupted'))
   assert.equal(result.emitted[0].from_seq, pages.at(-1).through_seq + 1)
+})
+
+test('replaces the old DSH identity when an interrupted session resumes', async () => {
+  const pages = await captureSession({ interrupt: true })
+  let replaced = false
+  const legacyPages = pages.map(page => {
+    const checkpoint = JSON.parse(page.payload)
+    for (const event of checkpoint.events) {
+      if (event.type === 'system/message') {
+        event.data.message.content = [{ type: 'text', text: 'You are an AI agent powered by DeepSeek Harness.' }]
+        replaced = true
+      }
+    }
+    const payload = JSON.stringify(checkpoint)
+    return { ...page, payload, sha256: createHash('sha256').update(payload).digest('hex') }
+  })
+  assert.equal(replaced, true)
+  const result = await resumeSession(legacyPages)
+  assert.equal(result.code, 0, `frames: ${result.frames.map(frame => frame.type).join(', ')}`)
+  assert.equal(result.modelCalls, 1)
+  const system = result.modelRequests[0].messages.filter(message => message.role === 'system')
+  assert.equal(system.length, 1)
+  const text = system[0].content.map(block => block.text ?? '').join('')
+  assert.match(text, /You are Morde, the user's AI assistant\./)
+  assert.doesNotMatch(text, /You are an AI agent powered by DeepSeek Harness/)
 })
 
 test('refuses recovery when interrupted-turn closers cannot be committed', async () => {
@@ -1756,6 +2201,32 @@ test('replays a persisted inbox message once during recovery', async () => {
   assert.notEqual(conflict.code, 0)
   assert.equal(conflict.modelCalls, 0)
   assert.equal(conflict.frames.some(frame => frame.type === 'settled'), false)
+})
+
+test('restages a partially persisted revision batch before one model turn', async () => {
+  const captured = await captureSession({ interrupt: true })
+  const decoded = captured.flatMap(page => JSON.parse(page.payload).events)
+  const pending = decoded.findIndex(event => event.type === 'agent/inbox/spliced' && event.data.inserted.length > 0)
+  assert.ok(pending >= 0)
+  const body = { header: JSON.parse(captured[0].payload).header, from_seq: 0, events: decoded.slice(0, pending + 1) }
+  const persisted = body.events[pending].data.inserted[0]
+  persisted.id = 'm1234567'
+  persisted.content = [{ type: 'text', text: 'Use revenue only.' }]
+  const payload = JSON.stringify(body)
+  const page = { from_seq: 0, through_seq: body.events.at(-1).seq, payload, sha256: createHash('sha256').update(payload).digest('hex') }
+  const revisionMessages = [
+    { message_id: 'm1234567', content: 'Use revenue only.', attachment_ids: [] },
+    { message_id: 'm2345678', content: 'Use Chinese headings.', attachment_ids: [] },
+  ]
+  const result = await resumeSession([page], { alterStart: value => ({ ...value, revision_messages: revisionMessages }) })
+  assert.equal(result.code, 0, `frames: ${result.frames.map(frame => frame.type).join(', ')}`)
+  assert.equal(result.modelCalls, 1)
+  const messages = result.modelRequests[0].messages.filter(message => revisionMessages.some(item => item.message_id === message.id))
+  assert.deepEqual(messages.map(message => message.id), revisionMessages.map(item => item.message_id))
+  const events = result.emitted.flatMap(frame => JSON.parse(frame.payload).events)
+  for (const message of revisionMessages) {
+    assert.equal(events.filter(event => event.type === 'user/message' && event.data.id === message.message_id).length, 1)
+  }
 })
 
 test('account runtime routes concurrent Tasks independently and cancels only the selected Task', async t => {

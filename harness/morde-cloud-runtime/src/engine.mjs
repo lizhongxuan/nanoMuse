@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { Context } from '@deepseek-ai/cordis'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
+import { createMcpToolDefinition } from '@deepseek-ai/dsh-mcp-client'
 import LlmRuntime, { LlmAdapter, MessageId, createToolResultMessage, createUserMessage, freezeMessage } from '@deepseek-ai/dsh-llm'
 import SessionStore, { SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
 import * as checkpointPolicy from '@deepseek-ai/dsh-session-checkpoint-policy'
@@ -9,6 +11,7 @@ import SessionPersistence, { assertContiguous, assertStoredId, assertVersion, ma
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
+import { apply as nativeToolExecutorApply, inject as nativeToolExecutorInject, name as nativeToolExecutorName } from '@deepseek-ai/dsh-tool-executor-native'
 
 const MAX_CHECKPOINT_PAYLOAD_BYTES = 1024 * 1024
 const MAX_RESTORE_BYTES = 8 * 1024 * 1024
@@ -21,6 +24,7 @@ const SCHEMA_TYPES = new Set(['object', 'array', 'string', 'number', 'integer', 
 const SCHEMA_ANNOTATIONS = new Set(['description', 'title', 'default', 'examples'])
 const CLARIFICATION_TOOL = 'ask_user'
 const DELEGATE_TOOL = 'dsh_delegate'
+const MORDE_MCP_TOOL_PREFIX = 'mcp_'
 const JOB_LIST_TOOL = 'dsh_job_list'
 const JOB_GET_TOOL = 'dsh_job_get'
 const JOB_OUTPUT_TOOL = 'dsh_job_output'
@@ -29,15 +33,20 @@ const JOB_TOOLS = new Set([JOB_LIST_TOOL, JOB_GET_TOOL, JOB_OUTPUT_TOOL, JOB_CAN
 const MAX_DELEGATE_TITLE_BYTES = 256
 const MAX_DELEGATE_OBJECTIVE_BYTES = 32 * 1024
 const MAX_CHILD_SUMMARY_BYTES = 1024 * 1024
-const MAX_USER_MESSAGE_CHARACTERS = 32_768
 const MAX_USER_MESSAGE_BYTES = 128 * 1024
+const SOUL = readFileSync(new URL('./SOUL.md', import.meta.url), 'utf8')
+// This is Morde's persisted checkpoint/protocol compatibility identifier, not the upstream DSH package release.
+// Keep it stable across compatible dependency upgrades; changing it requires a durable-task migration.
 export const ENGINE_VERSION = '0.2.0-rc.2'
 
-const MESSAGE_DELIVERY_KEYS = [
+const MESSAGE_DELIVERY_KEYS_V1 = [
   'type', 'version', 'task_id', 'owner_id', 'agent_id', 'generation', 'authorization_version',
   'session_id', 'message_id', 'content',
 ]
+const MESSAGE_DELIVERY_KEYS_V2 = [...MESSAGE_DELIVERY_KEYS_V1, 'attachment_ids']
 const MESSAGE_ID = /^m[a-z0-9]{7}$/
+const MESSAGE_ATTACHMENT_ID = /^(?:pa|pca)_[a-f0-9]{32}$/
+const MAX_MESSAGE_ATTACHMENTS = 16
 
 function deferred() {
   let resolve, reject
@@ -74,17 +83,66 @@ function isObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
+function isMordeMCPTool(tool) {
+  return typeof tool?.name === 'string' && tool.name.startsWith(MORDE_MCP_TOOL_PREFIX)
+}
+
+function mordeMCPToolDefinition(context, sessionDurable, tool, onError) {
+  const definition = createMcpToolDefinition(context, {
+    name: tool.name,
+    rawName: tool.name,
+    description: tool.description,
+    inputSchema: tool.parameters,
+    async call(args, execution) {
+      const result = await sessionDurable.ipc.toolCall(
+        sessionDurable.identity, sessionDurable.through, execution.callId, tool.name, args, execution.signal,
+      )
+      if (!isObject(result) || !['succeeded', 'failed'].includes(result.status) || typeof result.output !== 'string') {
+        throw new Error('Morde MCP broker returned an invalid result')
+      }
+      return {
+        content: [{
+          type: 'text',
+          text: result.status === 'failed' ? `Tool failed: ${result.output}` : result.output,
+        }],
+      }
+    },
+  })
+  if (onError) {
+    const execute = definition.execute
+    definition.execute = async (args, execution) => {
+      try {
+        return await execute(args, execution)
+      } catch (error) {
+        onError(error, execution)
+        throw error
+      }
+    }
+  }
+  return definition
+}
+
 function exactKeys(value, expected) {
   return Object.keys(value).sort().join(',') === [...expected].sort().join(',')
 }
 
 export function validMessageDelivery(frame, identity) {
-  if (!isObject(frame) || !exactKeys(frame, MESSAGE_DELIVERY_KEYS) || frame.type !== 'message_delivery' || frame.version !== 1 ||
+  const legacy = isObject(frame) && frame.version === 1 && exactKeys(frame, MESSAGE_DELIVERY_KEYS_V1)
+  const current = isObject(frame) && frame.version === 2 && exactKeys(frame, MESSAGE_DELIVERY_KEYS_V2)
+  if (!isObject(frame) || (!legacy && !current) || frame.type !== 'message_delivery' ||
       !identity || !['task_id', 'owner_id', 'agent_id', 'session_id'].every(key => frame[key] === identity[key]) ||
       !['generation', 'authorization_version'].every(key => Number.isSafeInteger(frame[key]) && frame[key] > 0 && frame[key] === identity[key]) ||
       !MESSAGE_ID.test(frame.message_id ?? '') || typeof frame.content !== 'string' || !frame.content.isWellFormed() ||
-      frame.content.includes('\0') || !frame.content.trim() || [...frame.content].length > MAX_USER_MESSAGE_CHARACTERS ||
+      frame.content.includes('\0') ||
       Buffer.byteLength(frame.content, 'utf8') > MAX_USER_MESSAGE_BYTES) return false
+  if (legacy) return !!frame.content.trim()
+  if (!Array.isArray(frame.attachment_ids) || frame.attachment_ids.length > MAX_MESSAGE_ATTACHMENTS) return false
+  if (!frame.content.trim() && frame.attachment_ids.length === 0) return false
+  let previous = ''
+  for (const id of frame.attachment_ids) {
+    if (typeof id !== 'string' || !MESSAGE_ATTACHMENT_ID.test(id) || id <= previous) return false
+    previous = id
+  }
   return true
 }
 
@@ -104,10 +162,20 @@ function validateInboxState(inbox) {
   return inbox
 }
 
-function sameDeliveredMessage(message, messageID, content) {
+function deliveredMessageBlocks(content, attachmentIDs = []) {
+  const blocks = [{ type: 'text', text: content }]
+  if (attachmentIDs.length) {
+    blocks.push({ type: 'text', text: `[MORDE_TASK_ATTACHMENT_IDS_V1:${attachmentIDs.join(',')}]` })
+  }
+  return blocks
+}
+
+function sameDeliveredMessage(message, messageID, content, attachmentIDs = []) {
   return isObject(message) && message.id === messageID && message.role === 'user' &&
-    message.source?.kind === 'user' && Array.isArray(message.content) && message.content.length === 1 &&
-    isObject(message.content[0]) && message.content[0].type === 'text' && message.content[0].text === content
+    message.source?.kind === 'user' && Array.isArray(message.content) && message.content.length === 1 + (attachmentIDs.length ? 1 : 0) &&
+    isObject(message.content[0]) && message.content[0].type === 'text' && message.content[0].text === content &&
+    (!attachmentIDs.length || isObject(message.content[1]) && message.content[1].type === 'text' &&
+      message.content[1].text === `[MORDE_TASK_ATTACHMENT_IDS_V1:${attachmentIDs.join(',')}]`)
 }
 
 function validImageRef(ref) {
@@ -156,7 +224,7 @@ function recoveryToolCalls(events, tools) {
         }
         const args = JSON.parse(block.arguments)
         if (!isObject(args) || calls.has(block.id)) throw new Error('checkpointed dsh tool call identity is invalid')
-        calls.set(block.id, { id: block.id, name: block.name, arguments: block.arguments, args, turn: event.data.turn, step: event.data.step, callSeq: undefined, resultText: undefined, resultImages: undefined })
+        calls.set(block.id, { id: block.id, name: block.name, definition: tool, arguments: block.arguments, args, turn: event.data.turn, step: event.data.step, callSeq: undefined, resultText: undefined, resultImages: undefined })
       }
     } else if (event.type === 'tool/call') {
       const call = calls.get(event.data.callId)
@@ -205,18 +273,21 @@ function validParameterSchema(root) {
   while (pending.length) {
     const { schema, depth } = pending.pop()
     if (!schema || typeof schema !== 'object' || Array.isArray(schema) || ++visited > 2048 || depth > 32 ||
-        typeof schema.type !== 'string' || !SCHEMA_TYPES.has(schema.type)) return false
-    const type = schema.type
+        !(typeof schema.type === 'string' || Array.isArray(schema.type))) return false
+    const types = typeof schema.type === 'string' ? [schema.type] : schema.type
+    if (!types.length || types.some((type, index) => typeof type !== 'string' || !SCHEMA_TYPES.has(type) || types.indexOf(type) !== index)) return false
+    const typeSet = new Set(types)
+    const hasType = (...candidates) => candidates.some(type => typeSet.has(type))
     const allowed = new Set([...SCHEMA_ANNOTATIONS, 'type'])
-    if (type === 'object') for (const key of ['properties', 'required', 'additionalProperties', 'minProperties', 'maxProperties']) allowed.add(key)
-    if (type === 'array') for (const key of ['items', 'minItems', 'maxItems', 'uniqueItems']) allowed.add(key)
-    if (type === 'string') for (const key of ['enum', 'const', 'pattern', 'format', 'minLength', 'maxLength']) allowed.add(key)
-    if (type === 'number' || type === 'integer') for (const key of ['enum', 'const', 'minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum', 'multipleOf']) allowed.add(key)
-    if (type === 'boolean' || type === 'null') for (const key of ['enum', 'const']) allowed.add(key)
+    if (hasType('object')) for (const key of ['properties', 'required', 'additionalProperties', 'minProperties', 'maxProperties']) allowed.add(key)
+    if (hasType('array')) for (const key of ['items', 'minItems', 'maxItems', 'uniqueItems']) allowed.add(key)
+    if (hasType('string')) for (const key of ['enum', 'const', 'pattern', 'format', 'minLength', 'maxLength']) allowed.add(key)
+    if (hasType('number', 'integer')) for (const key of ['enum', 'const', 'minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum', 'multipleOf']) allowed.add(key)
+    if (hasType('boolean', 'null')) for (const key of ['enum', 'const']) allowed.add(key)
     if (Object.keys(schema).some(key => !allowed.has(key))) return false
     if (Object.hasOwn(schema, 'description') && typeof schema.description !== 'string') return false
     if (Object.hasOwn(schema, 'title') && typeof schema.title !== 'string') return false
-    if (type === 'object') {
+    if (hasType('object')) {
       if (schema.additionalProperties !== false || (schema.properties !== undefined &&
           (!schema.properties || typeof schema.properties !== 'object' || Array.isArray(schema.properties)))) return false
       const properties = schema.properties ?? {}
@@ -224,7 +295,7 @@ function validParameterSchema(root) {
       if (!Array.isArray(required) || required.some((name, index) => typeof name !== 'string' || !Object.hasOwn(properties, name) || required.indexOf(name) !== index)) return false
       for (const child of Object.values(properties)) pending.push({ schema: child, depth: depth + 1 })
     }
-    if (type === 'array') {
+    if (hasType('array')) {
       if (!schema.items) return false
       pending.push({ schema: schema.items, depth: depth + 1 })
     }
@@ -242,13 +313,14 @@ function validParameterSchema(root) {
     if (Object.hasOwn(schema, 'format') && typeof schema.format !== 'string') return false
     if (Object.hasOwn(schema, 'enum') && (!Array.isArray(schema.enum) || !schema.enum.length)) return false
     if (Object.hasOwn(schema, 'const') && schema.const === undefined) return false
-    const matchesType = value => type === 'object' ? value !== null && typeof value === 'object' && !Array.isArray(value)
+    const matchesType = (value, type) => type === 'object' ? value !== null && typeof value === 'object' && !Array.isArray(value)
       : type === 'array' ? Array.isArray(value)
         : type === 'integer' ? Number.isSafeInteger(value)
           : type === 'number' ? typeof value === 'number' && Number.isFinite(value)
             : type === 'null' ? value === null : typeof value === type
-    if (Object.hasOwn(schema, 'enum') && schema.enum.some(value => !matchesType(value))) return false
-    if (Object.hasOwn(schema, 'const') && !matchesType(schema.const)) return false
+    const matchesSchemaType = value => types.some(type => matchesType(value, type))
+    if (Object.hasOwn(schema, 'enum') && (!Array.isArray(schema.enum) || schema.enum.some(value => !matchesSchemaType(value)))) return false
+    if (Object.hasOwn(schema, 'const') && (schema.const === undefined || !matchesSchemaType(schema.const))) return false
     if (Object.hasOwn(schema, 'minLength') && Object.hasOwn(schema, 'maxLength') && schema.minLength > schema.maxLength) return false
     if (Object.hasOwn(schema, 'minItems') && Object.hasOwn(schema, 'maxItems') && schema.minItems > schema.maxItems) return false
     if (Object.hasOwn(schema, 'minProperties') && Object.hasOwn(schema, 'maxProperties') && schema.minProperties > schema.maxProperties) return false
@@ -385,11 +457,31 @@ export function validStart(frame) {
     }
   }
   if (frame.checkpoint !== undefined || (frame.resume !== undefined && typeof frame.resume !== 'boolean')) return false
+  if (frame.initial_message !== undefined) {
+    const initial = frame.initial_message
+    if (!isObject(initial) || !exactKeys(initial, ['message_id', 'content', 'attachment_ids']) ||
+        !validMessageDelivery({ type: 'message_delivery', version: 2,
+          ...Object.fromEntries(['task_id', 'owner_id', 'agent_id', 'generation', 'authorization_version', 'session_id'].map(key => [key, frame[key]])),
+          ...initial }, frame) || frame.prompt !== undefined || frame.resume === true ||
+        (frame.initial_context !== undefined && (typeof frame.initial_context !== 'string' || !frame.initial_context.isWellFormed() ||
+          frame.initial_context.includes('\0') || Buffer.byteLength(frame.initial_context) > MAX_CHECKPOINT_PAYLOAD_BYTES / 2))) return false
+  } else if (frame.initial_context !== undefined) return false
+  if (frame.revision_messages !== undefined) {
+    if (!Array.isArray(frame.revision_messages) || frame.revision_messages.length < 1 || frame.revision_messages.length > 128) return false
+    const seen = new Set(frame.initial_message ? [frame.initial_message.message_id] : [])
+    for (const message of frame.revision_messages) {
+      if (!isObject(message) || !exactKeys(message, ['message_id', 'content', 'attachment_ids']) || seen.has(message.message_id) ||
+          !validMessageDelivery({ type: 'message_delivery', version: 2,
+            ...Object.fromEntries(['task_id', 'owner_id', 'agent_id', 'generation', 'authorization_version', 'session_id'].map(key => [key, frame[key]])),
+            ...message }, frame)) return false
+      seen.add(message.message_id)
+    }
+  }
   if (frame.resume === true) {
     if (frame.prompt !== undefined || !Number.isSafeInteger(frame.checkpoint_through_seq) || frame.checkpoint_through_seq < 0 || !DIGEST.test(frame.checkpoint_sha256)) return false
   } else {
     if (frame.checkpoint_through_seq !== undefined || frame.checkpoint_sha256 !== undefined) return false
-    if (typeof frame.prompt !== 'string' || !frame.prompt.trim() || Buffer.byteLength(frame.prompt) > MAX_CHECKPOINT_PAYLOAD_BYTES / 2) return false
+    if (frame.initial_message === undefined && (typeof frame.prompt !== 'string' || !frame.prompt.trim() || Buffer.byteLength(frame.prompt) > MAX_CHECKPOINT_PAYLOAD_BYTES / 2)) return false
   }
   return frame.max_tokens === undefined || (Number.isSafeInteger(frame.max_tokens) && frame.max_tokens > 0 && frame.max_tokens <= 1_000_000)
 }
@@ -533,12 +625,28 @@ class DurableSession {
     }
     for (const call of history.calls) {
       signal?.throwIfAborted()
-      const result = call.name === DELEGATE_TOOL
-        ? await this.executeDelegate?.(this, call.id, call.args, signal)
-        : await this.ipc.toolCall(this.identity, this.through, call.id, call.name, call.args, signal)
-      if (!result) throw new Error('delegated child recovery is unavailable')
-      const resultText = result.status === 'failed' ? `Tool failed: ${result.output}` : result.output
-      const resultImages = result.images
+      let resultText
+      let resultImages
+      if (call.name === DELEGATE_TOOL) {
+        const result = await this.executeDelegate?.(this, call.id, call.args, signal)
+        if (!result) throw new Error('delegated child recovery is unavailable')
+        resultText = result.status === 'failed' ? `Tool failed: ${result.output}` : result.output
+        resultImages = result.images
+      } else if (isMordeMCPTool(call.definition)) {
+        const definition = mordeMCPToolDefinition(context, this, call.definition)
+        const value = await definition.execute(call.args, { callId: call.id, signal })
+        const content = definition.output.render(call.args, value)
+        if (!Array.isArray(content) || content.length !== 1 || content[0]?.type !== 'text' || typeof content[0].text !== 'string') {
+          throw new Error('Morde MCP recovery result could not be rendered')
+        }
+        resultText = content[0].text
+        resultImages = []
+      } else {
+        const result = await this.ipc.toolCall(this.identity, this.through, call.id, call.name, call.args, signal)
+        if (!result) throw new Error('tool recovery result is unavailable')
+        resultText = result.status === 'failed' ? `Tool failed: ${result.output}` : result.output
+        resultImages = result.images
+      }
       if (call.resultText !== undefined) {
         if (call.resultText !== resultText || !sameImageRefs(call.resultImages, resultImages)) throw new Error('checkpointed dsh result differs from the reconciled operation ledger')
         continue
@@ -665,8 +773,20 @@ export async function runAgent(ipc, frame) {
   const durable = new DurableSession(ipc, identity, frame)
   durables.set(identity.session_id, durable)
   const ctx = new Context()
-  const plugins = [SessionStore, SessionProjectionRegistry, AgentRegistry, SystemPrompt, ToolRuntime, LlmRuntime, persistencePlugin(durables), AgentLoop, checkpointPolicy]
-  for (const plugin of plugins) await ctx.plugin(plugin)
+  const nativeToolExecutor = { name: nativeToolExecutorName, inject: nativeToolExecutorInject, apply: nativeToolExecutorApply }
+  const plugins = [SessionStore, SessionProjectionRegistry, AgentRegistry, SystemPrompt, ToolRuntime, nativeToolExecutor, LlmRuntime, persistencePlugin(durables), AgentLoop, checkpointPolicy]
+  for (const plugin of plugins) await ctx.plugin(plugin, plugin === SystemPrompt ? { includeHarnessIdentity: false } : undefined)
+  ctx.systemPrompt.section({
+    name: 'morde:soul', order: ctx.systemPrompt.getSectionOrder('DEPLOYMENT_PERSONA_PREFIX'),
+    text: SOUL, interpolate: false,
+  })
+  if (!frame.tools || frame.tools.length === 0) {
+    ctx.systemPrompt.section({
+      name: 'morde:no-tools', order: ctx.systemPrompt.getSectionOrder('DEPLOYMENT_PERSONA_SUFFIX'),
+      text: 'No tools are available for this model run. Answer text requests normally. If a requested action requires a tool, explain that the tool is unavailable and never claim to have used it or completed the action.',
+      interpolate: false,
+    })
+  }
 
   const liveHandles = new Set()
   const delegatedCalls = new Map()
@@ -702,6 +822,16 @@ export async function runAgent(ipc, frame) {
         return { kind: 'deny', reason: 'tool authorization is unavailable' }
       })
       for (const tool of tools) {
+        const onError = (_error, exec) => {
+          if (!ipc.cancelled && !exec.signal?.aborted) {
+            state.toolFailure = true
+            agent.cancel({ kind: 'hook', reason: 'tool result unavailable' })
+          }
+        }
+        if (isMordeMCPTool(tool)) {
+          agentCtx.tools.register(mordeMCPToolDefinition(agentCtx, sessionDurable, tool, onError))
+          continue
+        }
         agentCtx.tools.register({
           name: tool.name,
           description: tool.description,
@@ -721,10 +851,7 @@ export async function runAgent(ipc, frame) {
               }
               return await ipc.toolCall(sessionDurable.identity, sessionDurable.through, exec.callId, tool.name, args, exec.signal)
             } catch (error) {
-              if (!ipc.cancelled && !exec.signal?.aborted) {
-                state.toolFailure = true
-                agent.cancel({ kind: 'hook', reason: 'tool result unavailable' })
-              }
+              onError(error, exec)
               throw error
             }
           },
@@ -928,11 +1055,12 @@ export async function runAgent(ipc, frame) {
     handle = await createSessionHandle(durable)
     const agent = handle.agent
     const state = durable.agentState
-    const installMessageDeliveryHandler = () => ipc.setMessageDeliveryHandler(({ message_id, content }) => {
+    const installMessageDeliveryHandler = () => ipc.setMessageDeliveryHandler(({ message_id, content, attachment_ids }) => {
+      const attachmentIDs = attachment_ids ?? []
       let found = false
       const check = message => {
         if (message?.id !== message_id) return
-        if (!sameDeliveredMessage(message, message_id, content)) throw new Error('message delivery id conflicts with session history')
+        if (!sameDeliveredMessage(message, message_id, content, attachmentIDs)) throw new Error('message delivery id conflicts with session history')
         found = true
       }
       for (const event of agent.session.snapshotEvents()) {
@@ -941,10 +1069,35 @@ export async function runAgent(ipc, frame) {
       }
       for (const message of [...agent.inbox.nextTurn, ...agent.inbox.nextStep]) check(message)
       if (!found) agent.followup(freezeMessage({
-        id: MessageId(message_id), role: 'user', content: [{ type: 'text', text: content }], source: { kind: 'user' },
+        id: MessageId(message_id), role: 'user', content: deliveredMessageBlocks(content, attachmentIDs), source: { kind: 'user' },
       }))
     })
-    if (frame.resume === true) installMessageDeliveryHandler()
+    const revisionMessages = frame.revision_messages ?? []
+    const stageRevisionMessages = deliveries => {
+      const byID = new Map(deliveries.map(message => [message.message_id, message]))
+      for (const event of agent.session.snapshotEvents()) {
+        if (event.type === 'user/message' && byID.has(event.data?.id)) {
+          throw new Error('pending revision is already present in the checkpoint')
+        }
+      }
+      let contextCount = 0
+      for (const existing of [...agent.inbox.nextStep, ...agent.inbox.nextTurn]) {
+        const message = byID.get(existing.id)
+        if (!message && existing.source?.kind === 'plugin' && existing.source?.plugin === 'morde-context' && ++contextCount === 1) continue
+        if (!message || !sameDeliveredMessage(existing, message.message_id, message.content, message.attachment_ids)) {
+          throw new Error('checkpoint contains an unrelated pending message')
+        }
+        if (!agent.inbox.remove(existing.id)) throw new Error('pending revision could not be restaged')
+      }
+      for (let index = 0; index < deliveries.length; index++) {
+        const message = deliveries[index]
+        const value = freezeMessage({ id: MessageId(message.message_id), role: 'user',
+          content: deliveredMessageBlocks(message.content, message.attachment_ids), source: { kind: 'user' } })
+        if (index + 1 === deliveries.length) agent.followup(value)
+        else agent.inject(value)
+      }
+    }
+    if (frame.resume === true && revisionMessages.length === 0) installMessageDeliveryHandler()
     for (const record of frame.background_jobs ?? []) {
       const child = {
         identity: childIdentity(record, identity), tools: record.tools,
@@ -958,11 +1111,17 @@ export async function runAgent(ipc, frame) {
       return { type: 'settled', ...identity, state: 'cancelled', through_seq: durable.through }
     }
     if (frame.resume === true) {
-      if (!recovery || (!recovery.completed && recovery.openTurn === null && !durable.recoveryHasInbox)) throw new Error('checkpoint tail is not safely resumable')
+      if (!recovery || (!recovery.completed && recovery.openTurn === null && !durable.recoveryHasInbox && revisionMessages.length === 0)) throw new Error('checkpoint tail is not safely resumable')
       await agent.whenIdle()
       if (!await ctx.sessions.flush(agent.session)) throw new Error('checkpoint listener unavailable')
       if (state.failed || state.toolFailure || ipc.cancelled) throw new Error('session recovery did not remain idle')
-      if (!recovery.completed || (durable.recoveryHasInbox && agent.inbox.hasPending)) {
+      if (revisionMessages.length !== 0) {
+        stageRevisionMessages(revisionMessages)
+        installMessageDeliveryHandler()
+        await agent.whenIdle()
+        if (!await ctx.sessions.flush(agent.session)) throw new Error('checkpoint listener unavailable')
+        if (state.failed || state.toolFailure || ipc.cancelled) throw new Error('revised task did not remain idle')
+      } else if (!recovery.completed || (durable.recoveryHasInbox && agent.inbox.hasPending)) {
         agent.followup(createUserMessage({
           content: [{ type: 'text', text: 'Continue the existing task from the last verified checkpoint. Do not repeat completed tool actions; use their recorded results. Process any user message already queued in the session inbox.' }],
           source: { kind: 'user' },
@@ -976,7 +1135,19 @@ export async function runAgent(ipc, frame) {
       await waitForBackgroundJobs()
       return { type: 'settled', ...identity, state: 'completed_candidate', through_seq: durable.through }
     }
-    agent.followup(createUserMessage({ content: [{ type: 'text', text: frame.prompt }], source: { kind: 'user' } }))
+    if (frame.initial_message) {
+      if (frame.initial_context) agent.inject(createUserMessage({
+        content: [{ type: 'text', text: frame.initial_context }], source: { kind: 'plugin', plugin: 'morde-context' },
+      }))
+      if (revisionMessages.length !== 0) stageRevisionMessages([frame.initial_message, ...revisionMessages])
+      else agent.followup(freezeMessage({ id: MessageId(frame.initial_message.message_id), role: 'user',
+        content: deliveredMessageBlocks(frame.initial_message.content, frame.initial_message.attachment_ids), source: { kind: 'user' } }))
+    } else if (revisionMessages.length !== 0) {
+      agent.inject(createUserMessage({ content: [{ type: 'text', text: frame.prompt }], source: { kind: 'plugin', plugin: 'morde-context' } }))
+      stageRevisionMessages(revisionMessages)
+    } else {
+      agent.followup(createUserMessage({ content: [{ type: 'text', text: frame.prompt }], source: { kind: 'user' } }))
+    }
     installMessageDeliveryHandler()
     await agent.whenIdle()
     if (!await ctx.sessions.flush(agent.session)) throw new Error('checkpoint listener unavailable')

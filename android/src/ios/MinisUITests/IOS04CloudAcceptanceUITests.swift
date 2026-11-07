@@ -3,6 +3,42 @@ import XCTest
 
 @MainActor
 final class IOS04CloudAcceptanceUITests: XCTestCase {
+    func testLocalPortalAuthenticatedShell() throws {
+        guard let account = ProcessInfo.processInfo.environment["MORDE_IOS_LOCAL_PORTAL_USER"],
+              let password = ProcessInfo.processInfo.environment["MORDE_IOS_LOCAL_PORTAL_PASSWORD"],
+              let server = ProcessInfo.processInfo.environment["MORDE_IOS_LOCAL_PORTAL_SERVER"],
+              let url = URL(string: server), url.scheme == "http",
+              ["localhost", "127.0.0.1"].contains(url.host ?? ""), url.port == 7080 else {
+            throw XCTSkip("Set local Portal credentials and its port-7080 URL in the test environment.")
+        }
+
+        let app = XCUIApplication()
+        app.launchArguments = ["-morde.server", server]
+        app.launch()
+        let alert = app.alerts.firstMatch
+        if alert.waitForExistence(timeout: 2) { alert.buttons["确定"].tap() }
+
+        let accountField = app.textFields["morde.auth.username"]
+        XCTAssertTrue(accountField.waitForExistence(timeout: 15))
+        accountField.tap()
+        accountField.typeText(account)
+        let passwordField = app.secureTextFields["morde.auth.password"]
+        passwordField.tap()
+        passwordField.typeText(password)
+        app.buttons["morde.auth.submit"].tap()
+
+        let loginFormDismissed = expectation(
+            for: NSPredicate(format: "exists == false"),
+            evaluatedWith: accountField
+        )
+        wait(for: [loginFormDismissed], timeout: 30)
+        XCTAssertFalse(app.secureTextFields["morde.auth.password"].exists)
+        XCTAssertTrue(app.buttons["morde.shell.tab.chat"].waitForExistence(timeout: 30))
+        XCTAssertTrue(app.buttons["morde.shell.tab.tasks"].exists)
+        XCTAssertTrue(app.buttons["morde.shell.tab.approvals"].exists)
+        XCTAssertTrue(app.buttons["morde.shell.tab.resources"].exists)
+    }
+
     func testPersonalDataSyncAndLibrary() throws {
         guard let account = ProcessInfo.processInfo.environment["MORDE_IOS04_TEST_USER"],
               let password = ProcessInfo.processInfo.environment["MORDE_IOS04_TEST_PASSWORD"],

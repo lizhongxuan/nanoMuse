@@ -102,10 +102,29 @@ enum MordeWorkspaceTransferSupport {
         var seen = Set<String>()
         for path in paths {
             guard (try? validatePath(path)) != nil else { return false }
-            let key = path.folding(options: [.caseInsensitive], locale: Locale(identifier: "en_US_POSIX"))
+            let key = normalizedManifestPathKey(path)
             guard seen.insert(key).inserted else { return false }
         }
         return true
+    }
+
+    static func hasValidManifestPaths(filePaths: [String], directoryPaths: [String]) -> Bool {
+        let directories = directoryPaths.filter { $0 != "." }
+        let paths = filePaths + directories
+        guard hasCaseInsensitiveUniquePaths(paths) else { return false }
+        let fileKeys = Set(filePaths.map(normalizedManifestPathKey))
+        for path in paths.map(normalizedManifestPathKey) {
+            let components = path.split(separator: "/")
+            for ancestorCount in 1..<components.count {
+                let ancestor = components.prefix(ancestorCount).joined(separator: "/")
+                if fileKeys.contains(ancestor) { return false }
+            }
+        }
+        return true
+    }
+
+    private static func normalizedManifestPathKey(_ path: String) -> String {
+        path.folding(options: [.caseInsensitive], locale: Locale(identifier: "en_US_POSIX"))
     }
 
     static func scan(url: URL, path: String) throws -> MordeWorkspaceFile {

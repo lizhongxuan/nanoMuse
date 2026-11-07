@@ -69,7 +69,8 @@ final class MIFResourceViewsTests: XCTestCase {
         let unknownLease = ownedHost(control: control(lease: .unknown, canTakeOver: true))
         let transitioning = ownedHost(control: control(canTakeOver: true, transitionSummary: "handoff"))
         let returning = ownedHost(control: control(state: .returning, canReturnToAI: true))
-        let offline = ownedHost(status: .offline, control: control(canTakeOver: true))
+        // nanoMuse: offline hosts now report their concrete failed or stopped state.
+        let failed = ownedHost(status: .failed, control: control(canTakeOver: true))
         let starting = ownedHost(status: .starting, control: control(canTakeOver: true))
         let stopped = ownedHost(status: .stopped, control: control(canTakeOver: true))
         let unknownHostStatus = ownedHost(status: .unknown, control: control(canTakeOver: true))
@@ -78,7 +79,7 @@ final class MIFResourceViewsTests: XCTestCase {
         XCTAssertTrue(MIFResourcePageRules.controlActions(for: unknownLease).isEmpty)
         XCTAssertTrue(MIFResourcePageRules.controlActions(for: transitioning).isEmpty)
         XCTAssertTrue(MIFResourcePageRules.controlActions(for: returning).isEmpty)
-        XCTAssertTrue(MIFResourcePageRules.controlActions(for: offline).isEmpty)
+        XCTAssertTrue(MIFResourcePageRules.controlActions(for: failed).isEmpty)
         XCTAssertTrue(MIFResourcePageRules.controlActions(for: starting).isEmpty)
         XCTAssertTrue(MIFResourcePageRules.controlActions(for: stopped).isEmpty)
         XCTAssertTrue(MIFResourcePageRules.controlActions(for: unknownHostStatus).isEmpty)
@@ -108,15 +109,15 @@ final class MIFResourceViewsTests: XCTestCase {
         XCTAssertEqual(MIFResourcePageRules.controlActions(for: host), [.returnToAI])
     }
 
-    func testExpiredLeaseDoesNotOfferResourceListActions() {
+    func testExpiredLeaseOffersOnlyOwnerApprovedReturnAction() {
         let host = ownedHost(control: control(
             lease: .expired, canTakeOver: true, canReturnToAI: true, canRenewLease: true))
 
-        XCTAssertTrue(MIFResourcePageRules.controlActions(for: host).isEmpty)
+        XCTAssertEqual(MIFResourcePageRules.controlActions(for: host), [.returnToAI])
     }
 
-    func testUserControlWithoutActiveLeaseCannotReturnOrRenew() {
-        for lease in [MIFResourcePageState.Control.Lease.none, .expired, .unknown] {
+    func testUserControlWithoutActiveLeaseOnlyReturnsWhenOwnerPolicyAllowsIt() {
+        for lease in [MIFResourcePageState.Control.Lease.none, .unknown] {
             let host = ownedHost(control: control(
                 state: .user, lease: lease, canReturnToAI: true, canRenewLease: true))
 

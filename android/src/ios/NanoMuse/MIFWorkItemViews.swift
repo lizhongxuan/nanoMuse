@@ -159,7 +159,10 @@ struct MIFWorkItemRoom: View {
                 .frame(maxWidth: .infinity)
             }
             .background(NanoMuseTones.canvas)
-            .refreshable { await loadScope(store.scopeKey) }
+            .refreshable {
+                let refreshTask = Task { await loadScope(store.scopeKey) }
+                await refreshTask.value
+            }
             .accessibilityIdentifier("morde.workItems.scroll")
         }
         .background(NanoMuseTones.canvas.ignoresSafeArea())
@@ -180,6 +183,13 @@ struct MIFWorkItemRoom: View {
                 .background(NanoMuseTones.canvas.ignoresSafeArea())
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
+                .toolbar {
+                    ToolbarItemGroup(placement: .keyboard) {
+                        Spacer()
+                        Button(AppLocalized("Done")) { isWorkItemInputFocused = false }
+                            .accessibilityIdentifier("morde.workItems.keyboardDone")
+                    }
+                }
             }
         }
         .task(id: store.scopeKey) { await loadScope(store.scopeKey) }
@@ -281,6 +291,7 @@ struct MIFWorkItemRoom: View {
                 .frame(maxWidth: .infinity, minHeight: 150)
         } else if let failure = store.projectsState.failureMessage {
             errorCard(failure)
+                .accessibilityIdentifier("morde.workItems.projects.loadError")
         } else if !store.projectsState.isLoaded {
             ProgressView(AppLocalized("Loading projects…"))
                 .frame(maxWidth: .infinity, minHeight: 150)
@@ -362,6 +373,7 @@ struct MIFWorkItemRoom: View {
                     .font(.footnote)
                     .foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("morde.workItems.conversations.loadError")
             } else if !store.conversationsState.isLoaded {
                 ProgressView(AppLocalized("Loading project conversations…"))
             } else if store.conversations.isEmpty {
@@ -398,6 +410,28 @@ struct MIFWorkItemRoom: View {
                 }
                 .accessibilityIdentifier("morde.workItems.conversationPicker")
 
+                if !store.conversationTaskChoices.isEmpty {
+                    Menu {
+                        ForEach(store.conversationTaskChoices) { task in
+                            Button {
+                                Task { await store.selectTask(task.id) }
+                            } label: {
+                                Text("\(task.objective) · \(task.id)")
+                            }
+                            .accessibilityIdentifier("morde.workItems.task.\(task.id)")
+                        }
+                    } label: {
+                        HStack {
+                            Text(store.currentTask?.objective ?? AppLocalized("Task in this project"))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            Image(systemName: "chevron.down")
+                        }
+                        .padding(12)
+                        .background(NanoMuseTones.fill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                    .accessibilityIdentifier("morde.workItems.taskPicker")
+                }
+
                 if let failure = store.conversationError {
                     Text(failure)
                         .font(.footnote)
@@ -415,7 +449,7 @@ struct MIFWorkItemRoom: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .accessibilityIdentifier("morde.workItems.currentTask")
-                } else {
+                } else if store.conversationTaskChoices.isEmpty {
                     Text(AppLocalized("This conversation has no Task to link, or its Task is still loading."))
                         .font(.footnote)
                         .foregroundStyle(NanoMuseTones.secondaryText)
@@ -506,6 +540,7 @@ struct MIFWorkItemRoom: View {
 
             if let failure = store.workItemsState.failureMessage {
                 errorCard(failure)
+                    .accessibilityIdentifier("morde.workItems.list.loadError")
             } else if !store.workItemsState.isLoaded {
                 ProgressView(AppLocalized("Loading work items…"))
                     .frame(maxWidth: .infinity, minHeight: 120)

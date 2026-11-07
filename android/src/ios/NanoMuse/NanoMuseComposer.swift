@@ -37,6 +37,7 @@ struct NanoMuseComposerPill<Field: View>: View {
     var onCommands: () -> Void
     var onMic: () -> Void
     var onSend: () -> Void
+    var onIdleSend: (() -> Void)? = nil
     var onEnqueue: () -> Void
     var onStop: () -> Void
     @ViewBuilder var field: () -> Field
@@ -44,7 +45,7 @@ struct NanoMuseComposerPill<Field: View>: View {
     @State private var showAttachMenu = false
     @Environment(\.colorScheme) private var scheme
 
-    private let glyph: CGFloat = 40
+    private let glyph: CGFloat = 44
     /// The send disc's diameter, the size the `arrow.up.circle.fill` glyph had.
     private let disc: CGFloat = 30
 
@@ -122,6 +123,7 @@ struct NanoMuseComposerPill<Field: View>: View {
         }
         .frame(width: disc, height: disc)
         .frame(width: glyph, height: glyph)
+        .contentShape(Rectangle())
     }
 
     @ViewBuilder
@@ -160,6 +162,13 @@ struct NanoMuseComposerPill<Field: View>: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text("Voice input", comment: "Mic button opens voice panel"))
+        } else if let onIdleSend {
+            Button(action: onIdleSend) {
+                inkDisc("arrow.up", enabled: true)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("Send", comment: "VoiceOver label for the send button"))
+            .accessibilityIdentifier(sendAccessibilityIdentifier)
         } else {
             inkDisc("arrow.up", enabled: false)
                 .accessibilityHidden(true)

@@ -14,6 +14,11 @@ The in-progress fusion target in `Minis.xcodeproj` also displays as `morde`. Nan
 file names are internal source names; bundle and App Group IDs, URL scheme, persisted keys, the
 legacy Cloud model-group lookup and `X-NanoMuse-*` headers remain stable compatibility identifiers.
 
+**Morde chat attachments.** The file picker accepts images, PDFs, DOCX and XLSX. Office files are
+kept in their original format and saved as personal attachments; the server must support Office
+parsing for the assistant to read their contents. A message can contain up to 16 attachment items
+after processing. A PDF also adds extracted text and previews of up to 10 pages.
+
 **Status.** The tree, the branding, the morde Cloud sign-in, the hub client and the pipeline
 were written on a Linux machine. The app **builds, signs and is on TestFlight**: the first build,
 0.1.31 (2), went through the *iOS · TestFlight* workflow on 2026-10-03; 1.0.0 is build 16, which

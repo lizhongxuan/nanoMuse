@@ -243,9 +243,19 @@ struct NanoMuseRoundButton: View {
     var label: String
     var badge: Bool = false
     var size: CGFloat = 44
+    // nanoMuse: feature screens assign stable identifiers to shared controls.
+    var accessibilityIdentifier: String? = nil
     var action: () -> Void
 
-    var body: some View {
+    @ViewBuilder var body: some View {
+        if let accessibilityIdentifier {
+            button.accessibilityIdentifier(accessibilityIdentifier)
+        } else {
+            button
+        }
+    }
+
+    private var button: some View {
         Button(action: action) {
             NanoMuseRoundDisc(symbol: symbol, badge: badge, size: size)
         }
@@ -284,10 +294,10 @@ struct NanoMuseNamePill: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 4)
-        .frame(maxWidth: 260)
         .fixedSize(horizontal: false, vertical: true)
         .background(NanoMuseTones.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .shadow(color: .black.opacity(0.14), radius: 2, y: 1)
+        .frame(maxWidth: 260)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: status)
     }
 }
@@ -415,11 +425,15 @@ extension NanoMuseTopBar where Trailing == EmptyView {
 struct NanoMuseMenuHeader<Trailing: View>: View {
     var title: String
     var onMenu: () -> Void
+    // nanoMuse: approval pages show their confirmed count beside the title.
+    var titleAccessory: String? = nil
     @ViewBuilder var trailing: () -> Trailing
 
-    init(title: String, onMenu: @escaping () -> Void, @ViewBuilder trailing: @escaping () -> Trailing) {
+    init(title: String, onMenu: @escaping () -> Void, titleAccessory: String? = nil,
+         @ViewBuilder trailing: @escaping () -> Trailing) {
         self.title = title
         self.onMenu = onMenu
+        self.titleAccessory = titleAccessory
         self.trailing = trailing
     }
 
@@ -430,6 +444,13 @@ struct NanoMuseMenuHeader<Trailing: View>: View {
             Text(title)
                 .font(.headline.weight(.semibold))
                 .lineLimit(1)
+            if let titleAccessory {
+                Text(titleAccessory)
+                    .font(.system(size: 13.5, weight: .medium))
+                    .foregroundStyle(NanoMuseTones.secondaryText)
+                    .lineLimit(1)
+                    .accessibilityIdentifier("mif.approval.count")
+            }
             Spacer(minLength: 8)
             trailing()
         }

@@ -2,6 +2,7 @@ import CryptoKit
 import Combine
 import Foundation
 import ImageIO
+import Network
 import PDFKit
 import QuickLook
 import Security
@@ -33,44 +34,76 @@ private final class MordeAuthURLProtocol: URLProtocol {
     static let unknownTaskStatusFixtureLaunchArgument = "-morde.localUnknownTaskStatusFixture"
     static let accountIsolationFixtureLaunchArgument = "-morde.localAccountIsolationFixture"
     static let delayedAccountResponseFixtureLaunchArgument = "-morde.localDelayedAccountResponseFixture"
+    static let eventChainAccountIsolationFixtureLaunchArgument = "-morde.localEventChainAccountIsolationFixture"
+    static let eventChainLateDeliveryFixtureLaunchArgument = "-morde.localEventChainLateDeliveryFixture"
     static let delayedAccountChatResponseFixtureLaunchArgument = "-morde.localDelayedAccountChatResponseFixture"
     static let taskMediaFixtureLaunchArgument = "-morde.localTaskMediaFixture"
     static let taskMediaCapabilityDisabledFixtureLaunchArgument = "-morde.localTaskMediaCapabilityDisabled"
     static let taskPagesFixtureLaunchArgument = "-morde.localTaskPagesFixture"
+    static let taskPagesStepCountsFixtureLaunchArgument = "-morde.localTaskPagesStepCountsFixture"
+    static let taskPagesStatusFixtureLaunchArgument = "-morde.localTaskPagesStatusFixture"
     static let taskPagesEmptyFixtureLaunchArgument = "-morde.localTaskPagesEmptyFixture"
     static let taskPagesEmptyIntermediateFixtureLaunchArgument = "-morde.localTaskPagesEmptyIntermediateFixture"
     static let taskPagesRetryFixtureLaunchArgument = "-morde.localTaskPagesRetryFixture"
     static let taskPagesApprovalPaginationFixtureLaunchArgument = "-morde.localTaskPagesApprovalPaginationFixture"
     static let taskPagesApprovalPartialFixtureLaunchArgument = "-morde.localTaskPagesApprovalPartialFixture"
+    static let taskPagesTaskDetailReentryFixtureLaunchArgument = "-morde.localTaskPagesTaskDetailReentryFixture"
+    static let taskPagesOtherWaitReasonFixtureLaunchArgument = "-morde.localTaskPagesOtherWaitReasonFixture"
+    static let taskPagesApprovalLoadFailureFixtureLaunchArgument = "-morde.localTaskPagesApprovalLoadFailureFixture"
     static let taskPagesTaskDetailRequestsFixtureLaunchArgument = "-morde.localTaskPagesTaskDetailRequestsFixture"
+    static let taskPagesPermissionRecoveryFixtureLaunchArgument = "-morde.localTaskPagesPermissionRecoveryFixture"
     static let conversationFailureFixtureLaunchArgument = "-morde.localConversationFailureFixture"
     static let conversationDrawerRetryFixtureLaunchArgument = "-morde.localConversationDrawerRetryFixture"
     static let taskPagesApprovalUnknownRetryFixtureLaunchArgument = "-morde.localTaskPagesApprovalUnknownRetryFixture"
     static let taskPagesApprovalRetryWithoutCommitFixtureLaunchArgument = "-morde.localTaskPagesApprovalRetryWithoutCommitFixture"
     static let taskPagesApprovalDelayFixtureLaunchArgument = "-morde.localTaskPagesApprovalDelayFixture"
+    private static let taskPagesClarificationDelayFixtureLaunchArgument = "-morde.localTaskPagesClarificationDelayFixture"
+    private static let taskDetailLateDeliveryFixtureLaunchArgument = "-morde.localTaskDetailLateDeliveryFixture"
     static let taskPagesApprovalRefreshPendingFixtureLaunchArgument = "-morde.localTaskPagesApprovalRefreshPendingFixture"
     static let taskPagesTimelineRecoveryFixtureLaunchArgument = "-morde.localTaskPagesTimelineRecoveryFixture"
     static let taskPagesTimelinePermissionFixtureLaunchArgument = "-morde.localTaskPagesTimelinePermissionFixture"
+    static let taskPagesTimelineUnconfirmedFixtureLaunchArgument = "-morde.localTaskPagesTimelineUnconfirmedFixture"
     static let taskPagesEventChainTimelineFixtureLaunchArgument = "-morde.localTaskPagesEventChainTimelineFixture"
+    static let taskPagesEventChainEmptyTimelineFixtureLaunchArgument = "-morde.localTaskPagesEventChainEmptyTimelineFixture"
+    static let eventChainVisualFixtureLaunchArgument = "-morde.localEventChainVisualFixture"
+    static let eventChainFailureFixtureLaunchArgument = "-morde.localEventChainFailureFixture"
+    static let eventChainNetworkFailureFixtureLaunchArgument = "-morde.localEventChainNetworkFailureFixture"
     static let chatAttachmentFixtureLaunchArgument = "-morde.localChatAttachmentFixture"
+    static let libraryMetadataOnlyFixtureLaunchArgument = "-morde.localLibraryMetadataOnlyFixture"
+    static let chatAttachmentMissingProofFixtureLaunchArgument = "-morde.localChatAttachmentMissingProofFixture"
     static let chatAttachmentUploadFailureFixtureLaunchArgument = "-morde.localChatAttachmentUploadFailureFixture"
     static let chatAttachmentSendRetryFixtureLaunchArgument = "-morde.localChatAttachmentSendRetryFixture"
     static let chatAttachmentOverflowFixtureLaunchArgument = "-morde.localChatAttachmentOverflowFixture"
+    static let attachmentCleanupFailureFixtureLaunchArgument = "-morde.localAttachmentCleanupFailureFixture"
+    static let chatVisualFixtureLaunchArgument = "-morde.localChatVisualFixture"
     static let chatAttachmentDownloadFailureFixtureLaunchArgument = "-morde.localChatAttachmentDownloadFailureFixture"
+    static let chatAttachmentDownloadForbiddenFixtureLaunchArgument = "-morde.localChatAttachmentDownloadForbiddenFixture"
+    static let chatAttachmentDownloadNotFoundFixtureLaunchArgument = "-morde.localChatAttachmentDownloadNotFoundFixture"
+    static let chatAttachmentDownloadDelayFixtureLaunchArgument = "-morde.localChatAttachmentDownloadDelayFixture"
     static let chatAttachmentDownloadBadLengthFixtureLaunchArgument = "-morde.localChatAttachmentDownloadBadLengthFixture"
     static let chatAttachmentDownloadBadETagFixtureLaunchArgument = "-morde.localChatAttachmentDownloadBadETagFixture"
+    static let personalSyncUnavailableFixtureLaunchArgument = "-morde.localPersonalSyncUnavailableFixture"
     static let taskPagesTaskActionDelayFixtureLaunchArgument = "-morde.localTaskPagesTaskActionDelayFixture"
     static let taskPagesTaskActionUnknownRetryFixtureLaunchArgument = "-morde.localTaskPagesTaskActionUnknownRetryFixture"
     static let taskPagesTaskActionServiceInstanceFixtureLaunchArgument = "-morde.localTaskPagesTaskActionServiceInstanceFixture"
     static let taskTabLifecycleFixtureLaunchArgument = "-morde.localTaskTabLifecycleFixture"
     static let taskArtifactPreviewFixtureLaunchArgument = "-morde.localTaskArtifactPreviewFixture"
     static let resourceAcceptanceFixtureLaunchArgument = "-morde.localResourceAcceptanceFixture"
+    static let resourceHostTicketDeniedFixtureLaunchArgument = "-morde.localHostTicketDeniedFixture"
+    static let workspaceInvalidManifestFixtureLaunchArgument = "-morde.localWorkspaceInvalidManifestFixture"
+    static let workspacePathConflictFixtureLaunchArgument = "-morde.localWorkspacePathConflictFixture"
+    static let workspaceManifestCursorLoopFixtureLaunchArgument = "-morde.localWorkspaceManifestCursorLoopFixture"
+    static let workspaceReadOnlyFixtureLaunchArgument = "-morde.localWorkspaceReadOnlyFixture"
+    static let workspaceShareFixtureLaunchArgument = "-morde.localWorkspaceShareFixture"
+    static let workspaceShareDeepLinkFixtureLaunchArgument = "-morde.localWorkspaceShareDeepLinkFixture"
     static let resourceConfirmedEmptyFixtureLaunchArgument = "-morde.localResourceConfirmedEmptyFixture"
     static let resourceDefaultHostPreferenceFailureFixtureLaunchArgument = "-morde.localResourceDefaultHostPreferenceFailureFixture"
+    static let resourceRefreshRecoveryFixtureLaunchArgument = "-morde.localResourceRefreshRecoveryFixture"
     static let mainChatFixtureLaunchArgument = "-morde.localMainChatFixture"
     static let noAdminModelFixtureLaunchArgument = "-morde.localNoAdminModelFixture"
     static let conversationHistoryPaginationFixtureLaunchArgument = "-morde.localConversationHistoryPaginationFixture"
     static let workItemFixtureLaunchArgument = "-morde.localWorkItemFixture"
+    static let workItemListFailureFixtureLaunchArgument = "-morde.localWorkItemListFailureFixture"
     static let workItemCreateFailureFixtureLaunchArgument = "-morde.localWorkItemCreateFailureFixture"
     private static let executionConflictFixtureLaunchArgument = "-morde.localExecutionConflictFixture"
     private static let executionUnknownFixtureLaunchArgument = "-morde.localExecutionUnknownFixture"
@@ -81,17 +114,24 @@ private final class MordeAuthURLProtocol: URLProtocol {
     private static let workItemFixtureInitializationLock = NSLock()
     private static let executionFixtureLock = NSLock()
     private static let chatAttachmentFixtureLock = NSLock()
+    private static let resourceFixtureLock = NSLock()
     private let delayedResponseLock = NSLock()
     private var delayedResponseWorkItem: DispatchWorkItem?
     private static var taskFixtureEventCount = 0
     private static var taskApprovalConflictActionCount = 0
     private static var taskSequentialSendContents: [String] = []
+    private static var taskSequentialSendKeys: [String] = []
+    private static var taskSequentialRetried = false
     private static var registrationFixtureRequestCount = 0
     private static var taskMediaFixtureDecision: String?
     private static var workItemFixtureRows: [[String: Any]] = []
     private static var workItemFixtureInitialized = false
     private static var workItemFixtureBlockConflictPending = true
+    private static var workItemFixtureListFailureCounts: [String: Int] = [:]
     private static var taskPagesApprovalDecision: String?
+    private static var taskPagesApprovalLoadFailureRequestCount = 0
+    private static var taskPagesTaskDetailReentryRequestCount = 0
+    private static var taskPagesPermissionRecoveryFailed = false
     private static var taskPagesClarificationAnswered = false
     private static var taskPagesApprovalRetryIdempotencyKey: String?
     private static var taskPagesTaskActionStatus = "running"
@@ -105,6 +145,12 @@ private final class MordeAuthURLProtocol: URLProtocol {
     private static var conversationDrawerListRequestCount = 0
     private static var taskPagesCreatedConversation = false
     private static var mainChatFixtureEnsured = false
+    private static var resourceRefreshListRequestCount = 0
+    private static var resourceFixtureWorkspaceShareClaimed = false
+    private static var resourceFixtureHostMembers: [[String: Any]] = [[
+        "user_id": "u7654321", "permissions": ["desktop:view", "desktop:control"],
+        "created_at": "2026-01-01T00:00:00Z",
+    ]]
     private static var conversationHistoryFixtureInitialRequestCount = 0
     private static var executionFixtureState = "enabled"
     private static var executionFixtureEpoch: Int64 = 7
@@ -135,6 +181,9 @@ private final class MordeAuthURLProtocol: URLProtocol {
     private static var chatAttachmentFixtureUploadKeys: [String: String] = [:]
     private static var chatAttachmentFixtureCommittedIDs = Set<String>()
     private static var chatAttachmentFixtureAcceptedMessageKey: String?
+    private static var chatAttachmentFixtureMessage: [String: Any]?
+    private static var chatAttachmentFixturePendingIDs = Set<String>()
+    private static var chatAttachmentFixtureLinkedIDs: [String: String] = [:]
 
     private static let taskMediaFixturePNG = Data([
         0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
@@ -161,6 +210,30 @@ private final class MordeAuthURLProtocol: URLProtocol {
     private static func setTaskPagesApprovalDecision(_ decision: String?) {
         taskFixtureLock.lock(); defer { taskFixtureLock.unlock() }
         taskPagesApprovalDecision = decision
+    }
+
+    private static func nextTaskPagesApprovalLoadFailureRequest() -> Int {
+        taskFixtureLock.lock(); defer { taskFixtureLock.unlock() }
+        taskPagesApprovalLoadFailureRequestCount += 1
+        return taskPagesApprovalLoadFailureRequestCount
+    }
+
+    private static func nextTaskPagesTaskDetailReentryRequest() -> Int {
+        taskFixtureLock.lock(); defer { taskFixtureLock.unlock() }
+        taskPagesTaskDetailReentryRequestCount += 1
+        return taskPagesTaskDetailReentryRequestCount
+    }
+
+    private static func consumeTaskPagesPermissionFailure() -> Bool {
+        taskFixtureLock.lock(); defer { taskFixtureLock.unlock() }
+        guard !taskPagesPermissionRecoveryFailed else { return false }
+        taskPagesPermissionRecoveryFailed = true
+        return true
+    }
+
+    private static var didFailTaskPagesPermissionRecovery: Bool {
+        taskFixtureLock.lock(); defer { taskFixtureLock.unlock() }
+        return taskPagesPermissionRecoveryFailed
     }
 
     private static func nextTaskPagesRetryListRequest() -> Int {
@@ -209,6 +282,30 @@ private final class MordeAuthURLProtocol: URLProtocol {
                 "content": String(format: "History message %03d", index), "status": "completed",
                 "delivery_status": NSNull(),
                 "created_at": String(format: "2026-11-05T00:%02d:%02dZ", index / 60, index % 60),
+            ]
+        }
+    }
+
+    private static func chatVisualFixtureMessages() -> [[String: Any]] {
+        let entries: [(String, String)] = [
+            ("user", "修复支付回调超时，改完先测试再发布"),
+            ("assistant", "好，我先检查回调重试逻辑，再补回归测试。"),
+            ("assistant", "已经拆成 5 步：修改、审查、回归、灰度和汇总。"),
+            ("user", "先灰度 10%，有问题马上回滚。"),
+            ("assistant", "收到，等批准后按灰度执行；异常时回滚到稳定版本。"),
+            ("user", "设计稿按这份需求文档改。"),
+            ("assistant", "改好了，产物已存进文件库，随时可以打开。"),
+        ]
+        return entries.enumerated().map { offset, entry in
+            [
+                "id": String(format: "mvisual%03d", offset + 1),
+                "conversation_id": "c1234567",
+                "task_id": NSNull(),
+                "role": entry.0,
+                "content": entry.1,
+                "status": "completed",
+                "delivery_status": NSNull(),
+                "created_at": String(format: "2026-11-07T00:%02d:%02dZ", offset / 60, offset % 60),
             ]
         }
     }
@@ -407,7 +504,12 @@ private final class MordeAuthURLProtocol: URLProtocol {
         taskFixtureEventCount = 0
         taskApprovalConflictActionCount = 0
         taskSequentialSendContents = []
+        taskSequentialSendKeys = []
+        taskSequentialRetried = false
         taskPagesApprovalDecision = nil
+        taskPagesApprovalLoadFailureRequestCount = 0
+        taskPagesTaskDetailReentryRequestCount = 0
+        taskPagesPermissionRecoveryFailed = false
         taskPagesClarificationAnswered = false
         taskPagesApprovalRetryIdempotencyKey = nil
         taskPagesTaskActionStatus = "running"
@@ -429,24 +531,47 @@ private final class MordeAuthURLProtocol: URLProtocol {
         chatAttachmentFixtureUploadKeys = [:]
         chatAttachmentFixtureCommittedIDs = []
         chatAttachmentFixtureAcceptedMessageKey = nil
+        chatAttachmentFixtureMessage = nil
+        chatAttachmentFixturePendingIDs = []
+        chatAttachmentFixtureLinkedIDs = [:]
+    }
+
+    private static func resetResourceRefreshFixture() {
+        resourceFixtureLock.lock(); defer { resourceFixtureLock.unlock() }
+        resourceRefreshListRequestCount = 0
+    }
+
+    private static func shouldFailResourceRefreshListRequest() -> Bool {
+        resourceFixtureLock.lock(); defer { resourceFixtureLock.unlock() }
+        resourceRefreshListRequestCount += 1
+        return resourceRefreshListRequestCount <= 2
     }
 
     private static func chatAttachmentFixtureSnapshot() -> Data {
         chatAttachmentFixtureLock.lock(); defer { chatAttachmentFixtureLock.unlock() }
-        let items: [[String: Any]] = chatAttachmentFixtureLibraryItems.keys.sorted().compactMap { id in
+        var items: [[String: Any]] = chatAttachmentFixtureLibraryItems.keys.sorted().compactMap { id in
             guard let item = chatAttachmentFixtureLibraryItems[id],
                   let body = try? JSONSerialization.jsonObject(with: item.body) as? [String: Any] else { return nil }
             return ["object_type": "library_item", "object_id": id, "revision": item.revision, "body": body]
         }
+        if ProcessInfo.processInfo.arguments.contains(libraryMetadataOnlyFixtureLaunchArgument) {
+            items.append(["object_type": "library_item", "object_id": "li_metadata1", "revision": 1,
+                          "body": ["name": "metadata-only.pdf", "kind": "artifact",
+                                   "mime": "application/pdf", "size_bytes": 512]])
+        }
         return (try? JSONSerialization.data(withJSONObject: [
-            "watermark": chatAttachmentFixtureSequence, "items": items, "next_cursor": NSNull(),
+            "watermark": chatAttachmentFixtureSequence,
+            "items": ProcessInfo.processInfo.arguments.contains(chatAttachmentMissingProofFixtureLaunchArgument)
+                ? [] : items,
+            "next_cursor": NSNull(),
         ])) ?? Data()
     }
 
     private static func personalAttachmentDownloadFixtureResponse(for request: URLRequest)
         -> (status: Int, body: Data, headers: [String: String])? {
-        guard ProcessInfo.processInfo.arguments.contains(chatAttachmentFixtureLaunchArgument),
-              request.url?.host == "portal.120.25.178.93.sslip.io",
+        guard ProcessInfo.processInfo.arguments.contains(chatAttachmentFixtureLaunchArgument) ||
+              ProcessInfo.processInfo.arguments.contains(libraryMetadataOnlyFixtureLaunchArgument),
+              request.url?.host == "127.0.0.1",
               request.httpMethod == "GET",
               let path = request.url?.path,
               path.hasPrefix("/api/personal-data/attachments/") else { return nil }
@@ -464,6 +589,14 @@ private final class MordeAuthURLProtocol: URLProtocol {
         guard chatAttachmentFixtureCommittedIDs.contains(attachmentID),
               let upload = chatAttachmentFixtureUploads.values.first(where: { $0.attachmentID == attachmentID }) else {
             return (404, Data(#"{"error":{"code":"not_found","message":"Synthetic attachment not found"}}"#.utf8),
+                    ["Content-Type": "application/json"])
+        }
+        if ProcessInfo.processInfo.arguments.contains(chatAttachmentDownloadForbiddenFixtureLaunchArgument) {
+            return (403, Data(#"{"error":{"code":"permission_denied","message":"Synthetic attachment access denied"}}"#.utf8),
+                    ["Content-Type": "application/json"])
+        }
+        if ProcessInfo.processInfo.arguments.contains(chatAttachmentDownloadNotFoundFixtureLaunchArgument) {
+            return (404, Data(#"{"error":{"code":"not_found","message":"Synthetic committed attachment was deleted"}}"#.utf8),
                     ["Content-Type": "application/json"])
         }
         let bytes = (0..<upload.chunkCount).reduce(into: Data()) { data, index in
@@ -489,8 +622,9 @@ private final class MordeAuthURLProtocol: URLProtocol {
     }
 
     private static func chatAttachmentFixtureResponse(for request: URLRequest) -> (status: Int, body: Data)? {
-        guard ProcessInfo.processInfo.arguments.contains(chatAttachmentFixtureLaunchArgument),
-              request.url?.host == "portal.120.25.178.93.sslip.io",
+        guard ProcessInfo.processInfo.arguments.contains(chatAttachmentFixtureLaunchArgument) ||
+              ProcessInfo.processInfo.arguments.contains(libraryMetadataOnlyFixtureLaunchArgument),
+              request.url?.host == "127.0.0.1",
               let path = request.url?.path else { return nil }
         func response(_ status: Int, _ value: [String: Any]) -> (status: Int, body: Data) {
             (status, (try? JSONSerialization.data(withJSONObject: value)) ?? Data())
@@ -623,41 +757,66 @@ private final class MordeAuthURLProtocol: URLProtocol {
                 "object_id": upload.objectID, "result_revision": revision,
                 "account_change_sequence": chatAttachmentFixtureSequence, "replay": false])
         }
-        if path == "/api/conversations/c1234567/messages", request.httpMethod == "POST" {
-            guard let payload = jsonPayload(request),
-                  let content = payload["content"] as? String, !content.isEmpty,
-                  let modelID = payload["model_id"] as? String, !modelID.isEmpty,
-                  let idempotencyKey = request.value(forHTTPHeaderField: "Idempotency-Key"),
-                  MordePersonalDataContract.isValidIdempotencyKey(idempotencyKey),
-                  let attachmentIDs = payload["attachment_ids"] as? [String], attachmentIDs.count == 4,
-                  Set(attachmentIDs).count == 4,
-                  attachmentIDs.allSatisfy(MordePersonalDataContract.isValidAttachmentID) else {
-                return response(400, ["error": ["code": "bad_request", "message": "Expected two synthetic files and four attachment objects"]])
+        let usesAccountIsolation = ProcessInfo.processInfo.arguments.contains(accountIsolationFixtureLaunchArgument)
+        let fixtureConversationID = usesAccountIsolation
+            ? (isAccountA(request) ? "c0000001" : "c0000002") : "c1234567"
+        let messagePath = "/api/conversations/\(fixtureConversationID)/messages"
+        if path == messagePath && request.httpMethod == "GET" {
+            let requestedID = request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false) }?
+                .queryItems?.first(where: { $0.name == "client_message_id" })?.value
+            chatAttachmentFixtureLock.lock(); defer { chatAttachmentFixtureLock.unlock() }
+            guard var message = chatAttachmentFixtureMessage,
+                  requestedID == nil || requestedID == chatAttachmentFixtureAcceptedMessageKey else {
+                return response(200, ["items": [[String: Any]](), "next_cursor": NSNull()])
+            }
+            message["attachment_ids"] = Array(chatAttachmentFixtureLinkedIDs.values).sorted()
+            var items = [message]
+            if requestedID == nil && !chatAttachmentFixturePendingIDs.isEmpty &&
+                chatAttachmentFixtureLinkedIDs.count == chatAttachmentFixturePendingIDs.count {
+                items.append(["id": "m9999998", "conversation_id": fixtureConversationID,
+                              "role": "assistant", "content": "Synthetic attachment request accepted.",
+                              "created_at": "2026-11-05T00:00:01Z"])
+            }
+            return response(200, ["items": items, "next_cursor": NSNull()])
+        }
+        if path == messagePath && request.httpMethod == "POST" {
+            guard let payload = jsonPayload(request), let content = payload["content"] as? String, !content.isEmpty,
+                  let clientID = payload["client_message_id"] as? String, !clientID.isEmpty,
+                  payload["mode"] == nil, payload["expected_task_id"] == nil,
+                  request.value(forHTTPHeaderField: "Idempotency-Key") == clientID,
+                  let attachmentIDs = payload["client_attachment_ids"] as? [String], attachmentIDs.count == 2,
+                  Set(attachmentIDs).count == 2 else {
+                return response(400, ["error": ["code": "bad_request", "message": "Expected two synthetic attachment placeholders"]])
             }
             chatAttachmentFixtureLock.lock(); defer { chatAttachmentFixtureLock.unlock() }
-            guard Set(attachmentIDs) == chatAttachmentFixtureCommittedIDs else {
-                return response(409, ["error": ["code": "conflict", "message": "Synthetic message references uncommitted attachments"]])
+            if let accepted = chatAttachmentFixtureAcceptedMessageKey, accepted != clientID {
+                return response(409, ["error": ["code": "conflict", "message": "Synthetic message already accepted"]])
             }
-            if ProcessInfo.processInfo.arguments.contains(chatAttachmentSendRetryFixtureLaunchArgument) {
-                if let acceptedKey = chatAttachmentFixtureAcceptedMessageKey {
-                    guard idempotencyKey == acceptedKey else {
-                        return response(409, ["error": ["code": "conflict", "message": "Retry changed the message idempotency key"]])
-                    }
-                } else {
-                    chatAttachmentFixtureAcceptedMessageKey = idempotencyKey
-                    return response(503, ["error": ["code": "unavailable", "message": "Synthetic response lost after accepting the message"]])
-                }
+            let message: [String: Any] = ["id": "m9999999", "conversation_id": fixtureConversationID,
+                "role": "user", "content": content, "client_message_id": clientID, "routing_status": "pending",
+                "created_at": "2026-11-05T00:00:00Z"]
+            let first = chatAttachmentFixtureAcceptedMessageKey == nil
+            chatAttachmentFixtureAcceptedMessageKey = clientID
+            chatAttachmentFixtureMessage = message
+            chatAttachmentFixturePendingIDs = Set(attachmentIDs)
+            if first && ProcessInfo.processInfo.arguments.contains(chatAttachmentSendRetryFixtureLaunchArgument) {
+                return response(503, ["error": ["code": "unavailable", "message": "Synthetic response lost after accepting the message"]])
             }
-            let message: [String: Any] = ["id": "m9999999", "conversation_id": "c1234567", "task_id": "q9999999",
-                "role": "user", "content": content, "status": "completed", "delivery_status": NSNull(),
-                "attachment_ids": attachmentIDs, "created_at": "2026-11-05T00:00:00Z"]
-            let task: [String: Any] = ["id": "q9999999", "conversation_id": "c1234567", "host_id": NSNull(),
-                "execution_location": "server", "workspace_id": NSNull(), "input_revision": NSNull(),
-                "objective": content, "status": "completed", "event_sequence": 1, "result": "Synthetic attachment request accepted.",
-                "current_step": NSNull(), "waiting_reason": NSNull(), "stop_request": NSNull(),
-                "pending_request": NSNull(), "clarification_request": NSNull(), "batch_items": NSNull(),
-                "updated_at": "2026-11-05T00:00:00Z"]
-            return response(200, ["message": message, "task": task])
+            return response(202, ["message": message, "replayed": !first])
+        }
+        let prefix = messagePath + "/m9999999/attachments/"
+        if path.hasPrefix(prefix) && request.httpMethod == "PUT" {
+            let clientID = String(path.dropFirst(prefix.count))
+            guard let payload = jsonPayload(request), let attachmentID = payload["attachment_id"] as? String else {
+                return response(400, ["error": ["code": "bad_request", "message": "Missing synthetic attachment"]])
+            }
+            chatAttachmentFixtureLock.lock(); defer { chatAttachmentFixtureLock.unlock() }
+            guard chatAttachmentFixturePendingIDs.contains(clientID), chatAttachmentFixtureCommittedIDs.contains(attachmentID),
+                  chatAttachmentFixtureLinkedIDs[clientID] == nil || chatAttachmentFixtureLinkedIDs[clientID] == attachmentID else {
+                return response(409, ["error": ["code": "conflict", "message": "Invalid synthetic attachment link"]])
+            }
+            chatAttachmentFixtureLinkedIDs[clientID] = attachmentID
+            return response(200, ["attachment_id": attachmentID])
         }
         if path == "/api/tasks/q9999999/events", request.httpMethod == "GET" {
             return (204, Data())
@@ -783,11 +942,77 @@ private final class MordeAuthURLProtocol: URLProtocol {
     private static func taskPagesSummary(id: String, status: String, objective: String) -> [String: Any] {
         ["id": id, "conversation_id": "c1234567", "host_id": NSNull(),
          "execution_location": "server", "workspace_id": NSNull(), "input_revision": NSNull(),
-         "objective": objective, "status": status, "current_step": NSNull(),
+         "objective": objective, "status": status, "current_step": NSNull(), "step_count": 0, "completed_step_count": 0,
          "created_at": "2026-11-04T00:00:00Z", "updated_at": "2026-11-04T00:00:00Z"]
     }
 
+    private static func eventChainAccountIsolationTask(isAccountA: Bool) -> [String: Any] {
+        let account = isAccountA ? "account-a" : "account-b"
+        var task = taskPagesSummary(id: "q0000001", status: "waiting_user",
+                                    objective: "\(account)-private-task-detail")
+        task["event_sequence"] = 1
+        task["result"] = NSNull()
+        task["current_step"] = "Waiting for the local approval"
+        task["waiting_reason"] = "approval_required"
+        task["stop_request"] = NSNull()
+        task["pending_request"] = [
+            "id": "r0000001", "version": 1, "kind": "approval",
+            "title": "Review \(account) private task", "object": "Synthetic task only",
+            "content": "Confirm the local account fixture.",
+            "impact": "This fixture has no external side effects.",
+        ]
+        task["clarification_request"] = NSNull()
+        task["batch_items"] = []
+        task["steps"] = []
+        task["artifacts"] = []
+        return task
+    }
+
     private static func taskPagesDetail(id: String) -> [String: Any]? {
+        if ["q0000005", "q0000006", "q0000007"].contains(id) {
+            let isCompleted = id == "q0000005"
+            let isFailed = id == "q0000006"
+            let status = isCompleted ? "completed" : (isFailed ? "failed" : "cancelled")
+            let objective = isCompleted ? "Completed task fixture" :
+                (isFailed ? "Failed task fixture" : "Cancelled task fixture")
+            var task = taskPagesSummary(
+                id: id,
+                status: status,
+                objective: objective)
+            task["event_sequence"] = 0
+            task["result"] = isFailed ? NSNull() :
+                (isCompleted ? "Local completed result" : "Local cancelled result")
+            task["current_step"] = isFailed ? "Review failed output" : NSNull()
+            task["waiting_reason"] = NSNull()
+            task["stop_request"] = NSNull()
+            task["pending_request"] = NSNull()
+            task["clarification_request"] = NSNull()
+            task["batch_items"] = isFailed ? [
+                ["id": "b0000001", "key": "retry-local", "status": "failed"],
+            ] : []
+            let terminalStep: [String: Any]
+            if isCompleted {
+                terminalStep = ["id": "s0000005", "sequence": 1, "kind": "agent", "status": "succeeded",
+                                "title": "Finish local task", "summary": "The local task completed successfully.",
+                                "created_at": "2026-11-04T00:00:01Z"]
+            } else if isFailed {
+                terminalStep = ["id": "s0000007", "sequence": 1, "kind": "tool", "status": "failed",
+                                "title": "Review failed output", "summary": "A local synthetic failure.",
+                                "created_at": "2026-11-04T00:00:01Z"]
+            } else {
+                terminalStep = ["id": "s0000009", "sequence": 1, "kind": "agent", "status": "cancelled",
+                                "title": "Task stopped", "summary": "The local task was cancelled.",
+                                "created_at": "2026-11-04T00:00:01Z"]
+            }
+            task["steps"] = [
+                terminalStep,
+                ["id": "s0000010", "sequence": 2, "kind": "budget", "status": "succeeded",
+                 "title": "Private budget field", "summary": "This must never be shown.",
+                 "created_at": "2026-11-04T00:00:02Z"],
+            ]
+            task["artifacts"] = []
+            return task
+        }
         if id == "q0000001" {
             let hasTaskActionFixture = ProcessInfo.processInfo.arguments.contains(Self.taskPagesTaskActionDelayFixtureLaunchArgument) ||
                 ProcessInfo.processInfo.arguments.contains(Self.taskPagesTaskActionUnknownRetryFixtureLaunchArgument) ||
@@ -814,6 +1039,13 @@ private final class MordeAuthURLProtocol: URLProtocol {
                  "title": "Private budget field", "summary": "This must never be shown.",
                  "created_at": "2026-11-04T00:00:02Z"],
             ]
+            if !hasTaskActionFixture {
+                var steps = task["steps"] as? [[String: Any]] ?? []
+                steps.append(["id": "s0000003", "sequence": 3, "kind": "agent", "status": "running",
+                              "title": "Review current changes", "summary": "Review local task data.",
+                              "created_at": "2026-11-04T00:00:03Z"])
+                task["steps"] = steps
+            }
             if ProcessInfo.processInfo.arguments.contains(Self.taskArtifactPreviewFixtureLaunchArgument),
                let file = Self.taskArtifactPreviewFile() {
                 task["artifacts"] = [
@@ -831,20 +1063,30 @@ private final class MordeAuthURLProtocol: URLProtocol {
         }
         if id == "q0000101" {
             let decision = taskPagesApprovalDecisionSnapshot
-            let isEventChainTimelineFixture = ProcessInfo.processInfo.arguments.contains(Self.taskPagesEventChainTimelineFixtureLaunchArgument)
+            let isOtherWaitReasonFixture = ProcessInfo.processInfo.arguments.contains(
+                Self.taskPagesOtherWaitReasonFixtureLaunchArgument)
+            let isEventChainTimelineFixture = ProcessInfo.processInfo.arguments.contains(Self.taskPagesEventChainTimelineFixtureLaunchArgument) ||
+                ProcessInfo.processInfo.arguments.contains(Self.taskPagesEventChainEmptyTimelineFixtureLaunchArgument)
+            let isEventChainVisualFixture = ProcessInfo.processInfo.arguments.contains(Self.eventChainVisualFixtureLaunchArgument) ||
+                ProcessInfo.processInfo.arguments.contains(Self.eventChainFailureFixtureLaunchArgument)
+            let isEventChainWaitingFixture = isEventChainTimelineFixture || isEventChainVisualFixture ||
+                ProcessInfo.processInfo.arguments.contains(Self.eventChainNetworkFailureFixtureLaunchArgument)
             let isTimelineFixture = ProcessInfo.processInfo.arguments.contains(Self.taskPagesTimelineRecoveryFixtureLaunchArgument) ||
-                ProcessInfo.processInfo.arguments.contains(Self.taskPagesTimelinePermissionFixtureLaunchArgument)
-            if isTimelineFixture || isEventChainTimelineFixture {
-                var task = taskPagesSummary(id: id, status: isEventChainTimelineFixture ? "waiting_user" : "running",
-                                            objective: "Local task timeline fixture")
+                ProcessInfo.processInfo.arguments.contains(Self.taskPagesTimelinePermissionFixtureLaunchArgument) ||
+                ProcessInfo.processInfo.arguments.contains(Self.eventChainNetworkFailureFixtureLaunchArgument)
+            if isTimelineFixture || isEventChainTimelineFixture || isEventChainVisualFixture {
+                var task = taskPagesSummary(id: id, status: isEventChainWaitingFixture ? "waiting_user" : "running",
+                                            objective: ProcessInfo.processInfo.arguments.contains(
+                                                Self.taskPagesEventChainEmptyTimelineFixtureLaunchArgument)
+                                                ? "本地事件链验收" : "Local task timeline fixture")
                 task["conversation_id"] = "c7654321"
-                task["event_sequence"] = ProcessInfo.processInfo.arguments.contains(Self.taskPagesTimelineRecoveryFixtureLaunchArgument) || isEventChainTimelineFixture
-                    ? 8 : 1
+                task["event_sequence"] = ProcessInfo.processInfo.arguments.contains(Self.taskPagesTimelineRecoveryFixtureLaunchArgument) ||
+                    isEventChainTimelineFixture ? 8 : 1
                 task["result"] = NSNull()
                 task["current_step"] = "Waiting for local task events"
-                task["waiting_reason"] = isEventChainTimelineFixture ? "approval_required" : NSNull()
+                task["waiting_reason"] = isEventChainWaitingFixture ? "approval_required" : NSNull()
                 task["stop_request"] = NSNull()
-                task["pending_request"] = isEventChainTimelineFixture
+                task["pending_request"] = isEventChainWaitingFixture
                     ? ["id": "r0000001", "version": 1, "kind": "approval", "title": "Review local change",
                        "object": "Local task output", "content": "Accept the local fixture action?",
                        "impact": "The fixture changes only its synthetic task response."]
@@ -859,10 +1101,12 @@ private final class MordeAuthURLProtocol: URLProtocol {
                                         objective: "Local approval fixture")
             task["event_sequence"] = decision == nil ? 1 : 2
             task["result"] = decision == nil ? NSNull() : "Local decision refreshed"
-            task["waiting_reason"] = decision == nil ? "approval_required" : NSNull()
-            task["current_step"] = decision == nil ? "Waiting for approval" : NSNull()
+            task["waiting_reason"] = decision == nil
+                ? (isOtherWaitReasonFixture ? "mcp_result_unknown" : "approval_required") : NSNull()
+            task["current_step"] = decision == nil
+                ? (isOtherWaitReasonFixture ? "Review operation result" : "Waiting for approval") : NSNull()
             task["stop_request"] = NSNull()
-            task["pending_request"] = decision == nil
+            task["pending_request"] = decision == nil && !isOtherWaitReasonFixture
                 ? ["id": "r0000001", "version": 1, "kind": "approval", "title": "Review local change",
                    "object": "Local task output", "content": "Accept the local fixture action?",
                    "impact": "The fixture changes only its synthetic task response."]
@@ -947,15 +1191,32 @@ private final class MordeAuthURLProtocol: URLProtocol {
         return taskApprovalConflictActionCount > 0
     }
 
-    private static func recordTaskSequentialSend(_ content: String) -> Int {
+    private static func recordTaskSequentialSend(_ content: String, key: String) -> Int {
         taskFixtureLock.lock(); defer { taskFixtureLock.unlock() }
+        if let index = taskSequentialSendKeys.firstIndex(of: key) { return index + 1 }
         taskSequentialSendContents.append(content)
+        taskSequentialSendKeys.append(key)
         return taskSequentialSendContents.count
+    }
+
+    private static var taskSequentialSendKeysSnapshot: [String] {
+        taskFixtureLock.lock(); defer { taskFixtureLock.unlock() }
+        return taskSequentialSendKeys
     }
 
     private static var taskSequentialSendContentsSnapshot: [String] {
         taskFixtureLock.lock(); defer { taskFixtureLock.unlock() }
         return taskSequentialSendContents
+    }
+
+    private static var taskSequentialRetriedSnapshot: Bool {
+        taskFixtureLock.lock(); defer { taskFixtureLock.unlock() }
+        return taskSequentialRetried
+    }
+
+    private static func markTaskSequentialRetried() {
+        taskFixtureLock.lock(); defer { taskFixtureLock.unlock() }
+        taskSequentialRetried = true
     }
 
     private static func taskSequentialID(_ index: Int) -> String { index == 1 ? "q1234567" : "q2345678" }
@@ -965,10 +1226,24 @@ private final class MordeAuthURLProtocol: URLProtocol {
 
     private static func taskSequentialMessage(_ index: Int, content: String, role: String) -> [String: Any] {
         let sequence = (index - 1) * 2 + (role == "user" ? 1 : 2)
-        return ["id": String(format: "m%07d", sequence), "conversation_id": "c1234567",
+        var message: [String: Any] = ["id": String(format: "m%07d", sequence), "conversation_id": "c1234567",
                 "task_id": taskSequentialID(index), "role": role, "content": content,
                 "status": "completed", "delivery_status": NSNull(),
                 "created_at": String(format: "2026-11-04T00:00:%02dZ", sequence)]
+        let keys = taskSequentialSendKeysSnapshot
+        if role == "user", index <= keys.count {
+            message["client_message_id"] = keys[index - 1]
+            let tooLong = ProcessInfo.processInfo.arguments.contains("-morde.localMessageTooLongFixture")
+            if index == 1 && (ProcessInfo.processInfo.arguments.contains("-morde.localRoutingFailureFixture") || tooLong) &&
+                !taskSequentialRetriedSnapshot {
+                message["routing_status"] = "failed"
+                message["routing_failure_reason"] = tooLong ? "message_too_long" : "model_unavailable"
+            } else {
+                message["routing_status"] = index == 1 && ProcessInfo.processInfo.arguments.contains("-morde.localAdjustmentFixture")
+                    ? "waiting_adjustment" : "routed"
+            }
+        }
+        return message
     }
 
     private static func taskSequentialTask(_ index: Int, content: String) -> [String: Any] {
@@ -1018,6 +1293,14 @@ private final class MordeAuthURLProtocol: URLProtocol {
                                description: "viewer 只能浏览。", assigneeID: "u0000002", category: "unclassified"),
         ]
         workItemFixtureBlockConflictPending = true
+        workItemFixtureListFailureCounts = [:]
+    }
+
+    private static func shouldFailWorkItemListRequest(_ key: String) -> Bool {
+        workItemFixtureLock.lock(); defer { workItemFixtureLock.unlock() }
+        let previousCount = workItemFixtureListFailureCounts[key, default: 0]
+        workItemFixtureListFailureCounts[key] = previousCount + 1
+        return previousCount == 0
     }
 
     private static func initializeWorkItemFixtureIfNeeded() {
@@ -1069,12 +1352,15 @@ private final class MordeAuthURLProtocol: URLProtocol {
     private static func resourceFixtureResponse(for request: URLRequest) -> (status: Int, body: Data)? {
         let usesResourceAcceptanceFixture = ProcessInfo.processInfo.arguments.contains(resourceAcceptanceFixtureLaunchArgument)
         let usesConfirmedEmptyFixture = ProcessInfo.processInfo.arguments.contains(resourceConfirmedEmptyFixtureLaunchArgument)
-        guard usesResourceAcceptanceFixture || usesConfirmedEmptyFixture,
-              request.url?.host == "portal.120.25.178.93.sslip.io" else { return nil }
+        let usesRefreshRecoveryFixture = ProcessInfo.processInfo.arguments.contains(resourceRefreshRecoveryFixtureLaunchArgument)
+        let usesWorkspaceShareFixture = ProcessInfo.processInfo.arguments.contains(workspaceShareFixtureLaunchArgument)
+        guard usesResourceAcceptanceFixture || usesConfirmedEmptyFixture || usesRefreshRecoveryFixture || usesWorkspaceShareFixture,
+              request.url?.host == "127.0.0.1" else { return nil }
         let path = request.url?.path ?? ""
         let method = request.httpMethod ?? "GET"
         func json(_ value: Any) -> Data { (try? JSONSerialization.data(withJSONObject: value)) ?? Data() }
         func page(_ items: [[String: Any]]) -> [String: Any] { ["items": items, "next_cursor": NSNull()] }
+        let workspaceShareFixtureExpiry = ISO8601DateFormatter().string(from: Date().addingTimeInterval(6 * 24 * 60 * 60))
         func binding(_ workspaceID: String, name: String, syncState: String = "healthy") -> [String: Any] {
             ["workspace": ["id": workspaceID, "name": name, "revision": 7, "state": "ready"],
              "state": "active", "desired_revision": 7, "applied_revision": 7, "sync_state": syncState]
@@ -1086,13 +1372,17 @@ private final class MordeAuthURLProtocol: URLProtocol {
         let readyBinding = binding("w0000001", name: "Ready Workspace")
         let hosts = [
             host("h0000001", name: "Running host", state: "running", bindings: [readyBinding]),
-            host("h0000002", name: "Offline host", state: "offline", bindings: []),
+            host("h0000002", name: "Stopped host", state: "stopped", bindings: []),
             host("h0000003", name: "Unready binding host", state: "running",
                  bindings: [binding("w0000002", name: "Syncing Workspace", syncState: "syncing")]),
             host("h0000004", name: "Unknown control host", state: "running", bindings: [readyBinding]),
             host("h0000005", name: "Expired lease host", state: "running", bindings: [readyBinding]),
             host("h0000006", name: "Takeover failure host", state: "running", bindings: [readyBinding]),
             host("h0000007", name: "Return failure host", state: "running", bindings: [readyBinding]),
+            host("h0000011", name: "Creating host", state: "creating", bindings: []),
+            host("h0000012", name: "Stopping host", state: "stopping", bindings: []),
+            host("h0000013", name: "Failed host", state: "failed", bindings: []),
+            host("h0000014", name: "Deleting host", state: "deleting", bindings: []),
         ]
         if usesConfirmedEmptyFixture {
             if ["/api/hosts", "/api/shared-hosts", "/api/workspaces"].contains(path), method == "GET" {
@@ -1100,8 +1390,13 @@ private final class MordeAuthURLProtocol: URLProtocol {
             }
             return nil
         }
-        if path == "/api/hosts", method == "GET" { return (200, json(page(hosts))) }
+        if path == "/api/hosts", method == "GET" {
+            return (200, json(page(hosts)))
+        }
         if path == "/api/hosts/h0000001/enter", method == "POST" {
+            if ProcessInfo.processInfo.arguments.contains(resourceHostTicketDeniedFixtureLaunchArgument) {
+                return (403, Data(#"{"error":{"code":"permission_denied","message":"Synthetic host access denied"}}"#.utf8))
+            }
             return (200, json(["url": "https://resource-fixture.invalid/__ch/auth?t=local-only"]))
         }
         if path == "/api/hosts/h0000008/observation-ticket", method == "POST" {
@@ -1118,18 +1413,97 @@ private final class MordeAuthURLProtocol: URLProtocol {
                 "id": "h0000009", "name": "Running host without view permission", "state": "running",
                 "url": "https://resource-fixture.invalid", "permissions": [String](),
             ], [
-                "id": "h0000010", "name": "Offline host without view permission", "state": "offline",
+                "id": "h0000010", "name": "Stopped host without view permission", "state": "stopped",
                 "url": "https://resource-fixture.invalid", "permissions": [String](),
             ]])))
         }
+        if path == "/api/hosts/h0000001/members", method == "GET" {
+            resourceFixtureLock.lock(); defer { resourceFixtureLock.unlock() }
+            return (200, json(["items": resourceFixtureHostMembers]))
+        }
+        if path == "/api/hosts/h0000001/members", method == "POST" {
+            guard let payload = jsonPayload(request),
+                  let userID = payload["user_id"] as? String,
+                  MordeProjectPolicy.hasValidUserID(userID),
+                  let permissions = payload["permissions"] as? [String],
+                  permissions.contains("desktop:view"), permissions.contains("desktop:control") else {
+                return (400, Data(#"{"error":{"code":"bad_request","message":"Invalid host member request"}}"#.utf8))
+            }
+            resourceFixtureLock.lock(); defer { resourceFixtureLock.unlock() }
+            let createdAt = resourceFixtureHostMembers.first(where: { $0["user_id"] as? String == userID })?["created_at"]
+                as? String ?? "2026-11-06T00:00:00Z"
+            let member: [String: Any] = ["user_id": userID, "permissions": permissions, "created_at": createdAt]
+            resourceFixtureHostMembers.removeAll { $0["user_id"] as? String == userID }
+            resourceFixtureHostMembers.append(member)
+            return (201, json(member))
+        }
+        let hostMemberPrefix = "/api/hosts/h0000001/members/"
+        if path.hasPrefix(hostMemberPrefix), method == "DELETE" {
+            let userID = String(path.dropFirst(hostMemberPrefix.count))
+            resourceFixtureLock.lock(); defer { resourceFixtureLock.unlock() }
+            resourceFixtureHostMembers.removeAll { $0["user_id"] as? String == userID }
+            return (204, Data())
+        }
         if path == "/api/workspaces", method == "GET" {
-            return (200, json(page([
+            if usesRefreshRecoveryFixture && Self.shouldFailResourceRefreshListRequest() {
+                return (503, Data(#"{"error":{"code":"unavailable","message":"Synthetic resource list failure"}}"#.utf8))
+            }
+            var workspaces: [[String: Any]] = [
                 ["id": "w0000001", "name": "Ready Workspace", "revision": 7, "state": "ready"],
                 ["id": "w0000002", "name": "Syncing Workspace", "revision": 7, "state": "ready"],
                 ["id": "w0000003", "name": "Unbound Workspace", "revision": 1, "state": "syncing"],
-            ])))
+            ]
+            resourceFixtureLock.lock()
+            let shareClaimed = resourceFixtureWorkspaceShareClaimed
+            resourceFixtureLock.unlock()
+            if shareClaimed {
+                workspaces.append(["id": "w0000004", "name": "Ready Workspace copy", "revision": 7, "state": "ready",
+                                   "is_read_only": true])
+            }
+            if ProcessInfo.processInfo.arguments.contains(workspaceReadOnlyFixtureLaunchArgument) {
+                workspaces.append(["id": "w0000005", "name": "Read-only Workspace", "revision": 7,
+                                   "state": "ready", "is_read_only": true])
+            }
+            return (200, json(page(workspaces)))
         }
-        if path == "/api/workspaces/w0000001/manifest", method == "GET" {
+        if path == "/api/workspace-shares/preview", method == "POST", usesWorkspaceShareFixture {
+            guard let payload = jsonPayload(request),
+                  payload["token"] as? String == "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" else {
+                return (400, Data(#"{"error":{"code":"invalid_argument","message":"Invalid local Workspace share token"}}"#.utf8))
+            }
+            resourceFixtureLock.lock(); defer { resourceFixtureLock.unlock() }
+            guard !resourceFixtureWorkspaceShareClaimed else {
+                return (404, Data(#"{"error":{"code":"not_found","message":"Workspace share link not found"}}"#.utf8))
+            }
+            return (200, json(["workspace_name": "Ready Workspace", "permission": "view",
+                               "expires_at": workspaceShareFixtureExpiry]))
+        }
+        if path == "/api/workspace-shares/accept", method == "POST", usesWorkspaceShareFixture {
+            guard let payload = jsonPayload(request),
+                  payload["token"] as? String == "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" else {
+                return (400, Data(#"{"error":{"code":"invalid_argument","message":"Invalid local Workspace share token"}}"#.utf8))
+            }
+            resourceFixtureLock.lock(); defer { resourceFixtureLock.unlock() }
+            guard !resourceFixtureWorkspaceShareClaimed else {
+                return (404, Data(#"{"error":{"code":"not_found","message":"Workspace share link not found"}}"#.utf8))
+            }
+            resourceFixtureWorkspaceShareClaimed = true
+            return (200, json(["workspace_id": "w0000004", "workspace_name": "Ready Workspace copy",
+                               "permission": "view"]))
+        }
+        if path == "/api/workspaces/w0000001/shares", method == "POST", usesWorkspaceShareFixture {
+            guard let payload = jsonPayload(request), payload["expected_current_revision"] as? Int == 7,
+                  let permission = payload["permission"] as? String, ["view", "edit"].contains(permission) else {
+                return (400, Data(#"{"error":{"code":"invalid_argument","message":"Invalid local Workspace share request"}}"#.utf8))
+            }
+            return (201, json(["workspace_name": "Ready Workspace", "permission": permission,
+                               "token": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                               "expires_at": workspaceShareFixtureExpiry]))
+        }
+        if ["/api/workspaces/w0000001/manifest", "/api/workspaces/w0000004/manifest",
+            "/api/workspaces/w0000005/manifest"].contains(path), method == "GET" {
+            let workspaceID = path.contains("w0000004") ? "w0000004" :
+                (path.contains("w0000005") ? "w0000005" : "w0000001")
             let query = request.url.flatMap {
                 URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems
             } ?? []
@@ -1142,7 +1516,28 @@ private final class MordeAuthURLProtocol: URLProtocol {
                 return ["path": path, "size_bytes": data.count, "sha256": digest, "mode": 420,
                         "chunks": data.isEmpty ? [] : [["sha256": digest, "size_bytes": data.count]]]
             }
+            if ProcessInfo.processInfo.arguments.contains(workspaceInvalidManifestFixtureLaunchArgument) {
+                return (200, json(["workspace_id": workspaceID, "revision": 7,
+                                   "files": [file("../escape.md", content: "invalid path")],
+                                   "directories": [["path": "."]], "next_cursor": NSNull()]))
+            }
+            if ProcessInfo.processInfo.arguments.contains(workspacePathConflictFixtureLaunchArgument) {
+                return (200, json(["workspace_id": workspaceID, "revision": 7,
+                                   "files": [file("docs", content: "file conflicts with directory")],
+                                   "directories": [["path": "."], ["path": "docs/project"]],
+                                   "next_cursor": NSNull()]))
+            }
             let prefix = query.first(where: { $0.name == "prefix" })?.value
+            if ProcessInfo.processInfo.arguments.contains(workspaceManifestCursorLoopFixtureLaunchArgument) {
+                if query.first(where: { $0.name == "cursor" })?.value == nil {
+                    return (200, json(["workspace_id": workspaceID, "revision": 7,
+                                       "files": [file("README.md", content: "first page")],
+                                       "directories": [["path": "."]], "next_cursor": "page-2"]))
+                }
+                return (200, json(["workspace_id": workspaceID, "revision": 7,
+                                   "files": [file("second-page.md", content: "second page")],
+                                   "directories": [], "next_cursor": "page-2"]))
+            }
             let directories: [[String: Any]]
             let files: [[String: Any]]
             switch prefix {
@@ -1150,12 +1545,15 @@ private final class MordeAuthURLProtocol: URLProtocol {
                 directories = [["path": "."], ["path": "docs"]]
                 files = [file("README.md", content: "README\n")]
             case "docs":
-                directories = [["path": "docs"]]
+                directories = [["path": "docs"], ["path": "docs/empty"]]
                 files = [file("docs/guide.md", content: "guide\n")]
+            case "docs/empty":
+                directories = [["path": "docs/empty"]]
+                files = []
             default:
                 return (404, Data(#"{"error":{"code":"not_found","message":"Directory not found"}}"#.utf8))
             }
-            return (200, json(["workspace_id": "w0000001", "revision": 7, "files": files,
+            return (200, json(["workspace_id": workspaceID, "revision": 7, "files": files,
                                "directories": directories, "next_cursor": NSNull()]))
         }
         let parts = path.split(separator: "/").map(String.init)
@@ -1190,7 +1588,7 @@ private final class MordeAuthURLProtocol: URLProtocol {
 
     private static func workItemFixtureResponse(for request: URLRequest) -> (status: Int, body: Data)? {
         guard ProcessInfo.processInfo.arguments.contains(workItemFixtureLaunchArgument),
-              request.url?.host == "portal.120.25.178.93.sslip.io" else { return nil }
+              request.url?.host == "127.0.0.1" else { return nil }
         let path = request.url?.path ?? ""
         let method = request.httpMethod ?? "GET"
         func json(_ value: Any) -> Data { (try? JSONSerialization.data(withJSONObject: value)) ?? Data() }
@@ -1202,6 +1600,10 @@ private final class MordeAuthURLProtocol: URLProtocol {
             return (200, Data(#"{"id":"u0000001","name":"Local fixture user"}"#.utf8))
         }
         if path == "/api/projects", method == "GET" {
+            if ProcessInfo.processInfo.arguments.contains(workItemListFailureFixtureLaunchArgument),
+               Self.shouldFailWorkItemListRequest("projects") {
+                return (503, Data(#"{"error":{"code":"unavailable","message":"Synthetic project list failure"}}"#.utf8))
+            }
             return (200, json(page([
                 ["id": "j0000001", "owner_id": "u0000001", "name": "可编辑项目", "description": "", "version": 1],
                 ["id": "j0000002", "owner_id": "u0000002", "name": "只读项目", "description": "", "version": 1],
@@ -1223,6 +1625,11 @@ private final class MordeAuthURLProtocol: URLProtocol {
         if path == "/api/workspaces", method == "GET" {
             return (200, json(page([["id": "w0000001", "name": "本地工作区", "revision": 7, "state": "ready"]])))
         }
+        if path == "/api/tasks", method == "GET" {
+            return (200, json(page([["id": "q0000001", "conversation_id": "c0000001",
+                "objective": "本机工作项关联 Task", "status": "completed", "event_sequence": 1,
+                "updated_at": "2026-11-04T00:00:00Z"]])))
+        }
         if path == "/api/tasks/q0000001", method == "GET" {
             return (200, Data(#"{"id":"q0000001","conversation_id":"c0000001","host_id":null,"execution_location":"server","workspace_id":null,"input_revision":null,"objective":"本机工作项关联 Task","status":"completed","event_sequence":1,"result":"本机替身 Task","current_step":null,"waiting_reason":null,"stop_request":null,"pending_request":null,"clarification_request":null,"batch_items":null,"updated_at":"2026-11-04T00:00:00Z"}"#.utf8))
         }
@@ -1240,6 +1647,10 @@ private final class MordeAuthURLProtocol: URLProtocol {
         }
         if parts.count == 4, parts[3] == "resources", method == "GET" { return (200, json(page([]))) }
         if parts.count == 4, parts[3] == "conversations", method == "GET" {
+            if ProcessInfo.processInfo.arguments.contains(workItemListFailureFixtureLaunchArgument),
+               Self.shouldFailWorkItemListRequest("conversations") {
+                return (503, Data(#"{"error":{"code":"unavailable","message":"Synthetic project conversation list failure"}}"#.utf8))
+            }
             let values: [[String: Any]] = projectID == "j0000001"
                 ? [["id": "c0000001", "project_id": projectID, "owner_id": "u0000001",
                     "title": "本地项目会话", "model_id": NSNull(), "created_at": "2026-11-04T00:00:00Z",
@@ -1253,7 +1664,14 @@ private final class MordeAuthURLProtocol: URLProtocol {
                 "created_at": "2026-11-04T00:00:00Z", "owner_id": "u0000001", "actor_id": "u0000001"]
             return (200, json(page([message])))
         }
+        if parts.count == 6, parts[3] == "conversations", parts[5] == "tasks", method == "GET" {
+            return (200, json(page([])))
+        }
         if parts.count == 4, parts[3] == "work-items", method == "GET" {
+            if ProcessInfo.processInfo.arguments.contains(workItemListFailureFixtureLaunchArgument),
+               Self.shouldFailWorkItemListRequest("work-items") {
+                return (503, Data(#"{"error":{"code":"unavailable","message":"Synthetic work-item list failure"}}"#.utf8))
+            }
             let query = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems ?? []
             let cursor = query.first(where: { $0.name == "cursor" })?.value
             let includeUnassigned = query.contains { $0.name == "include_unassigned" && $0.value == "true" }
@@ -1341,51 +1759,85 @@ private final class MordeAuthURLProtocol: URLProtocol {
 
     override func startLoading() {
         Self.initializeWorkItemFixtureIfNeeded()
-        let isPortal = request.url?.host == "portal.120.25.178.93.sslip.io"
+        if ProcessInfo.processInfo.arguments.contains("-morde.localProjectQueueOffline"),
+           request.url?.host == "127.0.0.1", request.url?.path == "/api/capabilities",
+           request.httpMethod == "GET" {
+            client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
+            return
+        }
+        let isFixtureOrigin = request.url?.host == "127.0.0.1"
         let requestCursor = request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false) }?
             .queryItems?.first(where: { $0.name == "cursor" })?.value
-        let shouldDelayResponse = isPortal &&
+        let shouldDelayResponse = isFixtureOrigin &&
             ProcessInfo.processInfo.arguments.contains(Self.delayedAccountResponseFixtureLaunchArgument) &&
             Self.isAccountA(request) && request.httpMethod == "GET" &&
             request.url?.path == "/api/tasks" && requestCursor == "late-account-a-page"
-        let shouldDelayChatResponse = isPortal &&
+        let shouldDelayChatResponse = isFixtureOrigin &&
             ProcessInfo.processInfo.arguments.contains(Self.delayedAccountChatResponseFixtureLaunchArgument) &&
             Self.isAccountA(request) && request.httpMethod == "GET" &&
             request.url?.path == "/api/conversations/c0000003/messages"
+        let shouldDelayEventChainAccountAResponse = isFixtureOrigin &&
+            ProcessInfo.processInfo.arguments.contains(Self.eventChainAccountIsolationFixtureLaunchArgument) &&
+            Self.isAccountA(request) && request.httpMethod == "GET" &&
+            request.url?.path == "/api/tasks/q0000001/events"
+        let shouldDelayTaskDetailAccountAResponse = isFixtureOrigin &&
+            ProcessInfo.processInfo.arguments.contains(Self.eventChainAccountIsolationFixtureLaunchArgument) &&
+            ProcessInfo.processInfo.arguments.contains(Self.taskDetailLateDeliveryFixtureLaunchArgument) &&
+            Self.isAccountA(request) && request.httpMethod == "GET" &&
+            request.url?.path == "/api/tasks/q0000001"
+        let shouldDeliverTaskDetailResponseAfterCancellation = shouldDelayTaskDetailAccountAResponse
+        let shouldDeliverEventChainResponseAfterCancellation = shouldDelayEventChainAccountAResponse &&
+            ProcessInfo.processInfo.arguments.contains(Self.eventChainLateDeliveryFixtureLaunchArgument)
         var statusCode = 200
         var shouldLoseTaskPagesApprovalResponse = false
         var shouldLoseTaskPagesActionResponse = false
         var shouldDelayTaskPagesApprovalResponse = false
+        var shouldDelayTaskPagesClarificationResponse = false
+        var shouldDelayTaskDetailResponse = false
         var shouldDelayTaskPagesActionResponse = false
         var shouldDelayTaskTabLifecycleEvent = false
+        var shouldDelayFirstMessageResponse = false
         let workItemResponse = Self.workItemFixtureResponse(for: request)
         let resourceResponse = Self.resourceFixtureResponse(for: request)
         let body: Data
         var mediaResponseHeaders: [String: String] = [:]
-        if isPortal, request.url?.path == "/api/auth/client-login",
+        if isFixtureOrigin, request.url?.path == "/api/auth/client-login",
            ProcessInfo.processInfo.arguments.contains(Self.workItemFixtureLaunchArgument) {
             Self.resetWorkItemFixture()
         }
-        if isPortal, request.url?.path == "/api/auth/client-login",
+        if isFixtureOrigin, request.url?.path == "/api/auth/client-login",
            ProcessInfo.processInfo.arguments.contains(Self.mainChatFixtureLaunchArgument) {
             Self.resetMainChatFixture()
         }
-        if isPortal, request.url?.path == "/api/auth/client-login",
+        if isFixtureOrigin, request.url?.path == "/api/auth/client-login",
            ProcessInfo.processInfo.arguments.contains(Self.chatAttachmentFixtureLaunchArgument) {
             Self.resetChatAttachmentFixture()
         }
-        if isPortal, request.url?.path == "/api/auth/client-login",
+        if isFixtureOrigin, request.url?.path == "/api/auth/client-login",
+           ProcessInfo.processInfo.arguments.contains(Self.resourceRefreshRecoveryFixtureLaunchArgument) {
+            Self.resetResourceRefreshFixture()
+        }
+        if isFixtureOrigin, request.url?.path == "/api/auth/client-login",
            ProcessInfo.processInfo.arguments.contains("-morde.localExecutionFixture") {
             Self.resetExecutionFixture()
         }
-        let personalAttachmentDownloadResponse = isPortal ? Self.personalAttachmentDownloadFixtureResponse(for: request) : nil
-        let chatAttachmentResponse = isPortal ? Self.chatAttachmentFixtureResponse(for: request) : nil
-        let executionResponse = isPortal ? Self.executionFixtureResponse(for: request) : nil
+        let personalAttachmentDownloadResponse = isFixtureOrigin ? Self.personalAttachmentDownloadFixtureResponse(for: request) : nil
+        let shouldDelayAttachmentDownloadResponse = isFixtureOrigin &&
+            ProcessInfo.processInfo.arguments.contains(Self.chatAttachmentDownloadDelayFixtureLaunchArgument) &&
+            personalAttachmentDownloadResponse?.status == 200
+        let personalSyncUnavailableResponse = isFixtureOrigin && request.httpMethod == "GET" &&
+            request.url?.path == "/api/sync/snapshot" &&
+            ProcessInfo.processInfo.arguments.contains(Self.personalSyncUnavailableFixtureLaunchArgument)
+        let chatAttachmentResponse = isFixtureOrigin ? Self.chatAttachmentFixtureResponse(for: request) : nil
+        let executionResponse = isFixtureOrigin ? Self.executionFixtureResponse(for: request) : nil
         if executionResponse?.status == -1 {
             client?.urlProtocol(self, didFailWithError: URLError(.networkConnectionLost))
             return
         }
-        if let personalAttachmentDownloadResponse {
+        if personalSyncUnavailableResponse {
+            statusCode = 503
+            body = Data(#"{"error":{"code":"unavailable","message":"Synthetic personal sync is unavailable"}}"#.utf8)
+        } else if let personalAttachmentDownloadResponse {
             statusCode = personalAttachmentDownloadResponse.status
             body = personalAttachmentDownloadResponse.body
             mediaResponseHeaders = personalAttachmentDownloadResponse.headers
@@ -1401,9 +1853,9 @@ private final class MordeAuthURLProtocol: URLProtocol {
         } else if let workItemResponse {
             statusCode = workItemResponse.status
             body = workItemResponse.body
-        } else if isPortal, request.url?.path == "/api/auth/client-web-session", request.httpMethod == "POST" {
+        } else if isFixtureOrigin, request.url?.path == "/api/auth/client-web-session", request.httpMethod == "POST" {
             body = Data(#"{"web_session_credential":"chs_t1234567_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","web_session_expires_at":"2100-01-01T00:00:00Z"}"#.utf8)
-        } else if isPortal, request.url?.path == "/api/auth/register", request.httpMethod == "POST",
+        } else if isFixtureOrigin, request.url?.path == "/api/auth/register", request.httpMethod == "POST",
            request.value(forHTTPHeaderField: "Content-Type") == "application/json" {
             if ProcessInfo.processInfo.arguments.contains("-morde.localRegistrationBusyFixture") {
                 let attempt = Self.nextRegistrationFixtureRequest()
@@ -1420,14 +1872,15 @@ private final class MordeAuthURLProtocol: URLProtocol {
                 statusCode = 201
                 body = Data(#"{"user":{"id":"u_localtest1","status":"pending"}}"#.utf8)
             }
-        } else if isPortal, request.url?.path == "/api/capabilities", request.httpMethod == "GET" {
+        } else if isFixtureOrigin, request.url?.path == "/api/capabilities", request.httpMethod == "GET" {
             statusCode = 200
             if ProcessInfo.processInfo.arguments.contains(Self.hubFixtureLaunchArgument) {
                 body = Data(#"{"service_instance_id":"00000000-0000-0000-0000-000000000001","api_version":"1","hub_version":"1","supported_features":["password_login","client_installations","ordered_client_login","hub"]}"#.utf8)
             } else {
                 if ProcessInfo.processInfo.arguments.contains(Self.taskArtifactPreviewFixtureLaunchArgument) {
                     body = Data(#"{"service_instance_id":"00000000-0000-0000-0000-000000000001","api_version":"1","supported_features":["password_login","client_installations","ordered_client_login","task_api","cloud_tasks","workspace_sync"]}"#.utf8)
-                } else if ProcessInfo.processInfo.arguments.contains(Self.resourceAcceptanceFixtureLaunchArgument) {
+                } else if ProcessInfo.processInfo.arguments.contains(Self.resourceAcceptanceFixtureLaunchArgument) ||
+                            ProcessInfo.processInfo.arguments.contains(Self.resourceRefreshRecoveryFixtureLaunchArgument) {
                     body = Data(#"{"service_instance_id":"00000000-0000-0000-0000-000000000001","api_version":"1","supported_features":["password_login","client_installations","ordered_client_login","workspace_sync"]}"#.utf8)
                 } else if ProcessInfo.processInfo.arguments.contains(Self.taskMediaFixtureLaunchArgument) {
                     body = ProcessInfo.processInfo.arguments.contains(Self.taskMediaCapabilityDisabledFixtureLaunchArgument)
@@ -1437,17 +1890,17 @@ private final class MordeAuthURLProtocol: URLProtocol {
                           Self.taskPagesTaskActionServiceInstanceChangedSnapshot {
                     body = Data(#"{"service_instance_id":"00000000-0000-0000-0000-000000000002","api_version":"1","supported_features":["password_login","client_installations","ordered_client_login","task_api"]}"#.utf8)
                 } else if ProcessInfo.processInfo.arguments.contains(Self.mainChatFixtureLaunchArgument) {
-                    body = Data(#"{"service_instance_id":"00000000-0000-0000-0000-000000000001","api_version":"1","supported_features":["password_login","client_installations","ordered_client_login","task_api"]}"#.utf8)
+                    body = Data(#"{"service_instance_id":"00000000-0000-0000-0000-000000000001","api_version":"1","supported_features":["password_login","client_installations","ordered_client_login","task_api","conversation_auto_routing_v1"]}"#.utf8)
                 } else if ProcessInfo.processInfo.arguments.contains(Self.taskSSEFixtureLaunchArgument) ||
                             ProcessInfo.processInfo.arguments.contains(Self.taskPagesFixtureLaunchArgument) {
-                    body = Data(#"{"service_instance_id":"00000000-0000-0000-0000-000000000001","api_version":"1","supported_features":["password_login","client_installations","ordered_client_login","task_api"]}"#.utf8)
+                    body = Data(#"{"service_instance_id":"00000000-0000-0000-0000-000000000001","api_version":"1","supported_features":["password_login","client_installations","ordered_client_login","task_api","conversation_auto_routing_v1"]}"#.utf8)
                 } else if ProcessInfo.processInfo.arguments.contains(Self.accountIsolationFixtureLaunchArgument) {
                     body = Data(#"{"service_instance_id":"00000000-0000-0000-0000-000000000001","api_version":"1","supported_features":["password_login","client_installations","ordered_client_login","task_api"]}"#.utf8)
                 } else {
                     body = Data(#"{"service_instance_id":"00000000-0000-0000-0000-000000000001","api_version":"1","supported_features":["password_login","client_installations","ordered_client_login"]}"#.utf8)
                 }
             }
-        } else if isPortal, request.url?.path == "/api/workspaces/wabc1234/manifest",
+        } else if isFixtureOrigin, request.url?.path == "/api/workspaces/wabc1234/manifest",
                   request.httpMethod == "GET",
                   ProcessInfo.processInfo.arguments.contains(Self.taskArtifactPreviewFixtureLaunchArgument) {
             let revision = request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false) }?
@@ -1459,14 +1912,14 @@ private final class MordeAuthURLProtocol: URLProtocol {
                 statusCode = 404
                 body = Data(#"{"error":{"code":"not_found","message":"Local artifact manifest not found"}}"#.utf8)
             }
-        } else if isPortal, request.url?.path == "/api/tasks/q1234567/media/o1234567/preview",
+        } else if isFixtureOrigin, request.url?.path == "/api/tasks/q1234567/media/o1234567/preview",
                   request.httpMethod == "GET",
                   ProcessInfo.processInfo.arguments.contains(Self.taskMediaFixtureLaunchArgument) {
             statusCode = 200
             body = Self.taskMediaFixturePNG
             mediaResponseHeaders = ["Content-Type": "image/png", "Cache-Control": "private, no-store",
                                     "X-Content-Type-Options": "nosniff"]
-        } else if isPortal, request.url?.path == "/api/auth/client-login", request.httpMethod == "POST" {
+        } else if isFixtureOrigin, request.url?.path == "/api/auth/client-login", request.httpMethod == "POST" {
             if ProcessInfo.processInfo.arguments.contains(Self.approvedLaunchArgument) {
                 statusCode = 200
                 if ProcessInfo.processInfo.arguments.contains(Self.accountIsolationFixtureLaunchArgument) {
@@ -1511,10 +1964,10 @@ private final class MordeAuthURLProtocol: URLProtocol {
                 statusCode = 403
                 body = Data(#"{"error":{"code":"account_pending","message":"account is awaiting administrator review"}}"#.utf8)
             }
-        } else if isPortal, request.url?.path == "/api/auth/client-logout", request.httpMethod == "POST" {
+        } else if isFixtureOrigin, request.url?.path == "/api/auth/client-logout", request.httpMethod == "POST" {
             statusCode = 200
             body = Data("{}".utf8)
-        } else if isPortal, ProcessInfo.processInfo.arguments.contains(Self.hubFixtureLaunchArgument),
+        } else if isFixtureOrigin, ProcessInfo.processInfo.arguments.contains(Self.hubFixtureLaunchArgument),
                   ["/api/clients", "/api/devices"].contains(request.url?.path ?? ""), request.httpMethod == "GET" {
             statusCode = 200
             if request.url?.path == "/api/clients" {
@@ -1522,18 +1975,19 @@ private final class MordeAuthURLProtocol: URLProtocol {
             } else {
                 body = Data(#"{"items":[{"id":"i0000001","display_name":"This iPhone","platform":"ios","expires_at":"2100-01-01T00:00:00Z","revoked":false,"created_at":"2026-01-01T00:00:00Z","last_used_at":null,"online":true},{"id":"i7654321","display_name":"Local test device","platform":"desktop","expires_at":"2100-01-01T00:00:00Z","revoked":false,"created_at":"2026-01-01T00:00:00Z","last_used_at":null,"online":true},{"id":"i7654322","display_name":"Revoked local device","platform":"desktop","expires_at":"2100-01-01T00:00:00Z","revoked":true,"created_at":"2026-01-01T00:00:00Z","last_used_at":null,"online":true}]}"#.utf8)
             }
-        } else if isPortal, request.url?.path == "/api/me", request.httpMethod == "GET" {
+        } else if isFixtureOrigin, request.url?.path == "/api/me", request.httpMethod == "GET" {
             statusCode = 200
             if ProcessInfo.processInfo.arguments.contains(Self.accountIsolationFixtureLaunchArgument) {
                 body = Self.isAccountA(request)
                     ? Data(#"{"id":"u_accounta1","name":"account-a"}"#.utf8)
                     : Data(#"{"id":"u_accountb1","name":"account-b"}"#.utf8)
-            } else if ProcessInfo.processInfo.arguments.contains(Self.resourceAcceptanceFixtureLaunchArgument) {
+            } else if ProcessInfo.processInfo.arguments.contains(Self.resourceAcceptanceFixtureLaunchArgument) ||
+                        ProcessInfo.processInfo.arguments.contains(Self.resourceRefreshRecoveryFixtureLaunchArgument) {
                 body = Data(#"{"id":"u0000001","name":"Local resource user"}"#.utf8)
             } else {
                 body = Data(#"{"id":"u_localtest1","name":"morde-test-user"}"#.utf8)
             }
-        } else if isPortal, request.url?.path == "/api/me/preferences", request.httpMethod == "GET" {
+        } else if isFixtureOrigin, request.url?.path == "/api/me/preferences", request.httpMethod == "GET" {
             if ProcessInfo.processInfo.arguments.contains(Self.resourceDefaultHostPreferenceFailureFixtureLaunchArgument) {
                 statusCode = 503
                 body = Data(#"{"error":{"code":"unavailable","message":"Synthetic preference service unavailable"}}"#.utf8)
@@ -1541,7 +1995,7 @@ private final class MordeAuthURLProtocol: URLProtocol {
                 statusCode = 200
                 body = Data(#"{"assistant_name":"morde","selected_model_id":null,"default_host_id":null,"updated_at":null}"#.utf8)
             }
-        } else if isPortal, request.url?.path == "/api/model-connections", request.httpMethod == "GET" {
+        } else if isFixtureOrigin, request.url?.path == "/api/model-connections", request.httpMethod == "GET" {
             statusCode = 200
             let needsModelFixture = ProcessInfo.processInfo.arguments.contains(Self.mainChatFixtureLaunchArgument) ||
                 ProcessInfo.processInfo.arguments.contains(Self.noAdminModelFixtureLaunchArgument) ||
@@ -1553,7 +2007,7 @@ private final class MordeAuthURLProtocol: URLProtocol {
                 : needsModelFixture
                     ? Data(#"{"items":[{"id":"p1234567","shared":true,"checked_at":"2026-11-05T00:00:00Z"},{"id":"p3456789","shared":true,"checked_at":"2026-11-05T00:00:00Z"},{"id":"p2345678","shared":false,"checked_at":"2026-11-05T00:00:00Z"}]}"#.utf8)
                 : Data(#"{"items":[]}"#.utf8)
-        } else if isPortal, request.url?.path == "/api/personal-data/history/import", request.httpMethod == "POST",
+        } else if isFixtureOrigin, request.url?.path == "/api/personal-data/history/import", request.httpMethod == "POST",
                   ProcessInfo.processInfo.arguments.contains(Self.historyImportFixtureLaunchArgument) {
             let payload = Self.jsonPayload(request)
             let imported = payload?["messages"] as? [[String: Any]] ?? []
@@ -1583,13 +2037,76 @@ private final class MordeAuthURLProtocol: URLProtocol {
                 statusCode = 400
                 body = Data(#"{"error":{"code":"invalid_argument","message":"History fixture accepts only the selected user and assistant text"}}"#.utf8)
             }
-        } else if isPortal, request.url?.path.hasPrefix("/api/tasks/") == true,
+        } else if isFixtureOrigin, request.url?.path == "/api/tasks/q0000101/events", request.httpMethod == "GET",
+                  ProcessInfo.processInfo.arguments.contains(Self.taskPagesFixtureLaunchArgument),
+                  ProcessInfo.processInfo.arguments.contains(Self.taskPagesTimelineUnconfirmedFixtureLaunchArgument) {
+            statusCode = 200
+            body = Data()
+        } else if isFixtureOrigin, request.url?.path.hasPrefix("/api/tasks/") == true,
                   request.url?.path.hasSuffix("/events") == true, request.httpMethod == "GET",
                   ProcessInfo.processInfo.arguments.contains(Self.taskPagesFixtureLaunchArgument),
                   ProcessInfo.processInfo.arguments.contains(Self.taskPagesTimelinePermissionFixtureLaunchArgument) {
             statusCode = 403
             body = Data(#"{"error":{"code":"forbidden","message":"Local task access was revoked"}}"#.utf8)
-        } else if isPortal, request.url?.path == "/api/tasks/q0000101/events", request.httpMethod == "GET",
+        } else if isFixtureOrigin, request.url?.path == "/api/tasks/q0000101/events", request.httpMethod == "GET",
+                  ProcessInfo.processInfo.arguments.contains(Self.taskPagesFixtureLaunchArgument),
+                  ProcessInfo.processInfo.arguments.contains(Self.eventChainNetworkFailureFixtureLaunchArgument) {
+            statusCode = 503
+            body = Data(#"{"error":{"code":"unavailable","message":"Synthetic task event outage"}}"#.utf8)
+        } else if isFixtureOrigin, request.url?.path == "/api/tasks/q0000001/events", request.httpMethod == "GET",
+                  ProcessInfo.processInfo.arguments.contains(Self.eventChainAccountIsolationFixtureLaunchArgument) {
+            let after = request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false) }?.queryItems?
+                .first(where: { $0.name == "after" })?.value
+            if !Self.isAccountA(request), after == "2" {
+                statusCode = 204
+                body = Data()
+            } else {
+                statusCode = 200
+                let account = Self.isAccountA(request) ? "account-a" : "account-b"
+                let event = #"{"task_id":"q0000001","sequence":2,"type":"task.step","created_at":"2026-11-04T00:00:02Z","payload":{"kind":"agent","status":"succeeded","title":"\#(account)-private-event","summary":"Synthetic \#(account) task event."}}"#
+                body = Data("id: 2\nevent: task.step\ndata: \(event)\n\n".utf8)
+            }
+        } else if isFixtureOrigin, request.url?.path == "/api/tasks/q0000101/events", request.httpMethod == "GET",
+                  ProcessInfo.processInfo.arguments.contains(Self.taskPagesFixtureLaunchArgument),
+                  (ProcessInfo.processInfo.arguments.contains(Self.eventChainVisualFixtureLaunchArgument) ||
+                   ProcessInfo.processInfo.arguments.contains(Self.eventChainFailureFixtureLaunchArgument)) {
+            let after = request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false) }?.queryItems?
+                .first(where: { $0.name == "after" })?.value
+            if after == nil || after == "0" || after == "1" {
+                let samples: [(Int64, String, String, String)] = [
+                    (2, "Goal confirmed", "succeeded", "Task goal recorded."),
+                    (3, "Plan prepared", "succeeded", "Three steps defined."),
+                    (4, "Repository reviewed",
+                     ProcessInfo.processInfo.arguments.contains(Self.eventChainFailureFixtureLaunchArgument) ? "failed" : "succeeded",
+                     "Project files checked."),
+                    (5, "Changes written", "succeeded", "Three files updated."),
+                    (6, "Tests passed", "succeeded", "12 of 12 checks passed."),
+                    (7, "Approval needed", "waiting_user", "Waiting for your decision."),
+                    (8, "Rollout queued", "queued", "Will start after approval."),
+                ]
+                let frames = samples.map { sequence, title, status, summary -> String in
+                    let payload: [String: Any] = [
+                        "task_id": "q0000101",
+                        "sequence": sequence,
+                        "type": "task.step",
+                        "created_at": "2026-11-07T00:00:\(String(format: "%02d", sequence))Z",
+                        "payload": ["kind": "agent", "status": status, "title": title, "summary": summary],
+                    ]
+                    let json = (try? JSONSerialization.data(withJSONObject: payload)) ?? Data()
+                    return "id: \(sequence)\nevent: task.step\ndata: \(String(decoding: json, as: UTF8.self))\n\n"
+                }
+                statusCode = 200
+                body = Data(frames.joined().utf8)
+            } else {
+                statusCode = 204
+                body = Data()
+            }
+        } else if isFixtureOrigin, request.url?.path == "/api/tasks/q0000101/events", request.httpMethod == "GET",
+                  ProcessInfo.processInfo.arguments.contains(Self.taskPagesFixtureLaunchArgument),
+                  ProcessInfo.processInfo.arguments.contains(Self.taskPagesEventChainEmptyTimelineFixtureLaunchArgument) {
+            statusCode = 204
+            body = Data()
+        } else if isFixtureOrigin, request.url?.path == "/api/tasks/q0000101/events", request.httpMethod == "GET",
                   ProcessInfo.processInfo.arguments.contains(Self.taskPagesFixtureLaunchArgument),
                   (ProcessInfo.processInfo.arguments.contains(Self.taskPagesTimelineRecoveryFixtureLaunchArgument) ||
                    ProcessInfo.processInfo.arguments.contains(Self.taskPagesEventChainTimelineFixtureLaunchArgument)) {
@@ -1610,9 +2127,10 @@ private final class MordeAuthURLProtocol: URLProtocol {
                 statusCode = 200
                 body = Data("id: 8\nevent: task.snapshot_required\ndata: {\"sequence\":8}\n\n".utf8)
             }
-        } else if isPortal, request.url?.path.hasPrefix("/api/tasks/") == true,
+        } else if isFixtureOrigin, request.url?.path.hasPrefix("/api/tasks/") == true,
                   request.url?.path.hasSuffix("/events") == true, request.httpMethod == "GET",
-                  ProcessInfo.processInfo.arguments.contains(Self.taskPagesFixtureLaunchArgument) {
+                  (ProcessInfo.processInfo.arguments.contains(Self.taskPagesFixtureLaunchArgument) ||
+                   ProcessInfo.processInfo.arguments.contains(Self.taskPagesStatusFixtureLaunchArgument)) {
             let path = request.url?.path ?? ""
             let after = request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false) }?.queryItems?
                 .first(where: { $0.name == "after" })?.value.flatMap(Int64.init) ?? 0
@@ -1628,7 +2146,7 @@ private final class MordeAuthURLProtocol: URLProtocol {
                 statusCode = 204
                 body = Data()
             }
-        } else if isPortal, request.url?.path == "/api/tasks/q1234567/events", request.httpMethod == "GET",
+        } else if isFixtureOrigin, request.url?.path == "/api/tasks/q1234567/events", request.httpMethod == "GET",
                   (ProcessInfo.processInfo.arguments.contains(Self.taskSSEFixtureLaunchArgument) ||
                    ProcessInfo.processInfo.arguments.contains(Self.taskMediaFixtureLaunchArgument) ||
                    ProcessInfo.processInfo.arguments.contains(Self.taskTabLifecycleFixtureLaunchArgument)) {
@@ -1679,11 +2197,11 @@ private final class MordeAuthURLProtocol: URLProtocol {
                     }
                 }
             }
-        } else if isPortal, request.url?.path == "/api/tasks/q2345678/events", request.httpMethod == "GET",
+        } else if isFixtureOrigin, request.url?.path == "/api/tasks/q2345678/events", request.httpMethod == "GET",
                   ProcessInfo.processInfo.arguments.contains(Self.taskSequentialSendFixtureLaunchArgument) {
             statusCode = 204
             body = Data()
-        } else if isPortal, request.url?.path.hasPrefix("/api/tasks/") == true,
+        } else if isFixtureOrigin, request.url?.path.hasPrefix("/api/tasks/") == true,
                   request.url?.path.hasSuffix("/events") == true, request.httpMethod == "GET",
                   ProcessInfo.processInfo.arguments.contains(Self.accountIsolationFixtureLaunchArgument) {
             let isAccountA = Self.isAccountA(request)
@@ -1695,7 +2213,7 @@ private final class MordeAuthURLProtocol: URLProtocol {
                 statusCode = 403
                 body = Data(#"{"error":{"code":"forbidden","message":"Task belongs to another local fixture account"}}"#.utf8)
             }
-        } else if isPortal, request.url?.path == "/api/tasks/q0000001/actions",
+        } else if isFixtureOrigin, request.url?.path == "/api/tasks/q0000001/actions",
                   request.httpMethod == "POST",
                   (ProcessInfo.processInfo.arguments.contains(Self.taskPagesTaskActionDelayFixtureLaunchArgument) ||
                    ProcessInfo.processInfo.arguments.contains(Self.taskPagesTaskActionUnknownRetryFixtureLaunchArgument) ||
@@ -1710,7 +2228,7 @@ private final class MordeAuthURLProtocol: URLProtocol {
             body = response.body
             shouldLoseTaskPagesActionResponse = response.shouldLoseResponse
             shouldDelayTaskPagesActionResponse = response.shouldDelayResponse
-        } else if isPortal, request.url?.path == "/api/tasks/q0000101/approvals/r0000001/responses",
+        } else if isFixtureOrigin, request.url?.path == "/api/tasks/q0000101/approvals/r0000001/responses",
                   request.httpMethod == "POST",
                   ProcessInfo.processInfo.arguments.contains(Self.taskPagesApprovalDelayFixtureLaunchArgument) {
             let payload = Self.jsonPayload(request)
@@ -1726,7 +2244,7 @@ private final class MordeAuthURLProtocol: URLProtocol {
                 statusCode = 409
                 body = Data(#"{"error":{"code":"conflict","message":"Invalid local approval request"}}"#.utf8)
             }
-        } else if isPortal, request.url?.path == "/api/tasks/q0000101/approvals/r0000001/responses",
+        } else if isFixtureOrigin, request.url?.path == "/api/tasks/q0000101/approvals/r0000001/responses",
                   request.httpMethod == "POST",
                   ProcessInfo.processInfo.arguments.contains(Self.taskPagesApprovalRefreshPendingFixtureLaunchArgument) {
             let payload = Self.jsonPayload(request)
@@ -1739,7 +2257,7 @@ private final class MordeAuthURLProtocol: URLProtocol {
                 statusCode = 409
                 body = Data(#"{"error":{"code":"conflict","message":"Invalid local approval request"}}"#.utf8)
             }
-        } else if isPortal, request.url?.path == "/api/tasks/q0000101/approvals/r0000001/responses",
+        } else if isFixtureOrigin, request.url?.path == "/api/tasks/q0000101/approvals/r0000001/responses",
                   request.httpMethod == "POST",
                   (ProcessInfo.processInfo.arguments.contains(Self.taskPagesApprovalUnknownRetryFixtureLaunchArgument) ||
                    ProcessInfo.processInfo.arguments.contains(Self.taskPagesApprovalRetryWithoutCommitFixtureLaunchArgument)) {
@@ -1749,7 +2267,7 @@ private final class MordeAuthURLProtocol: URLProtocol {
             statusCode = response.status
             body = response.body
             shouldLoseTaskPagesApprovalResponse = response.shouldLoseResponse
-        } else if isPortal, request.url?.path == "/api/tasks/q0000101/approvals/r0000001/responses",
+        } else if isFixtureOrigin, request.url?.path == "/api/tasks/q0000101/approvals/r0000001/responses",
                   request.httpMethod == "POST",
                   ProcessInfo.processInfo.arguments.contains(Self.taskPagesFixtureLaunchArgument) {
             let payload = Self.jsonPayload(request)
@@ -1761,7 +2279,7 @@ private final class MordeAuthURLProtocol: URLProtocol {
                 statusCode = 202
                 body = Data(#"{"task_id":"q0000101","action":"approval_response","status":"completed","unsettled_operation_ids":[]}"#.utf8)
             }
-        } else if isPortal, request.url?.path == "/api/tasks/q0000102/inputs", request.httpMethod == "POST",
+        } else if isFixtureOrigin, request.url?.path == "/api/tasks/q0000102/inputs", request.httpMethod == "POST",
                   ProcessInfo.processInfo.arguments.contains(Self.taskPagesFixtureLaunchArgument) {
             // nanoMuse: Validate the local clarification fixture exactly like the task input contract.
             let payload = Self.jsonPayload(request)
@@ -1775,18 +2293,34 @@ private final class MordeAuthURLProtocol: URLProtocol {
                 Self.setTaskPagesClarificationAnswered()
                 statusCode = 202
                 body = Data(#"{"task_id":"q0000102","action":"clarification_response","status":"completed","unsettled_operation_ids":[]}"#.utf8)
+                shouldDelayTaskPagesClarificationResponse = ProcessInfo.processInfo.arguments.contains(
+                    Self.taskPagesClarificationDelayFixtureLaunchArgument)
             }
-        } else if isPortal, request.url?.path.hasPrefix("/api/tasks/") == true,
+        } else if isFixtureOrigin, request.url?.path == "/api/tasks/q0000102", request.httpMethod == "GET",
+                  ProcessInfo.processInfo.arguments.contains(Self.taskPagesTaskDetailReentryFixtureLaunchArgument) {
+            if Self.nextTaskPagesTaskDetailReentryRequest() == 1 {
+                statusCode = 403
+                body = Data(#"{"error":{"code":"forbidden","message":"Synthetic first detail request denied"}}"#.utf8)
+            } else if let task = Self.taskPagesDetail(id: "q0000102"),
+                      let encoded = try? JSONSerialization.data(withJSONObject: task) {
+                statusCode = 200
+                body = encoded
+            } else {
+                statusCode = 404
+                body = Data(#"{"error":{"code":"not_found","message":"Local Task fixture not found"}}"#.utf8)
+            }
+        } else if isFixtureOrigin, request.url?.path.hasPrefix("/api/tasks/") == true,
                   let taskID = request.url?.path.split(separator: "/").last.map(String.init),
                   request.url?.path == "/api/tasks/\(taskID)", request.httpMethod == "GET",
                   taskID == "q0000102",
                   ProcessInfo.processInfo.arguments.contains(Self.taskPagesApprovalPartialFixtureLaunchArgument) {
             statusCode = 403
             body = Data(#"{"error":{"code":"forbidden","message":"Local task detail access is unavailable"}}"#.utf8)
-        } else if isPortal, request.url?.path.hasPrefix("/api/tasks/") == true,
+        } else if isFixtureOrigin, request.url?.path.hasPrefix("/api/tasks/") == true,
                   let taskID = request.url?.path.split(separator: "/").last.map(String.init),
                   request.url?.path == "/api/tasks/\(taskID)", request.httpMethod == "GET",
-                  ProcessInfo.processInfo.arguments.contains(Self.taskPagesFixtureLaunchArgument) {
+                  (ProcessInfo.processInfo.arguments.contains(Self.taskPagesFixtureLaunchArgument) ||
+                   ProcessInfo.processInfo.arguments.contains(Self.taskPagesStatusFixtureLaunchArgument)) {
             if let task = Self.taskPagesDetail(id: taskID),
                let encoded = try? JSONSerialization.data(withJSONObject: task) {
                 statusCode = 200
@@ -1795,7 +2329,7 @@ private final class MordeAuthURLProtocol: URLProtocol {
                 statusCode = 404
                 body = Data(#"{"error":{"code":"not_found","message":"Local Task fixture not found"}}"#.utf8)
             }
-        } else if isPortal, ["/api/tasks/q1234567", "/api/tasks/q2345678"].contains(request.url?.path ?? ""), request.httpMethod == "GET",
+        } else if isFixtureOrigin, ["/api/tasks/q1234567", "/api/tasks/q2345678"].contains(request.url?.path ?? ""), request.httpMethod == "GET",
                   (ProcessInfo.processInfo.arguments.contains(Self.taskSSEFixtureLaunchArgument) ||
                    ProcessInfo.processInfo.arguments.contains(Self.taskMediaFixtureLaunchArgument) ||
                    ProcessInfo.processInfo.arguments.contains(Self.taskTabLifecycleFixtureLaunchArgument)) {
@@ -1844,7 +2378,7 @@ private final class MordeAuthURLProtocol: URLProtocol {
             } else {
                 body = Data(#"{"id":"q1234567","conversation_id":"c1234567","host_id":null,"execution_location":"server","workspace_id":null,"input_revision":null,"objective":"local SSE fixture","status":"running","event_sequence":1,"result":null,"current_step":null,"waiting_reason":null,"stop_request":null,"pending_request":null,"clarification_request":null,"batch_items":null,"updated_at":"2026-11-04T00:00:00Z"}"#.utf8)
             }
-        } else if isPortal, request.url?.path == "/api/tasks/q1234567/approvals/r1234567/responses",
+        } else if isFixtureOrigin, request.url?.path == "/api/tasks/q1234567/approvals/r1234567/responses",
                   request.httpMethod == "POST",
                   ProcessInfo.processInfo.arguments.contains(Self.taskMediaFixtureLaunchArgument) {
             let decision = request.value(forHTTPHeaderField: "X-Morde-Local-Task-Decision") ??
@@ -1852,68 +2386,147 @@ private final class MordeAuthURLProtocol: URLProtocol {
             Self.setTaskMediaFixtureDecision(decision)
             statusCode = 202
             body = Data(#"{"task_id":"q1234567","action":"approval_response","status":"waiting_user","unsettled_operation_ids":[]}"#.utf8)
-        } else if isPortal, request.url?.path == "/api/tasks/q1234567/approvals/r1234567/responses",
+        } else if isFixtureOrigin, request.url?.path == "/api/tasks/q1234567/approvals/r1234567/responses",
                   request.httpMethod == "POST",
                   ProcessInfo.processInfo.arguments.contains(Self.taskApprovalConflictFixtureLaunchArgument) {
             Self.markTaskApprovalConflictAction()
             statusCode = 409
             body = Data(#"{"error":{"code":"conflict","message":"Task state changed before approval"}}"#.utf8)
-        } else if isPortal, request.url?.path == "/api/conversations/c1234567/messages", request.httpMethod == "POST",
+        } else if isFixtureOrigin, request.url?.path == "/api/conversations/c1234567/messages/m0000001/retry-processing",
+                  request.httpMethod == "POST", ProcessInfo.processInfo.arguments.contains("-morde.localRoutingFailureFixture") {
+            if request.value(forHTTPHeaderField: "Idempotency-Key")?.isEmpty == false,
+               request.value(forHTTPHeaderField: "X-Morde-Service-Instance-ID")?.isEmpty == false,
+               request.value(forHTTPHeaderField: "X-Morde-Actor-ID")?.isEmpty == false {
+                Self.markTaskSequentialRetried()
+                statusCode = 202
+                body = Data()
+            } else {
+                statusCode = 400
+                body = Data(#"{"error":{"code":"invalid_argument","message":"Missing retry identity fence"}}"#.utf8)
+            }
+        } else if isFixtureOrigin, request.httpMethod == "GET",
+                  request.url?.path.hasPrefix("/api/conversations/") == true,
+                  request.url?.path.hasSuffix("/tasks") == true {
+            var items: [[String: Any]] = []
+            if request.url?.path == "/api/conversations/c1234567/tasks",
+               ProcessInfo.processInfo.arguments.contains(Self.taskSSEFixtureLaunchArgument) {
+                if ProcessInfo.processInfo.arguments.contains(Self.taskQueueFixtureLaunchArgument) {
+                    items = [Self.taskQueueFixtureTask()]
+                } else if ProcessInfo.processInfo.arguments.contains(Self.taskTabLifecycleFixtureLaunchArgument) {
+                    if Self.taskTabLifecycleTaskAcceptedSnapshot && !Self.taskTabLifecycleCompletedSnapshot {
+                        items = [Self.taskTabLifecycleTask()]
+                    }
+                } else if ProcessInfo.processInfo.arguments.contains(Self.taskSequentialSendFixtureLaunchArgument) {
+                    items = []
+                } else if ProcessInfo.processInfo.arguments.contains(Self.taskMediaFixtureLaunchArgument),
+                          let task = try? JSONSerialization.jsonObject(with: Self.taskMediaWaitingTask) as? [String: Any] {
+                    items = [task]
+                } else if !Self.didTaskFixtureSeeEvent {
+                    items = [["id": "q1234567", "conversation_id": "c1234567",
+                              "objective": "local SSE fixture", "status": "running", "event_sequence": 1,
+                              "updated_at": "2026-11-04T00:00:00Z"]]
+                }
+            }
+            statusCode = 200
+            body = (try? JSONSerialization.data(withJSONObject: ["items": items, "next_cursor": NSNull()])) ?? Data()
+        } else if isFixtureOrigin, request.url?.path == "/api/conversations/c1234567/messages", request.httpMethod == "POST",
                   ProcessInfo.processInfo.arguments.contains(Self.taskQueueFixtureLaunchArgument) {
             let payload = Self.jsonPayload(request)
             let content = payload?["content"] as? String ?? ""
-            let valid = payload?["expected_task_id"] as? String == "q1234567" &&
-                payload?["model_id"] as? String == "p1234567" &&
+            let clientID = payload?["client_message_id"] as? String ?? ""
+            let valid = payload?["reference_task_id"] as? String == "q1234567" &&
                 !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-                request.value(forHTTPHeaderField: "Idempotency-Key")?.isEmpty == false
+                payload?["mode"] == nil && payload?["expected_task_id"] == nil &&
+                !clientID.isEmpty && request.value(forHTTPHeaderField: "Idempotency-Key") == clientID
             if valid {
                 let message: [String: Any] = [
-                    "id": "m7654321", "conversation_id": "c1234567", "task_id": "q1234567",
+                    "id": "m7654321", "conversation_id": "c1234567",
                     "role": "user", "content": content, "status": NSNull(),
-                    "delivery_status": "pending", "created_at": "2026-11-06T00:00:00Z",
+                    "delivery_status": "pending", "client_message_id": clientID, "routing_status": "pending",
+                    "created_at": "2026-11-06T00:00:00Z",
                 ]
                 statusCode = 202
                 body = (try? JSONSerialization.data(withJSONObject: [
-                    "message": message, "task": Self.taskQueueFixtureTask(),
+                    "message": message, "replayed": false,
                 ])) ?? Data()
             } else {
                 statusCode = 400
-                body = Data(#"{"error":{"code":"bad_request","message":"Queue fixture requires the active Task ID, model, and an idempotency key"}}"#.utf8)
+                body = Data(#"{"error":{"code":"bad_request","message":"Queue fixture requires a task reference and a client message ID"}}"#.utf8)
             }
-        } else if isPortal, request.url?.path == "/api/conversations/c1234567/messages", request.httpMethod == "POST",
+        } else if isFixtureOrigin, request.url?.path == "/api/conversations/c1234567/messages", request.httpMethod == "POST",
                   ProcessInfo.processInfo.arguments.contains(Self.taskTabLifecycleFixtureLaunchArgument) {
             let payload = Self.jsonPayload(request)
-            let objective = (payload?["content"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            if objective.isEmpty || request.value(forHTTPHeaderField: "Idempotency-Key")?.isEmpty != false {
+            let objective = payload?["content"] as? String ?? ""
+            let clientID = payload?["client_message_id"] as? String ?? ""
+            if objective.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || clientID.isEmpty ||
+                request.value(forHTTPHeaderField: "Idempotency-Key") != clientID ||
+                payload?["mode"] != nil || payload?["expected_task_id"] != nil {
                 statusCode = 400
-                body = Data(#"{"error":{"code":"bad_request","message":"Lifecycle fixture expected content and Idempotency-Key"}}"#.utf8)
+                body = Data(#"{"error":{"code":"bad_request","message":"Lifecycle fixture expected a message and matching client ID"}}"#.utf8)
             } else {
                 Self.markTaskTabLifecycleAccepted()
                 let message: [String: Any] = [
-                    "id": "m1234567", "conversation_id": "c1234567", "task_id": "q1234567",
-                    "role": "user", "content": objective, "status": "completed",
-                    "delivery_status": NSNull(), "created_at": "2026-11-05T00:00:00Z",
+                    "id": "m1234567", "conversation_id": "c1234567", "client_message_id": clientID,
+                    "role": "user", "content": objective, "routing_status": "pending",
+                    "delivery_status": "pending", "created_at": "2026-11-05T00:00:00Z",
                 ]
-                statusCode = 200
+                statusCode = 202
                 body = (try? JSONSerialization.data(withJSONObject: [
-                    "message": message, "task": Self.taskTabLifecycleTask(),
+                    "message": message, "replayed": false,
                 ])) ?? Data()
             }
-        } else if isPortal, request.url?.path == "/api/conversations/c1234567/messages", request.httpMethod == "POST",
+        } else if isFixtureOrigin, request.url?.path == "/api/conversations/c1234567/messages", request.httpMethod == "POST",
                   ProcessInfo.processInfo.arguments.contains(Self.taskSequentialSendFixtureLaunchArgument) {
-            let content = request.value(forHTTPHeaderField: "X-Morde-Local-Task-Prompt") ?? ""
-            let index = Self.recordTaskSequentialSend(content)
-            if index <= 2 {
-                let content = Self.taskSequentialSendContentsSnapshot[index - 1]
-                let message = Self.taskSequentialMessage(index, content: content, role: "user")
-                let task = Self.taskSequentialTask(index, content: content)
-                statusCode = 200
-                body = (try? JSONSerialization.data(withJSONObject: ["message": message, "task": task])) ?? Data()
+            let content = request.value(forHTTPHeaderField: "X-Morde-Local-Task-Prompt-Base64")
+                .flatMap { Data(base64Encoded: $0) }.flatMap { String(data: $0, encoding: .utf8) } ?? ""
+            let clientID = request.value(forHTTPHeaderField: "X-Morde-Local-Client-Message-ID") ?? ""
+            let validTarget = !content.isEmpty && !clientID.isEmpty &&
+                request.value(forHTTPHeaderField: "Idempotency-Key") == clientID
+            let independentFixture = ProcessInfo.processInfo.arguments.contains("-morde.localIndependentSendFixture")
+            let uncertainFixture = ProcessInfo.processInfo.arguments.contains("-morde.localUncertainReconcileFixture")
+            let previous = request.value(forHTTPHeaderField: "X-Morde-Local-Previous-Client-Message-ID") ?? ""
+            if uncertainFixture && content == "Synthetic ambiguous message" {
+                statusCode = 503
+                body = Data(#"{"error":{"code":"unavailable","message":"Synthetic submission outcome unknown"}}"#.utf8)
+            } else if independentFixture && content == "Synthetic rejected message" {
+                statusCode = 422
+                body = Data(#"{"error":{"code":"invalid_argument","message":"Synthetic permanent rejection"}}"#.utf8)
+            } else if independentFixture && previous != (Self.taskSequentialSendKeysSnapshot.last ?? "") {
+                statusCode = 400
+                body = Data(#"{"error":{"code":"invalid_argument","message":"Incorrect local predecessor"}}"#.utf8)
+            } else if validTarget {
+                let index = Self.recordTaskSequentialSend(content, key: clientID)
+                if index <= 2 {
+                    let content = Self.taskSequentialSendContentsSnapshot[index - 1]
+                    var message = Self.taskSequentialMessage(index, content: content, role: "user")
+                    message.removeValue(forKey: "task_id")
+                    message.removeValue(forKey: "status")
+                    message["delivery_status"] = "pending"
+                    message["routing_status"] = "pending"
+                    statusCode = 202
+                    body = (try? JSONSerialization.data(withJSONObject: ["message": message, "replayed": false])) ?? Data()
+                    shouldDelayFirstMessageResponse = index == 1 &&
+                        ProcessInfo.processInfo.arguments.contains("-morde.localDelayFirstMessageResponse")
+                } else {
+                    statusCode = 409
+                    body = Data(#"{"error":{"code":"conflict","message":"Sequential fixture accepts two sends"}}"#.utf8)
+                }
             } else {
                 statusCode = 409
                 body = Data(#"{"error":{"code":"conflict","message":"Sequential fixture accepts two sends"}}"#.utf8)
             }
-        } else if isPortal, request.httpMethod == "GET",
+        } else if isFixtureOrigin, request.httpMethod == "GET",
+                  ProcessInfo.processInfo.arguments.contains(Self.eventChainAccountIsolationFixtureLaunchArgument),
+                  ["/api/tasks", "/api/tasks/q0000001"].contains(request.url?.path ?? "") {
+            let task = Self.eventChainAccountIsolationTask(isAccountA: Self.isAccountA(request))
+            statusCode = 200
+            if request.url?.path == "/api/tasks/q0000001" {
+                body = (try? JSONSerialization.data(withJSONObject: task)) ?? Data()
+                shouldDelayTaskDetailResponse = shouldDelayTaskDetailAccountAResponse
+            } else {
+                body = (try? JSONSerialization.data(withJSONObject: ["items": [task], "next_cursor": NSNull()])) ?? Data()
+            }
+        } else if isFixtureOrigin, request.httpMethod == "GET",
                   ProcessInfo.processInfo.arguments.contains(Self.accountIsolationFixtureLaunchArgument),
                   ["/api/tasks", "/api/tasks/q0000001", "/api/tasks/q0000002"].contains(request.url?.path ?? "") {
             let isAccountA = Self.isAccountA(request)
@@ -1942,21 +2555,21 @@ private final class MordeAuthURLProtocol: URLProtocol {
                 statusCode = 403
                 body = Data(#"{"error":{"code":"forbidden","message":"Task belongs to another local fixture account"}}"#.utf8)
             }
-        } else if isPortal, request.url?.path == "/api/me/main-conversation/ensure", request.httpMethod == "POST",
+        } else if isFixtureOrigin, request.url?.path == "/api/me/main-conversation/ensure", request.httpMethod == "POST",
                   ProcessInfo.processInfo.arguments.contains(Self.mainChatFixtureLaunchArgument) {
             Self.ensureMainChatFixture()
             statusCode = 200
             body = Data(#"{"status":"ready","conversation_id":"c1234567","version":1}"#.utf8)
-        } else if isPortal, request.url?.path == "/api/me/main-conversation", request.httpMethod == "GET" {
+        } else if isFixtureOrigin, request.url?.path == "/api/me/main-conversation", request.httpMethod == "GET" {
             statusCode = 200
-            if ProcessInfo.processInfo.arguments.contains(Self.mainChatFixtureLaunchArgument) {
-                body = Self.mainChatFixtureIsEnsured
-                    ? Data(#"{"status":"ready","conversation_id":"c1234567","version":1}"#.utf8)
-                    : Data(#"{"status":"uninitialized","conversation_id":"","version":0}"#.utf8)
-            } else if ProcessInfo.processInfo.arguments.contains(Self.accountIsolationFixtureLaunchArgument) {
+            if ProcessInfo.processInfo.arguments.contains(Self.accountIsolationFixtureLaunchArgument) {
                 body = Self.isAccountA(request)
                     ? Data(#"{"status":"ready","conversation_id":"c0000001","version":1}"#.utf8)
                     : Data(#"{"status":"ready","conversation_id":"c0000002","version":1}"#.utf8)
+            } else if ProcessInfo.processInfo.arguments.contains(Self.mainChatFixtureLaunchArgument) {
+                body = Self.mainChatFixtureIsEnsured
+                    ? Data(#"{"status":"ready","conversation_id":"c1234567","version":1}"#.utf8)
+                    : Data(#"{"status":"uninitialized","conversation_id":"","version":0}"#.utf8)
             } else {
                 body = ProcessInfo.processInfo.arguments.contains(Self.taskSSEFixtureLaunchArgument) ||
                     ProcessInfo.processInfo.arguments.contains(Self.taskPagesFixtureLaunchArgument) ||
@@ -1964,18 +2577,25 @@ private final class MordeAuthURLProtocol: URLProtocol {
                     ? Data(#"{"status":"ready","conversation_id":"c1234567","version":1}"#.utf8)
                     : Data(#"{"status":"uninitialized","conversation_id":"","version":0}"#.utf8)
             }
-        } else if isPortal, request.url?.path == "/api/conversations", request.httpMethod == "POST",
+        } else if isFixtureOrigin, request.url?.path == "/api/conversations", request.httpMethod == "POST",
                   ProcessInfo.processInfo.arguments.contains(Self.taskPagesFixtureLaunchArgument) {
-            Self.setTaskPagesCreatedConversation()
-            statusCode = 201
-            body = Data(#"{"id":"c4567890","host_id":null,"title":"新对话","is_main":false}"#.utf8)
-        } else if isPortal, request.url?.path == "/api/conversations", request.httpMethod == "GET",
+            if request.value(forHTTPHeaderField: "Idempotency-Key")?.hasPrefix("local-") == true,
+               request.value(forHTTPHeaderField: "X-Morde-Service-Instance-ID")?.isEmpty == false,
+               request.value(forHTTPHeaderField: "X-Morde-Actor-ID")?.isEmpty == false {
+                Self.setTaskPagesCreatedConversation()
+                statusCode = 201
+                body = Data(#"{"id":"c4567890","host_id":null,"title":"新对话","is_main":false}"#.utf8)
+            } else {
+                statusCode = 400
+                body = Data(#"{"error":{"code":"invalid_argument","message":"Missing creation identity fence"}}"#.utf8)
+            }
+        } else if isFixtureOrigin, request.url?.path == "/api/conversations", request.httpMethod == "GET",
                   ProcessInfo.processInfo.arguments.contains(Self.accountIsolationFixtureLaunchArgument) {
             statusCode = 200
             body = Self.isAccountA(request)
                 ? Data(#"{"items":[{"id":"c0000001","host_id":null,"title":"Account A conversation","is_main":true},{"id":"c0000003","host_id":null,"title":"Account A delayed chat","is_main":false}],"next_cursor":null}"#.utf8)
                 : Data(#"{"items":[{"id":"c0000002","host_id":null,"title":"Account B conversation","is_main":true}],"next_cursor":null}"#.utf8)
-        } else if isPortal, request.httpMethod == "GET",
+        } else if isFixtureOrigin, request.httpMethod == "GET",
                   ["/api/conversations/c0000001/messages", "/api/conversations/c0000002/messages",
                    "/api/conversations/c0000003/messages"].contains(request.url?.path ?? ""),
                   ProcessInfo.processInfo.arguments.contains(Self.accountIsolationFixtureLaunchArgument) {
@@ -1992,7 +2612,7 @@ private final class MordeAuthURLProtocol: URLProtocol {
                 statusCode = 403
                 body = Data(#"{"error":{"code":"forbidden","message":"Conversation belongs to another local fixture account"}}"#.utf8)
             }
-        } else if isPortal, request.httpMethod == "GET",
+        } else if isFixtureOrigin, request.httpMethod == "GET",
                   ["/api/conversations/c1234567/messages", "/api/conversations/c2345678/messages"].contains(request.url?.path ?? ""),
                   ProcessInfo.processInfo.arguments.contains(Self.mainChatFixtureLaunchArgument) {
             let conversationID = request.url?.path == "/api/conversations/c1234567/messages" ? "c1234567" : "c2345678"
@@ -2019,32 +2639,51 @@ private final class MordeAuthURLProtocol: URLProtocol {
                     statusCode = 400
                     body = Data(#"{"error":{"code":"bad_request","message":"Unexpected local history cursor"}}"#.utf8)
                 }
+            } else if conversationID == "c1234567",
+                      ProcessInfo.processInfo.arguments.contains(Self.chatVisualFixtureLaunchArgument) {
+                statusCode = 200
+                body = (try? JSONSerialization.data(withJSONObject: [
+                    "items": Self.chatVisualFixtureMessages(), "next_cursor": NSNull(),
+                ])) ?? Data()
             } else {
                 statusCode = 200
                 let content = conversationID == "c1234567" ? "Main chat is ready." : "Side conversation is sidebar-only."
                 body = Data("{\"items\":[{\"id\":\"m1234567\",\"conversation_id\":\"\(conversationID)\",\"task_id\":null,\"role\":\"assistant\",\"content\":\"\(content)\",\"status\":\"completed\",\"delivery_status\":null,\"created_at\":\"2026-11-05T00:00:00Z\"}],\"next_cursor\":null}".utf8)
             }
-        } else if isPortal, request.url?.path == "/api/conversations/c1234567/messages", request.httpMethod == "GET",
+        } else if isFixtureOrigin, request.url?.path == "/api/conversations/c1234567/messages", request.httpMethod == "GET",
                   ProcessInfo.processInfo.arguments.contains(Self.conversationFailureFixtureLaunchArgument) {
             statusCode = 503
             body = Data(#"{"error":{"code":"unavailable","message":"Local conversation fixture failure"}}"#.utf8)
-        } else if isPortal, request.url?.path == "/api/conversations/c1234567/messages", request.httpMethod == "GET",
+        } else if isFixtureOrigin, request.url?.path == "/api/conversations/c1234567/messages", request.httpMethod == "GET",
+                  ProcessInfo.processInfo.arguments.contains("-morde.localUncertainReconcileFixture"),
+                  request.url.flatMap({ URLComponents(url: $0, resolvingAgainstBaseURL: false) })?.queryItems?
+                    .contains(where: { $0.name == "client_message_id" }) == true {
+            statusCode = 404
+            body = Data(#"{"error":{"code":"not_found","message":"Synthetic lookup failure"}}"#.utf8)
+        } else if isFixtureOrigin, request.url?.path == "/api/conversations/c1234567/messages", request.httpMethod == "GET",
                   (ProcessInfo.processInfo.arguments.contains(Self.taskSSEFixtureLaunchArgument) ||
                    ProcessInfo.processInfo.arguments.contains(Self.taskPagesFixtureLaunchArgument)) {
             statusCode = 200
             if ProcessInfo.processInfo.arguments.contains(Self.taskSequentialSendFixtureLaunchArgument) {
                 let contents = Self.taskSequentialSendContentsSnapshot
+                let clientID = request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false) }?
+                    .queryItems?.first(where: { $0.name == "client_message_id" })?.value
                 var messages: [[String: Any]] = []
                 for (offset, content) in contents.enumerated() {
                     let index = offset + 1
-                    messages.append(Self.taskSequentialMessage(index, content: content, role: "user"))
-                    messages.append(Self.taskSequentialMessage(index, content: "Local sequential reply \(index)", role: "assistant"))
+                    let message = Self.taskSequentialMessage(index, content: content, role: "user")
+                    if clientID == nil || message["client_message_id"] as? String == clientID {
+                        messages.append(message)
+                        if clientID == nil {
+                            messages.append(Self.taskSequentialMessage(index, content: "Local sequential reply \(index)", role: "assistant"))
+                        }
+                    }
                 }
                 body = (try? JSONSerialization.data(withJSONObject: ["items": messages, "next_cursor": NSNull()])) ?? Data()
             } else {
                 body = Data(#"{"items":[],"next_cursor":null}"#.utf8)
             }
-        } else if isPortal, request.httpMethod == "GET",
+        } else if isFixtureOrigin, request.httpMethod == "GET",
                   ["/api/conversations/c2345678/messages", "/api/conversations/c3456789/messages",
                    "/api/conversations/c4567890/messages"].contains(request.url?.path ?? ""),
                   ProcessInfo.processInfo.arguments.contains(Self.taskPagesFixtureLaunchArgument) {
@@ -2052,13 +2691,13 @@ private final class MordeAuthURLProtocol: URLProtocol {
             body = request.url?.path == "/api/conversations/c2345678/messages"
                 ? Data(#"{"items":[{"id":"m2345678","conversation_id":"c2345678","task_id":null,"role":"assistant","content":"First page chat","status":"completed","delivery_status":null,"created_at":"2026-11-04T00:00:00Z"}],"next_cursor":null}"#.utf8)
                 : Data(#"{"items":[],"next_cursor":null}"#.utf8)
-        } else if isPortal, request.url?.path == "/api/conversations", request.httpMethod == "GET",
+        } else if isFixtureOrigin, request.url?.path == "/api/conversations", request.httpMethod == "GET",
                   ProcessInfo.processInfo.arguments.contains(Self.mainChatFixtureLaunchArgument),
                   // nanoMuse: The paged drawer fixture must take precedence when both fixtures are enabled.
                   !ProcessInfo.processInfo.arguments.contains(Self.taskPagesFixtureLaunchArgument) {
             statusCode = 200
             body = Data(#"{"items":[{"id":"c1234567","host_id":null,"title":"主会话","is_main":true},{"id":"c2345678","host_id":null,"title":"侧边栏历史会话","is_main":false}],"next_cursor":null}"#.utf8)
-        } else if isPortal, request.url?.path == "/api/conversations", request.httpMethod == "GET",
+        } else if isFixtureOrigin, request.url?.path == "/api/conversations", request.httpMethod == "GET",
                   (ProcessInfo.processInfo.arguments.contains(Self.taskSSEFixtureLaunchArgument) ||
                    ProcessInfo.processInfo.arguments.contains(Self.taskPagesFixtureLaunchArgument)) {
             if ProcessInfo.processInfo.arguments.contains(Self.conversationDrawerRetryFixtureLaunchArgument) &&
@@ -2078,7 +2717,25 @@ private final class MordeAuthURLProtocol: URLProtocol {
                 statusCode = 200
                 body = Data(#"{"items":[{"id":"c1234567","host_id":null,"title":"Local SSE fixture","is_main":true}],"next_cursor":null}"#.utf8)
             }
-        } else if isPortal, request.url?.path == "/api/tasks", request.httpMethod == "GET",
+        } else if isFixtureOrigin, request.url?.path == "/api/tasks", request.httpMethod == "GET",
+                  ProcessInfo.processInfo.arguments.contains(Self.taskPagesPermissionRecoveryFixtureLaunchArgument) {
+            let cursor = request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false) }?
+                .queryItems?.first(where: { $0.name == "cursor" })?.value
+            if cursor == "permission-page-2", Self.consumeTaskPagesPermissionFailure() {
+                statusCode = 403
+                body = Data(#"{"error":{"code":"forbidden","message":"Local task list access was revoked"}}"#.utf8)
+            } else {
+                statusCode = 200
+                let items = (1...24).map { index in
+                    Self.taskPagesSummary(id: String(format: "q%07d", index),
+                                          status: index == 1 ? "running" : "completed",
+                                          objective: index == 1 ? "Permission scoped local task" : "Local task \(index)")
+                }
+                let nextCursor: Any = cursor == nil && !Self.didFailTaskPagesPermissionRecovery
+                    ? "permission-page-2" : NSNull()
+                body = (try? JSONSerialization.data(withJSONObject: ["items": items, "next_cursor": nextCursor])) ?? Data()
+            }
+        } else if isFixtureOrigin, request.url?.path == "/api/tasks", request.httpMethod == "GET",
                   ProcessInfo.processInfo.arguments.contains(Self.taskPagesRetryFixtureLaunchArgument) {
             let status = request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false) }?
                 .queryItems?.first(where: { $0.name == "status" })?.value
@@ -2092,7 +2749,28 @@ private final class MordeAuthURLProtocol: URLProtocol {
                 statusCode = 200
                 body = Data(#"{"items":[],"next_cursor":null}"#.utf8)
             }
-        } else if isPortal, request.url?.path == "/api/tasks", request.httpMethod == "GET",
+        } else if isFixtureOrigin, request.url?.path == "/api/tasks", request.httpMethod == "GET",
+                  ProcessInfo.processInfo.arguments.contains(Self.taskPagesStepCountsFixtureLaunchArgument) {
+            var item = Self.taskPagesSummary(id: "q0000001", status: "running", objective: "Local task with step counts")
+            item["step_count"] = 5
+            item["completed_step_count"] = 2
+            statusCode = 200
+            body = (try? JSONSerialization.data(withJSONObject: ["items": [item], "next_cursor": NSNull()])) ?? Data()
+        } else if isFixtureOrigin, request.url?.path == "/api/tasks", request.httpMethod == "GET",
+                  ProcessInfo.processInfo.arguments.contains(Self.taskPagesStatusFixtureLaunchArgument) {
+            let items = [
+                Self.taskPagesSummary(id: "q0000001", status: "queued", objective: "Queued task fixture"),
+                Self.taskPagesSummary(id: "q0000002", status: "running", objective: "Running task fixture"),
+                Self.taskPagesSummary(id: "q0000003", status: "waiting_user", objective: "Waiting task fixture"),
+                Self.taskPagesSummary(id: "q0000004", status: "paused", objective: "Paused task fixture"),
+                Self.taskPagesSummary(id: "q0000005", status: "completed", objective: "Completed task fixture"),
+                Self.taskPagesSummary(id: "q0000006", status: "failed", objective: "Failed task fixture"),
+                Self.taskPagesSummary(id: "q0000007", status: "cancelled", objective: "Cancelled task fixture"),
+                Self.taskPagesSummary(id: "q0000008", status: "future_status", objective: "Unknown task fixture"),
+            ]
+            statusCode = 200
+            body = (try? JSONSerialization.data(withJSONObject: ["items": items, "next_cursor": NSNull()])) ?? Data()
+        } else if isFixtureOrigin, request.url?.path == "/api/tasks", request.httpMethod == "GET",
                   ProcessInfo.processInfo.arguments.contains(Self.taskPagesEmptyIntermediateFixtureLaunchArgument) {
             let query = request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false) }?.queryItems ?? []
             let cursor = query.first(where: { $0.name == "cursor" })?.value
@@ -2103,11 +2781,11 @@ private final class MordeAuthURLProtocol: URLProtocol {
             let nextCursor: Any = status == nil && cursor == nil ? "empty-page-2" : NSNull()
             statusCode = 200
             body = (try? JSONSerialization.data(withJSONObject: ["items": items, "next_cursor": nextCursor])) ?? Data()
-        } else if isPortal, request.url?.path == "/api/tasks", request.httpMethod == "GET",
+        } else if isFixtureOrigin, request.url?.path == "/api/tasks", request.httpMethod == "GET",
                   ProcessInfo.processInfo.arguments.contains(Self.taskPagesEmptyFixtureLaunchArgument) {
             statusCode = 200
             body = Data(#"{"items":[],"next_cursor":null}"#.utf8)
-        } else if isPortal, request.url?.path == "/api/tasks", request.httpMethod == "GET",
+        } else if isFixtureOrigin, request.url?.path == "/api/tasks", request.httpMethod == "GET",
                   ProcessInfo.processInfo.arguments.contains(Self.taskPagesTaskDetailRequestsFixtureLaunchArgument) {
             let items = [
                 Self.taskPagesSummary(id: "q0000101", status: "waiting_user", objective: "Local approval fixture"),
@@ -2115,7 +2793,19 @@ private final class MordeAuthURLProtocol: URLProtocol {
             ]
             statusCode = 200
             body = (try? JSONSerialization.data(withJSONObject: ["items": items, "next_cursor": NSNull()])) ?? Data()
-        } else if isPortal, request.url?.path == "/api/tasks", request.httpMethod == "GET",
+        } else if isFixtureOrigin, request.url?.path == "/api/tasks", request.httpMethod == "GET",
+                  ProcessInfo.processInfo.arguments.contains(Self.taskPagesFixtureLaunchArgument),
+                  ProcessInfo.processInfo.arguments.contains(Self.taskPagesApprovalLoadFailureFixtureLaunchArgument),
+                  request.url.flatMap({ URLComponents(url: $0, resolvingAgainstBaseURL: false) })?.queryItems?
+                    .contains(where: { $0.name == "status" && $0.value == "waiting_user" }) == true {
+            if Self.nextTaskPagesApprovalLoadFailureRequest() == 1 {
+                statusCode = 503
+                body = Data(#"{"error":{"code":"unavailable","message":"Synthetic approval list failure"}}"#.utf8)
+            } else {
+                statusCode = 200
+                body = Data(#"{"items":[],"next_cursor":null}"#.utf8)
+            }
+        } else if isFixtureOrigin, request.url?.path == "/api/tasks", request.httpMethod == "GET",
                   ProcessInfo.processInfo.arguments.contains(Self.taskPagesFixtureLaunchArgument) {
             let query = request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false) }?.queryItems ?? []
             let status = query.first(where: { $0.name == "status" })?.value
@@ -2164,7 +2854,7 @@ private final class MordeAuthURLProtocol: URLProtocol {
             }
             statusCode = 200
             body = (try? JSONSerialization.data(withJSONObject: ["items": items, "next_cursor": nextCursor])) ?? Data()
-        } else if isPortal, request.url?.path == "/api/tasks", request.httpMethod == "GET",
+        } else if isFixtureOrigin, request.url?.path == "/api/tasks", request.httpMethod == "GET",
                   ProcessInfo.processInfo.arguments.contains(Self.taskSSEFixtureLaunchArgument) {
             statusCode = 200
             if ProcessInfo.processInfo.arguments.contains(Self.taskQueueFixtureLaunchArgument) {
@@ -2187,21 +2877,21 @@ private final class MordeAuthURLProtocol: URLProtocol {
             } else {
                 body = Data(#"{"items":[{"id":"q1234567","conversation_id":"c1234567","host_id":null,"execution_location":"server","workspace_id":null,"input_revision":null,"objective":"local SSE fixture","status":"running","event_sequence":1,"result":null,"current_step":null,"waiting_reason":null,"stop_request":null,"pending_request":null,"clarification_request":null,"batch_items":null,"updated_at":"2026-11-04T00:00:00Z"}],"next_cursor":null}"#.utf8)
             }
-        } else if isPortal, request.url?.path == "/api/available-models", request.httpMethod == "GET",
+        } else if isFixtureOrigin, request.url?.path == "/api/available-models", request.httpMethod == "GET",
                   ProcessInfo.processInfo.arguments.contains(Self.mainChatFixtureLaunchArgument),
                   !ProcessInfo.processInfo.arguments.contains(Self.noAdminModelFixtureLaunchArgument) {
             statusCode = 200
             body = Data(#"{"items":[{"id":"p1234567","name":"Local Test Tool","capabilities":{"text":true,"tools":true}},{"id":"p2345678","name":"Local Personal Model","capabilities":{"text":true,"tools":true}},{"id":"p3456789","name":"Non-default shared model","capabilities":{"text":true,"tools":true}}],"default_model_configured":true,"default_model_id":"p1234567"}"#.utf8)
-        } else if isPortal, request.url?.path == "/api/available-models", request.httpMethod == "GET",
+        } else if isFixtureOrigin, request.url?.path == "/api/available-models", request.httpMethod == "GET",
                   ProcessInfo.processInfo.arguments.contains(Self.noAdminModelFixtureLaunchArgument) {
             statusCode = 200
             body = Data(#"{"items":[{"id":"p2345678","name":"Local Personal Model","capabilities":{"text":true,"tools":true}},{"id":"p3456789","name":"Non-default shared model","capabilities":{"text":true,"tools":true}}],"default_model_configured":false,"default_model_id":null}"#.utf8)
-        } else if isPortal, request.url?.path == "/api/available-models", request.httpMethod == "GET",
+        } else if isFixtureOrigin, request.url?.path == "/api/available-models", request.httpMethod == "GET",
                   (ProcessInfo.processInfo.arguments.contains(Self.taskSequentialSendFixtureLaunchArgument) ||
                    ProcessInfo.processInfo.arguments.contains(Self.taskTabLifecycleFixtureLaunchArgument)) {
             statusCode = 200
             body = Data(#"{"items":[{"id":"p1234567","name":"Local Test Tool","capabilities":{"text":true,"tools":true}}],"default_model_configured":true,"default_model_id":"p1234567"}"#.utf8)
-        } else if isPortal, request.httpMethod == "GET",
+        } else if isFixtureOrigin, request.httpMethod == "GET",
                   ["/api/hosts", "/api/shared-hosts", "/api/workspaces", "/api/available-models",
                    "/api/conversations", "/api/tasks", "/api/notifications"].contains(request.url?.path ?? "") {
             statusCode = 200
@@ -2210,7 +2900,12 @@ private final class MordeAuthURLProtocol: URLProtocol {
                 : Data(#"{"items":[],"next_cursor":null}"#.utf8)
         } else {
             statusCode = 400
-            body = Data(#"{"error":{"message":"Local registration stub rejected the request"}}"#.utf8)
+            if ProcessInfo.processInfo.arguments.contains("-morde.localFixtureDiagnostics") {
+                let description = "Fixture rejected \(request.httpMethod ?? "?") \(request.url?.host ?? "?")\(request.url?.path ?? "")"
+                body = (try? JSONSerialization.data(withJSONObject: ["error": ["message": description]])) ?? Data()
+            } else {
+                body = Data(#"{"error":{"message":"Local registration stub rejected the request"}}"#.utf8)
+            }
         }
         let contentType = mediaResponseHeaders["Content-Type"] ??
             (request.url?.path.hasSuffix("/events") == true ? "text/event-stream" : "application/json")
@@ -2225,18 +2920,35 @@ private final class MordeAuthURLProtocol: URLProtocol {
             client?.urlProtocol(self, didFailWithError: URLError(.networkConnectionLost))
             return
         }
-        let shouldDelayExecutionStopResponse = isPortal && executionResponse?.status == 202 &&
+        let shouldDelayExecutionStopResponse = isFixtureOrigin && executionResponse?.status == 202 &&
             ProcessInfo.processInfo.arguments.contains(Self.executionDelayStopFixtureLaunchArgument) &&
             request.httpMethod == "POST" && request.url?.path == "/api/execution/stop-all"
-        if shouldDelayResponse || shouldDelayChatResponse || shouldDelayExecutionStopResponse ||
-            shouldDelayTaskPagesApprovalResponse || shouldDelayTaskPagesActionResponse || shouldDelayTaskTabLifecycleEvent {
-            let delay: TimeInterval = shouldDelayTaskTabLifecycleEvent ? 4 : ((shouldDelayTaskPagesActionResponse || shouldDelayTaskPagesApprovalResponse) ? 3 :
-                (shouldDelayExecutionStopResponse ? 4 : (shouldDelayChatResponse ? 25 : 12))
-            )
-            let workItem = DispatchWorkItem { [weak self] in
-                if shouldDelayExecutionStopResponse { Self.finishExecutionFixtureStopResponse() }
-                if shouldDelayTaskTabLifecycleEvent { Self.finishTaskTabLifecycleEvent() }
-                self?.deliver(statusCode: statusCode, body: body, headers: responseHeaders)
+        let shouldDelayIdentityResponse = isFixtureOrigin && request.httpMethod == "GET" &&
+            request.url?.path == "/api/me" && ProcessInfo.processInfo.arguments.contains("-morde.localDelayIdentityFixture")
+        if shouldDelayAttachmentDownloadResponse || shouldDelayResponse || shouldDelayChatResponse ||
+            shouldDelayEventChainAccountAResponse || shouldDelayExecutionStopResponse ||
+            shouldDelayTaskPagesApprovalResponse || shouldDelayTaskPagesActionResponse || shouldDelayTaskTabLifecycleEvent ||
+            shouldDelayTaskPagesClarificationResponse ||
+            shouldDelayTaskDetailResponse ||
+            shouldDelayFirstMessageResponse || shouldDelayIdentityResponse {
+            let delay: TimeInterval = shouldDelayIdentityResponse ? 45 : shouldDeliverTaskDetailResponseAfterCancellation
+                ? 35 : shouldDelayEventChainAccountAResponse
+                ? (shouldDeliverEventChainResponseAfterCancellation ? 10 : 30) :
+                (shouldDelayFirstMessageResponse ? 5 : (shouldDelayAttachmentDownloadResponse ? 3 :
+                (shouldDelayTaskTabLifecycleEvent ? 4 : ((shouldDelayTaskPagesActionResponse || shouldDelayTaskPagesApprovalResponse || shouldDelayTaskPagesClarificationResponse) ? 3 :
+                (shouldDelayExecutionStopResponse ? 4 : (shouldDelayChatResponse ? 25 : 12)))
+            )))
+            let workItem: DispatchWorkItem
+            if shouldDeliverEventChainResponseAfterCancellation || shouldDeliverTaskDetailResponseAfterCancellation {
+                workItem = DispatchWorkItem { [self] in
+                    self.deliver(statusCode: statusCode, body: body, headers: responseHeaders)
+                }
+            } else {
+                workItem = DispatchWorkItem { [weak self] in
+                    if shouldDelayExecutionStopResponse { Self.finishExecutionFixtureStopResponse() }
+                    if shouldDelayTaskTabLifecycleEvent { Self.finishTaskTabLifecycleEvent() }
+                    self?.deliver(statusCode: statusCode, body: body, headers: responseHeaders)
+                }
             }
             delayedResponseLock.lock(); delayedResponseWorkItem = workItem; delayedResponseLock.unlock()
             DispatchQueue.global().asyncAfter(deadline: .now() + delay, execute: workItem)
@@ -2260,7 +2972,13 @@ private final class MordeAuthURLProtocol: URLProtocol {
     override func stopLoading() {
         delayedResponseLock.lock(); defer { delayedResponseLock.unlock() }
         let canceledDelayedStop = request.url?.path == "/api/execution/stop-all" && delayedResponseWorkItem != nil
-        delayedResponseWorkItem?.cancel()
+        let keepLateEventResponse = request.url?.path == "/api/tasks/q0000001/events" &&
+            Self.isAccountA(request) &&
+            ProcessInfo.processInfo.arguments.contains(Self.eventChainLateDeliveryFixtureLaunchArgument)
+        let keepLateTaskDetailResponse = request.url?.path == "/api/tasks/q0000001" &&
+            Self.isAccountA(request) &&
+            ProcessInfo.processInfo.arguments.contains(Self.taskDetailLateDeliveryFixtureLaunchArgument)
+        if !keepLateEventResponse && !keepLateTaskDetailResponse { delayedResponseWorkItem?.cancel() }
         delayedResponseWorkItem = nil
         if canceledDelayedStop { Self.finishExecutionFixtureStopResponse() }
     }
@@ -2274,14 +2992,47 @@ func isAllowedMordeHostNavigation(_ candidate: URL?, relativeTo origin: URL) -> 
     guard let candidate,
           let candidateComponents = URLComponents(url: candidate, resolvingAgainstBaseURL: false),
           let originComponents = URLComponents(url: origin, resolvingAgainstBaseURL: false),
-          candidateComponents.scheme?.lowercased() == "https",
-          originComponents.scheme?.lowercased() == "https",
           let candidateHost = candidateComponents.host, !candidateHost.isEmpty,
           let originHost = originComponents.host, !originHost.isEmpty,
+          mordeHostNavigationSchemeAllowed(candidateComponents.scheme, host: candidateHost),
+          mordeHostNavigationSchemeAllowed(originComponents.scheme, host: originHost),
+          candidateComponents.scheme?.caseInsensitiveCompare(originComponents.scheme ?? "") == .orderedSame,
           candidateHost.caseInsensitiveCompare(originHost) == .orderedSame,
-          (candidateComponents.port ?? 443) == (originComponents.port ?? 443),
+          mordeHostNavigationPort(candidateComponents) == mordeHostNavigationPort(originComponents),
           candidateComponents.user == nil, candidateComponents.password == nil,
           originComponents.user == nil, originComponents.password == nil else { return false }
+    return true
+}
+
+private func mordeHostNavigationSchemeAllowed(_ scheme: String?, host: String) -> Bool {
+    guard let scheme = scheme?.lowercased() else { return false }
+    if scheme == "https" { return true }
+#if DEBUG
+    // Local Host gateways use *.localhost over HTTP. Keep the ticket and all navigation
+    // confined to the reserved loopback namespace; production builds remain HTTPS-only.
+    let normalizedHost = host.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
+    return scheme == "http" && (normalizedHost == "localhost" || normalizedHost.hasSuffix(".localhost"))
+#else
+    return false
+#endif
+}
+
+private func mordeHostNavigationPort(_ components: URLComponents) -> Int? {
+    if let port = components.port { return port }
+    switch components.scheme?.lowercased() {
+    case "https": return 443
+    case "http": return 80
+    default: return nil
+    }
+}
+
+func isAllowedMordeHostOrigin(_ origin: URL) -> Bool {
+    guard let components = URLComponents(url: origin, resolvingAgainstBaseURL: false),
+          let host = components.host, !host.isEmpty,
+          mordeHostNavigationSchemeAllowed(components.scheme, host: host),
+          components.user == nil, components.password == nil,
+          components.percentEncodedPath.isEmpty || components.percentEncodedPath == "/",
+          components.query == nil, components.fragment == nil else { return false }
     return true
 }
 
@@ -2364,11 +3115,12 @@ enum MordeResourceRoomSection: String, CaseIterable, Hashable, Identifiable {
 func isValidMordeHostTicketURL(_ ticket: URL, for origin: URL) -> Bool {
     guard let host = URLComponents(url: origin, resolvingAgainstBaseURL: false),
           let url = URLComponents(url: ticket, resolvingAgainstBaseURL: false),
-          host.scheme?.lowercased() == "https", let hostName = host.host, !hostName.isEmpty,
+          isAllowedMordeHostOrigin(origin), let hostName = host.host, !hostName.isEmpty,
           host.user == nil, host.password == nil, host.query == nil, host.fragment == nil,
-          host.percentEncodedPath.isEmpty || host.percentEncodedPath == "/",
-          url.scheme?.lowercased() == "https", url.host?.caseInsensitiveCompare(hostName) == .orderedSame,
-          (url.port ?? 443) == (host.port ?? 443), url.percentEncodedPath == "/__ch/auth",
+          url.scheme?.caseInsensitiveCompare(host.scheme ?? "") == .orderedSame,
+          url.host?.caseInsensitiveCompare(hostName) == .orderedSame,
+          url.host.map({ mordeHostNavigationSchemeAllowed(url.scheme, host: $0) }) == true,
+          mordeHostNavigationPort(url) == mordeHostNavigationPort(host), url.percentEncodedPath == "/__ch/auth",
           url.user == nil, url.password == nil, url.fragment == nil else { return false }
     let tickets = (url.queryItems ?? []).filter { $0.name == "t" }
     guard tickets.count == 1, let value = tickets.first?.value else { return false }
@@ -2515,11 +3267,37 @@ private struct MordeSharedHost: Decodable, Identifiable {
     let url: URL
     let permissions: [String]
 }
+private struct MordeHostMember: Decodable, Identifiable {
+    let user_id: String
+    let permissions: [String]
+    let created_at: String
+    var id: String { user_id }
+}
+private struct MordeHostMemberList: Decodable {
+    let items: [MordeHostMember]
+}
 private struct MordeWorkspace: Decodable, Identifiable {
     let id: String
     let name: String
     let revision: Int
     let state: String
+    let is_read_only: Bool?
+}
+private struct MordeWorkspaceShareCreated: Decodable {
+    let workspace_name: String
+    let permission: String
+    let token: String
+    let expires_at: String
+}
+private struct MordeWorkspaceSharePreview: Decodable {
+    let workspace_name: String
+    let permission: String
+    let expires_at: String
+}
+private struct MordeWorkspaceShareAccepted: Decodable {
+    let workspace_id: String
+    let workspace_name: String
+    let permission: String
 }
 private struct MordeClientInstallation: Decodable, Identifiable {
     let id: String
@@ -2636,13 +3414,32 @@ struct MordeProjectConversation: Decodable, Identifiable {
 private struct MordeProjectConversationMessage: Decodable, Identifiable {
     let id: String
     let conversation_id: String
+    let sequence: Int64?
     let role: String
     let content: String
     let task_id: String?
-    let delivery_status: String
+    let delivery_status: String?
     let created_at: String
     let owner_id: String
     let actor_id: String
+    let client_message_id: String?
+    let routing_status: String?
+    let routing_failure_reason: String?
+    let attachment_ids: [String]?
+    let output_status: String?
+    let output_task_revision: Int64?
+    let output_result_event_sequence: Int64?
+    let local_send_status: String?
+    let sources: [MordeClientMessageSource]?
+
+    var clientMessage: MordeClientMessage {
+        MordeClientMessage(id: id, conversation_id: conversation_id, sequence: sequence, task_id: task_id,
+            role: role, content: content, attachment_ids: attachment_ids, delivery_status: delivery_status,
+            created_at: created_at, client_message_id: client_message_id, routing_status: routing_status,
+            routing_failure_reason: routing_failure_reason, local_send_status: local_send_status,
+            owner_id: owner_id, actor_id: actor_id, sources: sources, output_status: output_status,
+            output_task_revision: output_task_revision, output_result_event_sequence: output_result_event_sequence)
+    }
 }
 private struct MordeProjectConversationTask: Decodable {
     let task: MordeTask
@@ -2658,10 +3455,6 @@ private struct MordeProjectConversationTask: Decodable {
         initiator_id = try container.decode(String.self, forKey: .initiator_id)
     }
 }
-private struct MordeProjectConversationAppendResponse: Decodable {
-    let message: MordeProjectConversationMessage
-    let task: MordeProjectConversationTask
-}
 private struct MordeModel: Decodable, Identifiable {
     struct Capabilities: Decodable { let text: Bool; let tools: Bool }
     let id: String; let name: String; let capabilities: Capabilities
@@ -2670,6 +3463,7 @@ private struct MordeAvailableModels: Decodable {
     let items: [MordeModel]
     let default_model_configured: Bool
     let default_model_id: String?
+    let configuration_status: String?
 }
 private struct MordeModelConnectionList: Decodable {
     struct Item: Decodable {
@@ -2684,6 +3478,7 @@ private struct MordeLoadedModels {
     let defaultModelConfigured: Bool
     let defaultModelID: String?
     let personalModelIDs: Set<String>
+    let configurationStatus: String
 }
 private struct MordeConversation: Decodable, Identifiable {
     let id: String
@@ -2744,16 +3539,39 @@ struct MordeTask: Decodable, Identifiable {
     let workspace_id: String?; let input_revision: Int64?
     let objective: String; let status: String
     let event_sequence: Int64?
-    let result: String?; let current_step: String?; let waiting_reason: String?; let stop_request: StopRequest?
+    let current_revision: Int64?; let desired_revision: Int64?; let current_revision_started: Bool?
+    let result: String?; let result_message_pending: Bool?; let result_message_published: Bool?
+    let current_step: String?; let waiting_reason: String?; let stop_request: StopRequest?
+    let step_count: Int64?; let completed_step_count: Int64?
     let pending_request: Pending?
     let clarification_request: Clarification?; let batch_items: [MordeBatchItem]?
     let steps: [Step]?; let artifacts: [Artifact]?; let updated_at: String
     let assistant_message: MordeClientMessage?
 
+    var isWaitingForRevisionStart: Bool {
+        MordeTaskStartPresentation.isWaiting(status: status, currentRevision: current_revision,
+            desiredRevision: desired_revision, currentRevisionStarted: current_revision_started)
+    }
+
+    var displayedCurrentStep: String? {
+        isWaitingForRevisionStart ? AppLocalized("Waiting to start") : current_step.map(MordeTaskStepPresentation.title)
+    }
+
     var statusLabel: String {
+        if isWaitingForRevisionStart { return AppLocalized("Waiting to start") }
         let key = MordeTaskStatusPresentation.localizationKey(
             status: status, waitingReason: waiting_reason, stopRequestStatus: stop_request?.status)
         return NSLocalizedString(key, comment: "Task status shown in the conversation")
+    }
+}
+
+enum MordeConversationTasksPolicy {
+    static func valid(_ tasks: [MordeTask], conversationID: String) -> Bool {
+        Set(tasks.map(\.id)).count == tasks.count && tasks.allSatisfy {
+            MordeTaskResponsePolicy.hasValidTaskID($0.id) && $0.conversation_id == conversationID &&
+                $0.event_sequence.map { $0 >= 0 } == true &&
+                ($0.current_revision.map { $0 >= 0 } ?? true) && ($0.desired_revision.map { $0 >= 0 } ?? true)
+        }
     }
 }
 
@@ -2765,16 +3583,28 @@ struct MordeTaskTimelineEvent: Decodable, Identifiable, Equatable {
     private let payload: MordePersonalJSONValue
 
     var id: Int64 { sequence }
+    var status: String? { payload.objectValue?["status"]?.stringValue }
 
     var display: (title: String, summary: String?)? {
         guard let values = payload.objectValue else { return (eventTitle, nil) }
         if type == "task.step" {
             if values["kind"]?.stringValue == "budget" { return nil }
-            let title = values["title"]?.stringValue ?? AppLocalized("Task step updated")
-            let pieces = [values["status"]?.stringValue.map { MordeTaskStatusPresentation.label(status: $0) },
-                          values["summary"]?.stringValue].compactMap { $0 }.filter { !$0.isEmpty }
+            let originalTitle = values["title"]?.stringValue ?? AppLocalized("Task step updated")
+            let title = MordeTaskStepPresentation.title(originalTitle)
+            let kind = values["kind"]?.stringValue
+            let pieces = [values["status"]?.stringValue.map {
+                              MIFTaskPresentation.stepStatusLabel($0, kind: kind, title: originalTitle)
+                          },
+                          values["summary"]?.stringValue.flatMap {
+                              MordeTaskStepPresentation.summary($0, title: originalTitle)
+                          }].compactMap { $0 }.filter { !$0.isEmpty }
             let summary = pieces.joined(separator: " · ")
             return (title, summary.isEmpty ? nil : summary)
+        }
+        if values["reason"]?.stringValue == "project_recovery_unavailable" &&
+            (type == "task.waiting_user" || (type == "task.status" && values["status"]?.stringValue == "waiting_user")) {
+            return (eventTitle, MordeTaskStatusPresentation.label(status: "waiting_user",
+                waitingReason: "project_recovery_unavailable"))
         }
         if type == "task.status", let status = values["status"]?.stringValue {
             return (AppLocalized("Task status updated"), MordeTaskStatusPresentation.label(status: status))
@@ -3126,6 +3956,22 @@ private struct MordeTaskMediaPreviewFile: Identifiable {
     let mediaType: String
 }
 
+struct MordeProjectAttachmentMetadata: Decodable {
+    let attachment_id: String
+    let name: String
+    let media_type: String
+    let size_bytes: Int64
+    let sha256: String
+
+    func isValid(for attachmentID: String) -> Bool {
+        attachment_id == attachmentID && MordeProjectAttachmentContract.isValidAttachmentID(attachment_id) &&
+            MordeProjectAttachmentContract.isValidName(name) &&
+            MordePersonalDataContract.isValidAttachmentMediaType(media_type) &&
+            size_bytes >= 0 && size_bytes <= MordeProjectAttachmentContract.maxBytes &&
+            sha256.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil
+    }
+}
+
 enum MordePersonalAttachmentHash {
     static let chunkBytes = 4 * 1024 * 1024
 
@@ -3410,9 +4256,14 @@ private struct MordeChatAttachment: Identifiable, Equatable {
     let name: String
     let mediaType: String
     let sizeBytes: Int64
+    var stagedFiles: [MordeOutboxAttachment] = []
+    var sourcePaths: [String] = []
+    var localIdentity = UUID()
 
-    var id: String { attachmentID }
-    var allAttachmentIDs: [String] { [attachmentID] + additionalAttachmentIDs }
+    var id: UUID { localIdentity }
+    var allAttachmentIDs: [String] {
+        stagedFiles.isEmpty ? [attachmentID] + additionalAttachmentIDs : stagedFiles.map(\.id)
+    }
 }
 
 struct MordePreparedChatFile: Sendable {
@@ -3430,6 +4281,141 @@ struct MordePreparedChatAttachment: Sendable {
 }
 
 enum MordeChatAttachmentPreparation {
+    static var stagingRoot: URL {
+        MordePersonalStorage.root.appendingPathComponent("MessageUploads", isDirectory: true)
+    }
+
+    static func stagingFilename(_ name: String, index: Int) -> String {
+        guard name.utf8.count > 255 else { return name }
+        let ext = URL(fileURLWithPath: name).pathExtension
+        let safeExtension = !ext.isEmpty && ext.utf8.count <= 16 &&
+            ext.utf8.allSatisfy { (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0) }
+            ? ".\(ext)" : ""
+        return "attachment-\(index)\(safeExtension)"
+    }
+
+    static func planSources(_ urls: [URL]) throws -> [MordeOutboxAttachment] {
+        let root = stagingRoot.appendingPathComponent(UUID().uuidString.lowercased(), isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+#if os(iOS)
+            try FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
+                                                  ofItemAtPath: root.path)
+#endif
+            return try urls.enumerated().map { index, source in
+                let folder = root.appendingPathComponent("source-\(index)", isDirectory: true)
+                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                let name = source.lastPathComponent.isEmpty ? "attachment" : source.lastPathComponent
+                let destination = folder.appendingPathComponent(stagingFilename(name, index: index))
+                let bookmark = try? withMordeSecurityScope(source) {
+                    try source.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil)
+                }
+                let type = UTType(filenameExtension: source.pathExtension)
+                let imageNeedsDerivative = type?.conforms(to: .image) == true &&
+                    !["image/jpeg", "image/png", "image/webp", "image/gif"].contains(type?.preferredMIMEType ?? "")
+                let derivativeMode = source.pathExtension.lowercased() == "pdf" ? "pdf" :
+                    (imageNeedsDerivative ? "image" : "none")
+                return MordeOutboxAttachment(id: UUID().uuidString.lowercased(), attachmentID: nil,
+                    localPath: destination.path, linked: false, sourceBookmark: bookmark, sourcePath: source.path,
+                    derivedAssociationPending: derivativeMode != "none", projectDerivativeMode: derivativeMode,
+                    originalFilename: name.utf8.count > 255 ? name : nil)
+            }
+        } catch {
+            try? FileManager.default.removeItem(at: root)
+            throw error
+        }
+    }
+
+    static func ensureStagedSource(_ item: MordeOutboxAttachment) throws -> URL {
+        guard let path = item.localPath else { throw URLError(.fileDoesNotExist) }
+        if validStagedPath(path) { return URL(fileURLWithPath: path) }
+        let root = stagingRoot.standardizedFileURL.resolvingSymlinksInPath().path + "/"
+        let destination = URL(fileURLWithPath: path).standardizedFileURL
+        guard destination.deletingLastPathComponent().resolvingSymlinksInPath().path.hasPrefix(root) else {
+            throw CocoaError(.fileWriteNoPermission)
+        }
+        var stale = false
+        let source = item.sourceBookmark.flatMap {
+            try? URL(resolvingBookmarkData: $0, options: [], relativeTo: nil, bookmarkDataIsStale: &stale)
+        } ?? item.sourcePath.map { URL(fileURLWithPath: $0) }
+        guard let source else { throw URLError(.fileDoesNotExist) }
+        let temporary = destination.deletingLastPathComponent().appendingPathComponent(".copy-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: temporary) }
+        try withMordeSecurityScope(source) { try FileManager.default.copyItem(at: source, to: temporary) }
+#if os(iOS)
+        try FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
+                                              ofItemAtPath: temporary.path)
+#endif
+        do { try FileManager.default.moveItem(at: temporary, to: destination) }
+        catch { if !validStagedPath(path) { throw error } }
+        return destination
+    }
+
+    static func stageDerivedFiles(_ files: [MordePreparedChatFile]) throws -> [String] {
+        guard !files.isEmpty else { return [] }
+        let root = stagingRoot.appendingPathComponent(UUID().uuidString.lowercased(), isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+#if os(iOS)
+            try FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
+                                                  ofItemAtPath: root.path)
+#endif
+            return try files.enumerated().map { index, file in
+                let folder = root.appendingPathComponent("derived-\(index)", isDirectory: true)
+                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                let destination = folder.appendingPathComponent(file.url.lastPathComponent)
+                try FileManager.default.copyItem(at: file.url, to: destination)
+                return destination.path
+            }
+        } catch {
+            try? FileManager.default.removeItem(at: root)
+            throw error
+        }
+    }
+
+    static func stageDerivativeRequest(_ data: Data) throws -> String {
+        let root = stagingRoot.appendingPathComponent(UUID().uuidString.lowercased(), isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+#if os(iOS)
+        try FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
+                                              ofItemAtPath: root.path)
+#endif
+        let file = root.appendingPathComponent("project-derivatives.json")
+#if os(iOS)
+        try data.write(to: file, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+#else
+        try data.write(to: file, options: .atomic)
+#endif
+        return file.path
+    }
+
+    static func validStagedPath(_ path: String) -> Bool {
+        let root = stagingRoot.standardizedFileURL.resolvingSymlinksInPath().path + "/"
+        let file = URL(fileURLWithPath: path).standardizedFileURL.resolvingSymlinksInPath().path
+        return file.hasPrefix(root) && FileManager.default.fileExists(atPath: file)
+    }
+
+    static func discardStagedFiles(_ paths: [String]) {
+        let root = stagingRoot.standardizedFileURL.resolvingSymlinksInPath()
+        let prefix = root.path + "/"
+        let folders = Set(paths.compactMap { path -> String? in
+            let file = URL(fileURLWithPath: path).standardizedFileURL.resolvingSymlinksInPath().path
+            guard file.hasPrefix(prefix), let folder = file.dropFirst(prefix.count).split(separator: "/").first,
+                  UUID(uuidString: String(folder)) != nil else { return nil }
+            return String(folder)
+        })
+        for folder in folders { try? FileManager.default.removeItem(at: root.appendingPathComponent(folder)) }
+    }
+
+    private static let officeMediaTypes = [
+        "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ]
+    static let importContentTypes: [UTType] = [
+        .image, .pdf,
+        UTType(filenameExtension: "docx") ?? UTType(importedAs: "org.openxmlformats.wordprocessingml.document"),
+        UTType(filenameExtension: "xlsx") ?? UTType(importedAs: "org.openxmlformats.spreadsheetml.sheet"),
+    ]
     private static let maxImageBytes = 512 * 1024
     private static let maxTextBytes = 48 * 1024
     private static let maxPDFTextPages = 100
@@ -3438,13 +4424,24 @@ enum MordeChatAttachmentPreparation {
 
     static func prepare(_ sourceURL: URL) throws -> MordePreparedChatAttachment {
         try withMordeSecurityScope(sourceURL) {
+            if officeMediaTypes[sourceURL.pathExtension.lowercased()] != nil {
+                return MordePreparedChatAttachment(name: sourceURL.lastPathComponent,
+                    files: [MordePreparedChatFile(url: sourceURL)], temporaryDirectory: nil)
+            }
             guard let type = UTType(filenameExtension: sourceURL.pathExtension),
                   type.conforms(to: .image) || type.conforms(to: .pdf) else {
                 throw NSError(domain: "Morde", code: 415,
-                              userInfo: [NSLocalizedDescriptionKey: "聊天附件仅支持图片与 PDF。"])
+                              userInfo: [NSLocalizedDescriptionKey: AppLocalized("Chat attachments support images, PDF, DOCX, and XLSX.")])
             }
             return type.conforms(to: .pdf) ? try preparePDF(sourceURL) : try prepareImage(sourceURL)
         }
+    }
+
+    static func uploadMediaType(for sourceURL: URL) -> String? {
+        let fileExtension = sourceURL.pathExtension.lowercased()
+        if let mediaType = officeMediaTypes[fileExtension] { return mediaType }
+        guard let type = UTType(filenameExtension: fileExtension), let mediaType = type.preferredMIMEType else { return nil }
+        return type.conforms(to: .image) || ["application/pdf", "text/plain"].contains(mediaType) ? mediaType : nil
     }
 
     private static func prepareImage(_ sourceURL: URL) throws -> MordePreparedChatAttachment {
@@ -3484,10 +4481,14 @@ enum MordeChatAttachmentPreparation {
             var scalars = String.UnicodeScalarView()
             var textBytes = 0
             var textWasTruncated = false
+            var foundSelectableText = false
             let textPageCount = min(document.pageCount, maxPDFTextPages)
             for index in 0..<textPageCount {
                 guard let page = document.page(at: index) else { continue }
-                let pageText = "\n--- Page \(index + 1) ---\n" + (page.string ?? "")
+                let content = page.string ?? ""
+                guard !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+                foundSelectableText = true
+                let pageText = "\n--- Page \(index + 1) ---\n" + content
                 for scalar in pageText.unicodeScalars {
                     let count = String(scalar).utf8.count
                     guard textBytes + count <= maxTextBytes else {
@@ -3499,25 +4500,41 @@ enum MordeChatAttachmentPreparation {
                 }
                 if textWasTruncated { break }
             }
-            var extractedText = String(scalars)
-            if extractedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                extractedText = "No selectable text was found. Inspect the page JPEG attachments."
-            }
-            if textWasTruncated || document.pageCount > maxPDFTextPages {
-                extractedText += "\n[PDF text extraction is bounded; page images are attached for visual inspection.]"
-            }
             let shortDigest = String(digest.prefix(12))
-            let textName = "morde-解析-\(shortDigest)-文本.txt"
-            try Data(extractedText.utf8).write(to: directory.appendingPathComponent(textName), options: .atomic)
-            files.append(MordePreparedChatFile(url: directory.appendingPathComponent(textName)))
-
+            var previews: [MordePreparedChatFile] = []
             for index in 0..<min(document.pageCount, maxPDFPreviewPages) {
                 guard let page = document.page(at: index) else { continue }
                 let data = try jpegData(page.thumbnail(of: CGSize(width: 1280, height: 720), for: .mediaBox))
                 let pageName = String(format: "morde-解析-%@-第%02d页.jpg", shortDigest, index + 1)
                 try data.write(to: directory.appendingPathComponent(pageName), options: .atomic)
-                files.append(MordePreparedChatFile(url: directory.appendingPathComponent(pageName)))
+                previews.append(MordePreparedChatFile(url: directory.appendingPathComponent(pageName)))
             }
+            var extractedText = String(scalars)
+            if !foundSelectableText {
+                extractedText = "前 \(textPageCount) 页未发现可选择文本。"
+                if document.pageCount > maxPDFPreviewPages {
+                    extractedText += "仅生成前 \(maxPDFPreviewPages) 页中的 \(previews.count) 页预览（共 \(document.pageCount) 页）；其余页面未读取。"
+                } else if previews.count < document.pageCount {
+                    extractedText += "仅生成 \(previews.count) 页预览（共 \(document.pageCount) 页）；未生成预览的页面未读取。"
+                } else {
+                    extractedText += "已提供全部 \(document.pageCount) 页预览，需通过预览读取内容。"
+                }
+            } else {
+                var notes: [String] = []
+                if textWasTruncated || document.pageCount > maxPDFTextPages {
+                    notes.append("文字提取最多覆盖前 \(maxPDFTextPages) 页及 \(maxTextBytes / 1024) KiB，未涵盖的文字未读取。")
+                }
+                if document.pageCount > maxPDFPreviewPages || previews.count < document.pageCount {
+                    notes.append("预览图仅覆盖前 \(maxPDFPreviewPages) 页中的 \(previews.count) 页（共 \(document.pageCount) 页），其余页面未提供预览。")
+                }
+                if !notes.isEmpty {
+                    extractedText = MordePDFTextLimit.appendingNote(extractedText, note: "\n[\(notes.joined())]", limit: maxTextBytes)
+                }
+            }
+            let textName = "morde-解析-\(shortDigest)-文本.txt"
+            try Data(extractedText.utf8).write(to: directory.appendingPathComponent(textName), options: .atomic)
+            files.append(MordePreparedChatFile(url: directory.appendingPathComponent(textName)))
+            files.append(contentsOf: previews)
             return MordePreparedChatAttachment(name: sourceURL.lastPathComponent, files: files,
                                                temporaryDirectory: directory)
         } catch {
@@ -3566,6 +4583,7 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
 @MainActor final class MordeShellAuthorization: ObservableObject {
     static let shared = MordeShellAuthorization()
     @Published private(set) var signedIn = false
+    @Published private(set) var offlineConversationAvailable = false
     @Published private(set) var personalDataScopeKey: String?
     @Published private(set) var scheduleAuthorizationState = MordeScheduleAuthorizationState.disabled
 
@@ -3573,9 +4591,10 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
         await MordeClient.shared.restoreLoginForFirstRun()
     }
 
-    fileprivate func update(signedIn: Bool, personalDataScopeKey: String?,
+    fileprivate func update(signedIn: Bool, offlineConversationAvailable: Bool, personalDataScopeKey: String?,
                             scheduleAuthorizationState: MordeScheduleAuthorizationState) {
         self.signedIn = signedIn
+        self.offlineConversationAvailable = offlineConversationAvailable
         self.personalDataScopeKey = personalDataScopeKey
         self.scheduleAuthorizationState = scheduleAuthorizationState
     }
@@ -3690,6 +4709,12 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
     }
 }
 
+private struct MordeIndependentSendTarget {
+    let messageID: String
+    let predecessorID: String
+    let scope: MordeClientDataScope
+}
+
 @MainActor private final class MordeClient: ObservableObject {
     static let shared = MordeClient()
     private static let defaultServer = "https://portal.120.25.178.93.sslip.io"
@@ -3699,6 +4724,7 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
     @Published var hosts: [MordeHost] = []
     @Published var sharedHosts: [MordeSharedHost] = []
     @Published var workspaces: [MordeWorkspace] = []
+    @Published var pendingWorkspaceShareToken: String?
     @Published private(set) var defaultHostID: String?
     @Published private(set) var defaultHostPreferenceState: MordeResourceLoadState = .loading
     @Published var hostOpenErrors: [String: String] = [:]
@@ -3712,6 +4738,8 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
     @Published private(set) var defaultModelConfigured = false
     @Published private(set) var defaultModelID: String?
     @Published private(set) var personalModelIDs: Set<String> = []
+    @Published private(set) var modelConfigurationStatus = "unknown"
+    private var modelConfigurationCheckedAt: Date?
     @Published var conversations: [MordeConversation] = []
     @Published var conversationNextCursor: String?
     @Published var loadingMoreConversations = false
@@ -3766,6 +4794,8 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
     @Published var projectConversationMessages: [MordeProjectConversationMessage] = []
     @Published var projectConversationMessagesState: MordeResourceLoadState = .loading
     @Published var projectConversationTask: MordeTask?
+    @Published var projectConversationTasks: [MordeTask] = []
+    @Published private(set) var projectAssistantSnapshots: [MordeClientMessage] = []
     @Published var projectConversationError: String?
     @Published var recentProjectInvitations: [String: [MordeProjectInvitation]] = [:]
     @Published var selectedProjectID: String?
@@ -3785,18 +4815,39 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
     private var devicesLoadGeneration = UUID()
     @Published var currentConversation: String?
     @Published var currentTask: MordeTask?
+    @Published var conversationTasks: [MordeTask] = []
+    @Published var conversationTasksLoaded = false
     @Published var hostURL: URL?
     @Published var error: String?
     @Published var busy = false
     @Published var taskAPIAvailable: Bool?
+    @Published private(set) var autoRoutingAvailable: Bool?
+    @Published private(set) var expiredConversationAvailable = false
+    @Published private(set) var offlineRequiresLoginScreen = false
+    private var retainedOfflineScope: MordeClientDataScope?
+    private var retainedOfflineConversationID: String?
+    private var retainedOfflineMessages: [MordeClientMessage] = []
     @Published var taskMediaGenerationAvailable: Bool?
 
     private let keychain = MordeKeychain()
     private let loginStateStore = MordeLoginStateStore()
     private let revocationStore = MordeRevocationStore()
+    private let messageOutbox = MordeMessageOutbox(root: MordePersonalStorage.root.appendingPathComponent("MessageOutbox", isDirectory: true))
+    private let unconfirmedMessageStore = MordeUnconfirmedMessageStore(root: MordePersonalStorage.root.appendingPathComponent("MessageOutbox", isDirectory: true))
+    private let networkMonitor = NWPathMonitor()
+    @Published private(set) var pendingMessages: [MordeOutboxMessage] = []
+    @Published private(set) var unconfirmedMessages: [MordeUnconfirmedMessage] = []
+    @Published private(set) var draftConversationAliases: [String: String] = [:]
+    @Published private(set) var routingRetryInFlight: Set<String> = []
+    @Published private(set) var routingRetryErrors: [String: String] = [:]
+    private var outboxInFlight: Set<String> = []
+    private var outboxRetryScheduled: Set<String> = []
+    private var outboxRetryAttempts: [String: Int] = [:]
+    private var pendingConversationCreations: [String: Task<MordeConversation, Error>] = [:]
 #if DEBUG
     private let urlSession: URLSession = {
-        guard MordeAuthURLProtocol.usesLocalFixture else {
+        let useLocalFixture = MordeAuthURLProtocol.usesLocalFixture
+        guard useLocalFixture else {
             return .shared
         }
         let configuration = URLSessionConfiguration.ephemeral
@@ -3815,6 +4866,7 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
     private var resourceLoadGeneration = UUID()
     private var resourceLoadIsInProgress = false
     private var conversationLoadGeneration = UUID()
+    private var conversationMessagesRefreshGeneration = UUID()
     private var conversationLoadMoreGeneration = UUID()
     private var messageLoadMoreGeneration = UUID()
     private var taskDetailLoadGenerations: [String: UUID] = [:]
@@ -3829,7 +4881,9 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
     private var portalSessionScope: MordeClientDataScope?
 
     private func publishShellAuthorization() {
-        MordeShellAuthorization.shared.update(signedIn: signedIn, personalDataScopeKey: personalDataScopeKey,
+        MordeShellAuthorization.shared.update(signedIn: signedIn,
+                                              offlineConversationAvailable: expiredConversationAvailable && !offlineRequiresLoginScreen,
+                                              personalDataScopeKey: personalDataScopeKey,
                                               scheduleAuthorizationState: scheduleAuthorizationState)
     }
 
@@ -4164,8 +5218,17 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
     }
 
     private func messagesIncludingAssistantSnapshot(_ task: MordeTask, in messages: [MordeClientMessage]) -> [MordeClientMessage] {
-        MordeTaskSnapshotMessageMerge.merge(messages, snapshot: task.assistant_message,
-                                            taskID: task.id, conversationID: task.conversation_id)
+        let retained = messages.filter {
+            !MordeTaskSnapshotMessageMerge.shouldDiscardPublishedSynthetic($0, taskID: task.id,
+                currentRevision: task.current_revision, published: task.result_message_published)
+        }
+        guard MordeTaskSnapshotMessageMerge.shouldIncludeSnapshot(resultMessagePending: task.result_message_pending,
+                                                                  resultMessagePublished: task.result_message_published,
+                                                                  status: task.assistant_message?.displayStatus) else {
+            return retained
+        }
+        return MordeTaskSnapshotMessageMerge.merge(retained, snapshot: task.assistant_message,
+                                                   taskID: task.id, conversationID: task.conversation_id)
     }
 
     private func applyCurrentTaskAssistantSnapshot(_ task: MordeTask) {
@@ -4218,12 +5281,71 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
         } else {
             self.server = Self.defaultServer
         }
+        do { unconfirmedMessages = try unconfirmedMessageStore.messages() }
+        catch { self.error = "无法读取本机待确认消息：\(error.localizedDescription)" }
+        Task { [weak self] in
+            guard let self else { return }
+            for message in self.unconfirmedMessages where !message.stagedAttachments.isEmpty {
+                self.stageUnconfirmedAttachments(message)
+            }
+        }
         if let origin = MordeLoginStateStore.serviceOrigin(self.server) {
             self.installationLookupKey = Self.activeInstallationMap()[origin]
+            let currentInstallation = installation
+            let installationScope = currentInstallation.flatMap { value -> MordeClientDataScope? in
+                guard let serviceID = value.serviceInstanceID, let accountID = value.accountID else { return nil }
+                return MordeClientDataScope(serviceOrigin: origin, serviceInstanceID: serviceID,
+                                            accountID: accountID, installationID: value.id)
+            }
+            let scopedData = installationScope.flatMap {
+                UserDefaults.standard.data(forKey: "morde.recentConversation.\($0.storageKey)")
+            }
+            if let data = scopedData ?? UserDefaults.standard.data(forKey: Self.offlineConversationKey(origin)),
+               let recent = try? JSONDecoder().decode(MordeScopedRecentConversation.self, from: data),
+               recent.scope.serviceOrigin == origin, let conversationID = recent.conversationID,
+               MordeOfflineConversationPolicy.mayRestore(recent.scope, hasActiveInstallation: currentInstallation != nil,
+                   origin: currentInstallation?.serviceOrigin, instanceID: currentInstallation?.serviceInstanceID,
+                   accountID: currentInstallation?.accountID) {
+                retainedOfflineScope = recent.scope
+                expiredConversationAvailable = true
+                offlineRequiresLoginScreen = currentInstallation == nil
+                do {
+                    let resolved = try messageOutbox.resolvedConversationID(conversationID, scope: recent.scope)
+                    currentConversation = resolved
+                    if resolved != conversationID { draftConversationAliases[resolved] = conversationID }
+                    pendingMessages = try messageOutbox.messages(scope: recent.scope)
+                    includeLocalConversations()
+                }
+                catch { self.error = "无法读取本机待发送消息：\(error.localizedDescription)" }
+            }
+            if retainedOfflineScope == nil, let installationScope {
+                do {
+                    let local = try messageOutbox.messages(scope: installationScope)
+                    if !MordeOfflineProjectQueue.messages(local, scope: installationScope).isEmpty {
+                        retainedOfflineScope = installationScope
+                        expiredConversationAvailable = true
+                        offlineRequiresLoginScreen = false
+                        pendingMessages = local
+                    }
+                } catch { self.error = "无法读取本机待发送消息：\(error.localizedDescription)" }
+            }
         }
         if !revocationStore.pending().isEmpty {
             self.error = "有服务器安装撤销尚未确认；本机已退出并保留撤销标识。"
         }
+        networkMonitor.pathUpdateHandler = { [weak self] path in
+            guard path.status == .satisfied else { return }
+            Task { @MainActor [weak self] in
+                guard let self, self.signedIn else { return }
+                await self.load()
+            }
+        }
+        networkMonitor.start(queue: DispatchQueue(label: "morde.message-outbox.network"))
+    }
+
+    private static func offlineConversationKey(_ origin: String) -> String {
+        let digest = SHA256.hash(data: Data(origin.utf8)).map { String(format: "%02x", $0) }.joined()
+        return "morde.offlineConversation.\(digest)"
     }
 
     private static func activeInstallationMap() -> [String: String] {
@@ -4316,15 +5438,76 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
         return try? JSONDecoder().decode(MordeInstallation.self, from: data)
     }
     private var currentDataScope: MordeClientDataScope? {
+        if !signedIn, expiredConversationAvailable, let retainedOfflineScope,
+           retainedOfflineScope.serviceOrigin == MordeLoginStateStore.serviceOrigin(server) {
+            return retainedOfflineScope
+        }
         guard let installation, let user,
               let serviceID = installation.serviceInstanceID,
               verifiedServiceInstanceID == serviceID,
-              installation.accountID == nil || installation.accountID == user.id,
+              installation.accountID == user.id,
               let origin = MordeLoginStateStore.serviceOrigin(server) else { return nil }
         return MordeClientDataScope(serviceOrigin: origin, serviceInstanceID: serviceID,
                                     accountID: user.id, installationID: installation.id)
     }
     var taskPageScopeKey: String? { currentDataScope?.storageKey }
+    var chatDraftScopeKey: String? { currentDataScope?.messageOutboxKey }
+    var canRecoverUnconfirmedMessage: Bool { currentDataScope != nil }
+    private var matchingUnconfirmedMessages: [MordeUnconfirmedMessage] {
+        let activeScope = currentDataScope ?? (signedIn ? nil : retainedOfflineScope)
+        let origin = activeScope?.serviceOrigin ?? MordeLoginStateStore.serviceOrigin(server)
+        let name = installation?.accountName
+        let accountID = activeScope?.accountID ?? installation?.accountID
+        return unconfirmedMessages.filter { $0.belongsTo(origin: origin, accountName: name, accountID: accountID) }
+    }
+    var visibleUnconfirmedMessages: [MordeUnconfirmedMessage] {
+        matchingUnconfirmedMessages.filter { isSameUnconfirmedIdentity($0) }
+    }
+    var otherInstanceUnconfirmedMessages: [MordeUnconfirmedMessage] {
+        matchingUnconfirmedMessages.filter { !isSameUnconfirmedIdentity($0) }
+    }
+    private func isSameUnconfirmedIdentity(_ message: MordeUnconfirmedMessage) -> Bool {
+        isSameUnconfirmedInstance(message) && message.matchesInstallation(installation?.id)
+    }
+    func isSameUnconfirmedInstance(_ message: MordeUnconfirmedMessage) -> Bool {
+        message.matchesInstance(currentDataScope?.serviceInstanceID ?? (signedIn ? installation?.serviceInstanceID : retainedOfflineScope?.serviceInstanceID))
+    }
+    func deleteUnconfirmedMessage(_ id: String) {
+        guard matchingUnconfirmedMessages.contains(where: { $0.id == id }) else { return }
+        do {
+            try unconfirmedMessageStore.remove(id: id)
+            unconfirmedMessages = try unconfirmedMessageStore.messages()
+        } catch { self.error = "无法删除本机待确认消息：\(error.localizedDescription)" }
+    }
+    func isUnconfirmedAttachmentPath(_ path: String) -> Bool {
+        unconfirmedMessages.contains { message in
+            message.stagedAttachments.contains { $0.localPath == path } || message.pendingUploadPaths.contains(path)
+        }
+    }
+    private func stageUnconfirmedAttachments(_ message: MordeUnconfirmedMessage) {
+        guard !message.stagedAttachments.isEmpty else { return }
+        let attachments = message.stagedAttachments
+        Task { [weak self] in
+            let result = await Task.detached(priority: .utility) { () -> String in
+                do {
+                    for attachment in attachments {
+                        _ = try MordeChatAttachmentPreparation.ensureStagedSource(attachment)
+                    }
+                    return "附件原件已保存在本机，仍需确认后恢复。"
+                } catch {
+                    return "部分附件未能保存到本机，请恢复后重新选择文件：\(error.localizedDescription)"
+                }
+            }.value
+            guard let self else { return }
+            do { self.unconfirmedMessages = try self.unconfirmedMessageStore.updateAttachmentStatus(id: message.id, status: result) }
+            catch { self.error = "无法保存附件状态：\(error.localizedDescription)" }
+        }
+    }
+    func draftConversationID(_ id: String) -> String { draftConversationAliases[id] ?? id }
+    func isRetainedOfflineAccount(_ accountID: String?) -> Bool {
+        accountID != nil && retainedOfflineScope?.accountID == accountID
+    }
+    func openOfflineConversation() { offlineRequiresLoginScreen = false; publishShellAuthorization() }
     private var recentConversation: MordeScopedRecentConversation? {
         guard let scope = currentDataScope,
               let data = UserDefaults.standard.data(forKey: "morde.recentConversation.\(scope.storageKey)"),
@@ -4337,22 +5520,988 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
         let recent = MordeScopedRecentConversation(scope: scope, conversationID: conversationID)
         guard let data = try? JSONEncoder().encode(recent) else { return }
         UserDefaults.standard.set(data, forKey: "morde.recentConversation.\(scope.storageKey)")
+        UserDefaults.standard.set(data, forKey: Self.offlineConversationKey(scope.serviceOrigin))
     }
-    private func pendingSendAttempt(for scope: MordeClientDataScope) -> MordeRetryAttempt? {
-        MordeRetryAttempt.decodePersisted(from: .standard, scope: scope)
+    private var definitelyNoModelConfigured: Bool {
+        MordeCloudModelConfiguration.isConfirmedAbsent(status: modelConfigurationStatus,
+            loaded: resourceState(.models).isLoaded, checkedAt: modelConfigurationCheckedAt)
     }
-    private func storePendingSendAttempt(_ attempt: MordeRetryAttempt?, for scope: MordeClientDataScope) {
-        let storageKey = "morde.pendingSendAttempt.\(scope.storageKey)"
-        guard let attempt else {
-            UserDefaults.standard.removeObject(forKey: storageKey)
+
+    func invalidateModelConfiguration() {
+        modelConfigurationStatus = "unknown"
+        modelConfigurationCheckedAt = nil
+    }
+
+    var displayedConversationMessages: [MordeClientMessage] {
+        guard let scope = currentDataScope, let conversationID = currentConversation else { return messages }
+        let receivedIDs = Set(messages.compactMap(\.client_message_id))
+        let pending = pendingMessages.filter {
+            $0.scope.hasSameAccount(as: scope) && $0.conversationID == conversationID &&
+                $0.projectID == nil && !receivedIDs.contains($0.id)
+        }.map {
+            MordeClientMessage(id: $0.id, conversation_id: $0.conversationID, role: "user", content: $0.content,
+                               attachment_ids: $0.attachments.compactMap(\.attachmentID), created_at: $0.createdAt,
+                               client_message_id: $0.id, local_send_status: $0.state.rawValue)
+        }
+        return orderedConversationMessages(messages) + pending
+    }
+
+    var offlineProjectMessages: [MordeOutboxMessage] {
+        guard let scope = currentDataScope else { return [] }
+        return MordeOfflineProjectQueue.messages(pendingMessages, scope: scope)
+    }
+
+    var displayedProjectConversationMessages: [MordeProjectConversationMessage] {
+        guard let scope = currentDataScope, let projectID = selectedProjectID,
+              let conversationID = selectedProjectConversationID,
+              let ownerID = projectConversations.first(where: { $0.id == conversationID })?.owner_id else {
+            return projectConversationMessages
+        }
+        let originals = Dictionary(uniqueKeysWithValues: projectConversationMessages.map { ($0.id, $0) })
+        var combined = projectConversationMessages.map(\.clientMessage)
+        for snapshot in projectAssistantSnapshots where snapshot.conversation_id == conversationID {
+            guard let taskID = snapshot.task_id else { continue }
+            combined = MordeTaskSnapshotMessageMerge.merge(combined, snapshot: snapshot,
+                                                           taskID: taskID, conversationID: conversationID)
+        }
+        combined = MordeTaskSnapshotMessageMerge.deduplicatingPublished(combined)
+        let displayed = combined.map { message in
+            let original = originals[message.id]
+            return MordeProjectConversationMessage(id: message.id, conversation_id: conversationID,
+                sequence: message.sequence, role: message.role, content: message.content, task_id: message.task_id,
+                delivery_status: message.delivery_status, created_at: message.created_at ?? "",
+                owner_id: original?.owner_id ?? ownerID, actor_id: original?.actor_id ?? message.actor_id ?? "",
+                client_message_id: message.client_message_id, routing_status: message.routing_status,
+                routing_failure_reason: message.routing_failure_reason, attachment_ids: original?.attachment_ids,
+                output_status: message.displayStatus, output_task_revision: message.displayTaskRevision,
+                output_result_event_sequence: message.displayResultEventSequence,
+                local_send_status: message.local_send_status, sources: message.sources)
+        }
+        let receivedIDs = Set(displayed.compactMap(\.client_message_id))
+        let pending = pendingMessages.filter {
+            $0.scope.hasSameAccount(as: scope) && $0.projectID == projectID &&
+                $0.conversationID == conversationID && !receivedIDs.contains($0.id)
+        }.map {
+            MordeProjectConversationMessage(id: $0.id, conversation_id: conversationID, sequence: nil,
+                role: "user", content: $0.content, task_id: nil, delivery_status: nil, created_at: $0.createdAt,
+                owner_id: ownerID, actor_id: scope.accountID, client_message_id: $0.id,
+                routing_status: nil, routing_failure_reason: nil,
+                attachment_ids: $0.attachments.filter(\.linked).compactMap(\.attachmentID),
+                output_status: nil, output_task_revision: nil, output_result_event_sequence: nil,
+                local_send_status: $0.state.rawValue, sources: nil)
+        }
+        return orderedProjectConversationMessages(displayed) + pending
+    }
+
+    private func refreshPendingMessages(scope: MordeClientDataScope) {
+        guard currentDataScope?.hasSameAccount(as: scope) == true else { return }
+        do {
+            pendingMessages = try messageOutbox.messages(scope: scope)
+            includeLocalConversations()
+        }
+        catch { self.error = "无法读取本机待发送消息：\(error.localizedDescription)" }
+    }
+
+    private func includeLocalConversations() {
+        var ids = Set(pendingMessages.filter { $0.projectID == nil && $0.conversationID.hasPrefix("local-") }
+            .map(\.conversationID))
+        if let currentConversation, currentConversation.hasPrefix("local-") { ids.insert(currentConversation) }
+        for id in ids where !conversations.contains(where: { $0.id == id }) {
+            conversations.insert(MordeConversation(id: id, host_id: nil, title: "新对话", is_main: false), at: 0)
+        }
+    }
+
+    private func activateLocalConversation(_ id: String) {
+        currentConversation = id
+        followsMainConversation = false
+        messages = []
+        currentTask = nil
+        conversationTasks = []
+        conversationTasksLoaded = false
+        setResourceState(.loaded, for: .messages)
+        setResourceState(.loaded, for: .taskDetail)
+        includeLocalConversations()
+        saveRecentConversation(id)
+    }
+
+    func ensureConversationForDraft() -> String? {
+        guard currentDataScope != nil else { return nil }
+        if let currentConversation { return currentConversation }
+        let id = "local-\(UUID().uuidString.lowercased())"
+        activateLocalConversation(id)
+        return id
+    }
+
+    private func restorePendingMessages(scope: MordeClientDataScope) {
+        do {
+            for message in try messageOutbox.messages(scope: scope)
+                where message.state == .sending && !outboxInFlight.contains(message.id) {
+                try messageOutbox.update(id: message.id, scope: scope) { $0.state = .unknown }
+            }
+            refreshPendingMessages(scope: scope)
+            schedulePendingMessages()
+        } catch { self.error = "无法恢复本机待发送消息：\(error.localizedDescription)" }
+    }
+
+    func retryPendingMessage(_ id: String) {
+        guard let scope = currentDataScope else { return }
+        do {
+            outboxRetryAttempts[id] = 0
+            try messageOutbox.update(id: id, scope: scope) {
+                if $0.serverMessageID != nil { $0.state = .accepted }
+                else if $0.state == .failed { $0.state = .unknown }
+                $0.error = nil
+            }
+            refreshPendingMessages(scope: scope)
+            schedulePendingMessages()
+        } catch { self.error = "无法重试本机消息：\(error.localizedDescription)" }
+    }
+
+    func independentSendTarget(for message: MordeOutboxMessage) -> MordeIndependentSendTarget? {
+        guard let scope = currentDataScope, message.scope.hasSameAccount(as: scope),
+              let previous = MordeOutboxScheduling.bypassablePredecessor(of: message,
+                  in: pendingMessages, inFlight: outboxInFlight) else { return nil }
+        return MordeIndependentSendTarget(messageID: message.id, predecessorID: previous.id, scope: scope)
+    }
+
+    func sendIndependently(_ target: MordeIndependentSendTarget) {
+        guard let scope = currentDataScope, scope.hasSameAccount(as: target.scope),
+              !outboxInFlight.contains(target.messageID), !outboxInFlight.contains(target.predecessorID) else {
+            error = AppLocalized("Message or account changed. Refresh and try again.")
             return
         }
-        guard attempt.scope == scope, let data = try? JSONEncoder().encode(attempt) else { return }
-        UserDefaults.standard.set(data, forKey: storageKey)
+        do {
+            guard try messageOutbox.detachFailedPredecessor(messageID: target.messageID,
+                    predecessorID: target.predecessorID, scope: scope) else {
+                error = AppLocalized("Message status changed. Refresh and try again.")
+                return
+            }
+            refreshPendingMessages(scope: scope)
+            schedulePendingMessages()
+        } catch {
+            self.error = String(format: AppLocalized("Could not save the independent send: %@"), error.localizedDescription)
+        }
     }
-    private func clearPendingSend(for scope: MordeClientDataScope, matching key: String) {
-        guard pendingSendAttempt(for: scope)?.key == key else { return }
-        storePendingSendAttempt(nil, for: scope)
+
+    func skipProjectDerivative(messageID: String, attachmentID: String) {
+        guard let scope = currentDataScope, let projectID = selectedProjectID,
+              let conversationID = selectedProjectConversationID, !outboxInFlight.contains(messageID),
+              let pending = pendingMessages.first(where: {
+                  $0.id == messageID && $0.projectID == projectID && $0.conversationID == conversationID &&
+                      $0.scope.hasSameAccount(as: scope)
+              }), let item = pending.attachments.first(where: { $0.id == attachmentID }),
+              item.linked, item.derivedAssociationPending == true, item.projectDerivativePayloadPath == nil,
+              let mode = item.projectDerivativeMode, ["pdf", "image"].contains(mode),
+              let payload = MordeProjectDerivativeRequest(outcome: "skipped", files: []).encoded(mode: mode) else {
+            projectConversationError = "无法确认附件解析状态，请先重试或刷新。"
+            return
+        }
+        do {
+            let path = try MordeChatAttachmentPreparation.stageDerivativeRequest(payload)
+            try messageOutbox.update(id: messageID, scope: scope) { message in
+                guard let index = message.attachments.firstIndex(where: { $0.id == attachmentID }),
+                      message.attachments[index].projectDerivativePayloadPath == nil else { return }
+                message.attachments[index].projectDerivativePayloadPath = path
+                message.attachments[index].projectDerivativePayloadDigest = MordeMessageChunking.digest(payload)
+                message.error = nil
+                message.state = .accepted
+            }
+            refreshPendingMessages(scope: scope)
+            schedulePendingMessages()
+        } catch { projectConversationError = "无法保存跳过解析操作：\(error.localizedDescription)" }
+    }
+
+    func retryMessageProcessing(messageID: String, conversationID: String, projectID: String? = nil) async {
+        guard let scope = currentDataScope else { return }
+        guard signedIn else {
+            routingRetryErrors[messageID] = "请先登录，再重试处理。"
+            return
+        }
+        guard
+              MordeProjectPolicy.hasValidConversationID(conversationID),
+              messageID.range(of: #"^m[a-z0-9]{7}$"#, options: .regularExpression) != nil,
+              projectID.map(MordeProjectPolicy.hasValidID) ?? true,
+              !routingRetryInFlight.contains(messageID) else { return }
+        if let projectID {
+            guard selectedProjectID == projectID, selectedProjectConversationID == conversationID,
+                  projectConversationMessages.contains(where: { $0.id == messageID && $0.actor_id == scope.accountID &&
+                      $0.routing_status == "failed" && MordeRoutingPresentation.canRetryProcessing($0.routing_failure_reason) }) else { return }
+        } else {
+            guard currentConversation == conversationID,
+                  messages.contains(where: { $0.id == messageID && $0.role == "user" && $0.routing_status == "failed" &&
+                      MordeRoutingPresentation.canRetryProcessing($0.routing_failure_reason) }) else { return }
+        }
+        let storageKey = MordeRoutingRetryAttempt.storageKey(scope: scope, projectID: projectID,
+                                                             conversationID: conversationID, messageID: messageID)
+        routingRetryInFlight.insert(messageID)
+        routingRetryErrors.removeValue(forKey: messageID)
+        defer { routingRetryInFlight.remove(messageID) }
+        let base = projectID.map { "/api/projects/\($0)/conversations/\(conversationID)" }
+            ?? "/api/conversations/\(conversationID)"
+        do {
+            let attempt = try messageOutbox.beginRoutingRetry(storageKey: storageKey, scope: scope)
+            let (_, response) = try await responseData("\(base)/messages/\(messageID)/retry-processing",
+                method: "POST", body: nil, key: attempt, authorized: true, handleUnauthorized: true,
+                scheduleAuthorized: false, headers: ["X-Morde-Service-Instance-ID": scope.serviceInstanceID,
+                                                    "X-Morde-Actor-ID": scope.accountID])
+            guard response.statusCode == 202, currentDataScope?.hasSameAccount(as: scope) == true else {
+                throw URLError(.cannotParseResponse)
+            }
+            try messageOutbox.finishRoutingRetry(storageKey: storageKey, attempt: attempt, scope: scope)
+            if let projectID, selectedProjectID == projectID, selectedProjectConversationID == conversationID {
+                await loadProjectConversationMessages(projectID: projectID, conversationID: conversationID)
+            }
+            try? await Task.sleep(nanoseconds: 3_500_000_000)
+        } catch {
+            guard currentDataScope?.hasSameAccount(as: scope) == true else { return }
+            routingRetryErrors[messageID] = error.localizedDescription
+        }
+    }
+
+    private func schedulePendingMessages() {
+        guard signedIn, autoRoutingAvailable == true, let scope = currentDataScope else { return }
+        for id in MordeOutboxScheduling.readyIDs(pendingMessages, scope: scope, inFlight: outboxInFlight) {
+            outboxInFlight.insert(id)
+            Task { @MainActor in await processPendingMessage(id: id, scope: scope) }
+        }
+    }
+
+    private func scheduleMessageRetry(_ id: String, scope: MordeClientDataScope) {
+        guard !outboxRetryScheduled.contains(id) else { return }
+        let attempt = min(outboxRetryAttempts[id] ?? 0, 4)
+        outboxRetryAttempts[id] = attempt + 1
+        outboxRetryScheduled.insert(id)
+        let seconds = min(60, 5 * (1 << attempt))
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64(seconds) * 1_000_000_000)
+            outboxRetryScheduled.remove(id)
+            guard signedIn, currentDataScope?.hasSameAccount(as: scope) == true else { return }
+            if autoRoutingAvailable != true { await load() }
+            guard signedIn, currentDataScope?.hasSameAccount(as: scope) == true else { return }
+            refreshPendingMessages(scope: scope)
+            if autoRoutingAvailable == true { schedulePendingMessages() }
+            else if pendingMessages.contains(where: { $0.id == id && $0.state != .failed }) {
+                scheduleMessageRetry(id, scope: scope)
+            }
+        }
+    }
+
+    func resumePendingAttachmentCopy(messageID: String) {
+        guard let scope = currentDataScope, !outboxInFlight.contains(messageID),
+              let message = pendingMessages.first(where: { $0.id == messageID }),
+              message.error != nil else { return }
+        retryPendingMessage(messageID)
+    }
+
+    private func uploadChatAttachment(from sourceURL: URL, expectedScope: MordeClientDataScope,
+                                      originalFilename: String? = nil) async throws -> MordeChatAttachment {
+        let authorization = MordeShellAuthorization.shared
+        guard authorization.signedIn, let scope = authorization.personalDataScopeKey,
+              currentDataScope?.hasSameAccount(as: expectedScope) == true else { throw URLError(.userAuthenticationRequired) }
+        let personal = NanoMuseMordePersonalContentStore.shared
+        await personal.refresh(root: MordePersonalStorage.root)
+        guard authorization.personalDataScopeKey == scope, personal.syncEnabled else {
+            throw NSError(domain: "Morde", code: 403,
+                          userInfo: [NSLocalizedDescriptionKey: "请登录并启用个人同步后再添加聊天附件。"])
+        }
+        let name = originalFilename ?? sourceURL.lastPathComponent
+        guard !name.isEmpty, name.utf8.count <= 255,
+              !name.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains) else {
+            throw NSError(domain: "Morde", code: 400,
+                          userInfo: [NSLocalizedDescriptionKey: "附件文件名无效或过长。"])
+        }
+        guard let mediaType = MordeChatAttachmentPreparation.uploadMediaType(for: sourceURL) else {
+            throw NSError(domain: "Morde", code: 415,
+                          userInfo: [NSLocalizedDescriptionKey: AppLocalized("Chat attachments support images, PDF, DOCX, and XLSX.")])
+        }
+        let digest = try await Task.detached(priority: .utility) {
+            try withMordeSecurityScope(sourceURL) { try MordePersonalAttachmentHash.measure(fileURL: sourceURL) }
+        }.value
+        let quota = try await authorization.personalDataQuota()
+        guard authorization.personalDataScopeKey == scope, digest.sizeBytes <= quota.max_attachment_bytes else {
+            throw NSError(domain: "Morde", code: 413,
+                          userInfo: [NSLocalizedDescriptionKey: "附件超过当前账号允许的上传大小。"])
+        }
+        let identity = SHA256.hash(data: Data((expectedScope.messageOutboxKey + "\u{0}" + name + "\u{0}" + digest.sha256).utf8))
+            .map { String(format: "%02x", $0) }.joined()
+        let objectID = "li_" + String(identity.prefix(40))
+        let existing = personal.object("library_item", objectID)
+        let baseRevision: Int64
+        if let existing {
+            guard let body = try? existing.decodeBody(NanoMuseMordeLibraryItemBody.self), body.isValid,
+                  body.name == name, body.mime == mediaType, body.size_bytes == digest.sizeBytes else {
+                throw NSError(domain: "Morde", code: 409,
+                              userInfo: [NSLocalizedDescriptionKey: "此附件的文件信息与已有文件库记录冲突。"])
+            }
+            if let attachmentID = body.attachment_id {
+                return MordeChatAttachment(attachmentID: attachmentID, additionalAttachmentIDs: [], name: name,
+                                           mediaType: mediaType, sizeBytes: digest.sizeBytes)
+            }
+            baseRevision = existing.revision
+        } else {
+            let body = NanoMuseMordeLibraryItemBody(name: name,
+                kind: UTType(mimeType: mediaType)?.conforms(to: .image) == true ? "media" : "artifact",
+                mime: mediaType, size_bytes: digest.sizeBytes, attachment_id: nil)
+            guard let revision = try await personal.replace("library_item", id: objectID, revision: 0,
+                                                            body: body, root: MordePersonalStorage.root) else {
+                throw NSError(domain: "Morde", code: 409,
+                              userInfo: [NSLocalizedDescriptionKey: "文件库记录正在等待同步，请完成同步后重试。"])
+            }
+            baseRevision = revision
+        }
+        guard authorization.personalDataScopeKey == scope else { throw URLError(.userAuthenticationRequired) }
+        let personalDataRoot = MordePersonalStorage.root
+        let staged = try await Task.detached(priority: .utility) {
+            try withMordeSecurityScope(sourceURL) {
+                try NanoMuseMordePersonalAttachmentStaging.stage(sourceURL: sourceURL,
+                    expectedSizeBytes: digest.sizeBytes, expectedSHA256: digest.sha256,
+                    maxBytes: quota.max_attachment_bytes, root: personalDataRoot)
+            }
+        }.value
+        defer { NanoMuseMordePersonalAttachmentStaging.discard(staged) }
+        guard authorization.personalDataScopeKey == scope, currentDataScope?.hasSameAccount(as: expectedScope) == true else {
+            throw URLError(.userAuthenticationRequired)
+        }
+        let receipt = try await authorization.uploadPersonalAttachment(objectID: objectID,
+            baseRevision: baseRevision, fileURL: staged.fileURL, sizeBytes: staged.sizeBytes,
+            sha256: staged.sha256, mediaType: mediaType, idempotencyKey: "chat-library-upload-\(objectID)")
+        guard authorization.personalDataScopeKey == scope, currentDataScope?.hasSameAccount(as: expectedScope) == true,
+              MordePersonalDataContract.isValidAttachmentID(receipt.attachment_id) else {
+            throw URLError(.cannotParseResponse)
+        }
+        await personal.refresh(root: MordePersonalStorage.root)
+        return MordeChatAttachment(attachmentID: receipt.attachment_id, additionalAttachmentIDs: [], name: name,
+                                   mediaType: mediaType, sizeBytes: digest.sizeBytes)
+    }
+
+    private func uploadProjectAttachment(_ attachment: MordeOutboxAttachment, messageID: String,
+                                         clientMessageID: String, base: String,
+                                         scope: MordeClientDataScope, supportsDerivatives: Bool) async throws -> String {
+        struct ChunkReceipt: Decodable { let sequence: Int; let replay: Bool }
+        func checkScope() throws {
+            guard signedIn, currentDataScope?.hasSameAccount(as: scope) == true else {
+                throw URLError(.userAuthenticationRequired)
+            }
+        }
+        try checkScope()
+        let source = try await Task.detached(priority: .userInitiated) {
+            try MordeChatAttachmentPreparation.ensureStagedSource(attachment)
+        }.value
+        let name = attachment.originalFilename ?? source.lastPathComponent
+        guard name.utf8.count <= 255 else {
+            throw NSError(domain: "Morde", code: 400,
+                          userInfo: [NSLocalizedDescriptionKey: "附件名称超过 255 字节，原文件已保存在本机；请重命名原文件后重新选择。"])
+        }
+        guard MordeProjectAttachmentContract.isValidName(name),
+              let mediaType = MordeChatAttachmentPreparation.uploadMediaType(for: source),
+              attachment.attachmentID.map(MordeProjectAttachmentContract.isValidAttachmentID) ?? true else {
+            throw NSError(domain: "Morde", code: 400,
+                          userInfo: [NSLocalizedDescriptionKey: "项目附件名称或类型无效，原文件保留在本机。"])
+        }
+        let measured = try await Task.detached(priority: .utility) {
+            try MordePersonalAttachmentHash.measure(fileURL: source)
+        }.value
+        guard MordeProjectAttachmentContract.chunkCount(size: measured.sizeBytes) != nil else {
+            throw NSError(domain: "Morde", code: 413,
+                          userInfo: [NSLocalizedDescriptionKey: "附件超过项目允许的 300 MiB，原文件保留在本机。"])
+        }
+        let path = "\(base)/\(messageID)/attachments/\(attachment.id)"
+        let headers = ["X-Morde-Service-Instance-ID": scope.serviceInstanceID, "X-Morde-Actor-ID": scope.accountID]
+        let mode = attachment.projectDerivativeMode ??
+            (attachment.derivedAssociationPending == true ? (source.pathExtension.lowercased() == "pdf" ? "pdf" : "image") : "none")
+        guard ["none", "pdf", "image"].contains(mode) else { throw URLError(.cannotParseResponse) }
+        guard mode == "none" || supportsDerivatives else {
+            throw NSError(domain: "Morde", code: 501,
+                          userInfo: [NSLocalizedDescriptionKey: "当前服务尚不支持项目附件解析，原文件和消息已保存在本机。"])
+        }
+        if attachment.projectDerivativeMode == nil {
+            try messageOutbox.update(id: clientMessageID, scope: scope) { message in
+                if let index = message.attachments.firstIndex(where: { $0.id == attachment.id }) {
+                    message.attachments[index].projectDerivativeMode = mode
+                }
+            }
+        }
+        var metadata: [String: Any] = ["name": name, "media_type": mediaType,
+                                       "size_bytes": measured.sizeBytes, "sha256": measured.sha256]
+        if supportsDerivatives { metadata["derivative_mode"] = mode }
+        func initialize() async throws -> MordeProjectAttachmentUploadStatus {
+            try checkScope()
+            return try await call(path, method: "PUT", body: metadata, headers: headers)
+        }
+        var status: MordeProjectAttachmentUploadStatus
+        if attachment.attachmentID != nil {
+            do {
+                try checkScope()
+                status = try await call(path, headers: headers)
+            } catch let failure as NSError where failure.domain == "Morde" && [404, 410].contains(failure.code) {
+                status = try await initialize()
+            }
+        } else {
+            status = try await initialize()
+        }
+        func validate(_ value: MordeProjectAttachmentUploadStatus) throws {
+            if (supportsDerivatives && value.derivative_mode != mode) ||
+                (value.derivative_mode != nil && value.derivative_mode != mode) {
+                throw NSError(domain: "Morde", code: 409,
+                              userInfo: [NSLocalizedDescriptionKey: "项目附件已使用旧解析设置，请重新发送原文件。"])
+            }
+            guard value.isValid(name: name, mediaType: mediaType, size: measured.sizeBytes,
+                                digest: measured.sha256, existingID: attachment.attachmentID,
+                                derivativeMode: mode) else {
+                throw URLError(.cannotParseResponse)
+            }
+        }
+        try checkScope()
+        try validate(status)
+        if status.state == "expired" {
+            let expiredID = status.attachment_id
+            status = try await initialize()
+            try checkScope()
+            try validate(status)
+            guard status.state != "expired", status.attachment_id == expiredID else { throw URLError(.cannotParseResponse) }
+        }
+        let projectAttachmentID = status.attachment_id
+        try messageOutbox.update(id: clientMessageID, scope: scope) { message in
+            if let index = message.attachments.firstIndex(where: { $0.id == attachment.id }) {
+                message.attachments[index].attachmentID = projectAttachmentID
+            }
+        }
+        refreshPendingMessages(scope: scope)
+        if status.state == "committed" { return projectAttachmentID }
+        for sequence in status.missingSequences {
+            try checkScope()
+            guard let range = MordeProjectAttachmentContract.chunkRange(size: measured.sizeBytes, sequence: sequence) else {
+                throw URLError(.cannotParseResponse)
+            }
+            let offset = range.lowerBound
+            let length = Int(range.count)
+            let chunk = try await Task.detached(priority: .utility) { () -> (Data, String) in
+                let file = try FileHandle(forReadingFrom: source)
+                defer { try? file.close() }
+                try file.seek(toOffset: UInt64(offset))
+                guard let data = try file.read(upToCount: length), data.count == length else {
+                    throw NSError(domain: "Morde", code: 409,
+                                  userInfo: [NSLocalizedDescriptionKey: "附件暂存文件已变化，原文件保留在本机。"])
+                }
+                return (data, MordePersonalAttachmentHash.sha256(data))
+            }.value
+            try checkScope()
+            let receipt: ChunkReceipt = try await call("\(path)/chunks/\(sequence)", method: "PUT",
+                rawBody: chunk.0, contentType: "application/octet-stream",
+                headers: headers.merging(["X-Chunk-SHA256": chunk.1, "Content-Length": String(chunk.0.count)]) { _, new in new })
+            guard receipt.sequence == sequence else { throw URLError(.cannotParseResponse) }
+        }
+        try checkScope()
+        let finalMeasurement = try await Task.detached(priority: .utility) {
+            try MordePersonalAttachmentHash.measure(fileURL: source)
+        }.value
+        guard finalMeasurement.sizeBytes == measured.sizeBytes, finalMeasurement.sha256 == measured.sha256 else {
+            throw NSError(domain: "Morde", code: 409,
+                          userInfo: [NSLocalizedDescriptionKey: "附件暂存文件已变化，原文件保留在本机。"])
+        }
+        try checkScope()
+        let committed: MordeProjectAttachmentUploadStatus = try await call("\(path)/commit", method: "POST", headers: headers)
+        try checkScope()
+        try validate(committed)
+        guard committed.state == "committed", committed.attachment_id == projectAttachmentID else {
+            throw URLError(.cannotParseResponse)
+        }
+        return projectAttachmentID
+    }
+
+    nonisolated private static func prepareProjectDerivativeRequest(mode: String, paths: [String]) throws -> Data {
+        let files: [MordeProjectDerivativeFile] = try paths.map { path in
+            guard MordeChatAttachmentPreparation.validStagedPath(path) else { throw URLError(.fileDoesNotExist) }
+            let url = URL(fileURLWithPath: path)
+            let kind: String
+            let page: Int
+            if mode == "image" { kind = "image_conversion"; page = 0 }
+            else if url.pathExtension.lowercased() == "txt" { kind = "extracted_text"; page = 0 }
+            else {
+                kind = "page_preview"
+                let name = url.deletingPathExtension().lastPathComponent
+                guard let match = name.range(of: "第[0-9]{2}页$", options: .regularExpression),
+                      let parsed = Int(name[match].dropFirst().dropLast()) else { throw URLError(.cannotParseResponse) }
+                page = parsed
+            }
+            let limit = kind == "extracted_text" ? 48 * 1024 : 512 * 1024
+            let attributes = try FileManager.default.attributesOfItem(atPath: path)
+            guard let size = (attributes[.size] as? NSNumber)?.int64Value,
+                  size >= 0, size <= Int64(limit) else { throw URLError(.dataLengthExceedsMaximum) }
+            let bytes = try Data(contentsOf: url)
+            guard bytes.count <= limit else { throw URLError(.dataLengthExceedsMaximum) }
+            return MordeProjectDerivativeFile(kind: kind, page: page, name: url.lastPathComponent,
+                media_type: kind == "extracted_text" ? "text/plain" : "image/jpeg",
+                sha256: MordeMessageChunking.digest(bytes), content_base64: bytes.base64EncodedString())
+        }
+        guard let data = MordeProjectDerivativeRequest(outcome: "completed", files: files).encoded(mode: mode) else {
+            throw NSError(domain: "Morde", code: 413,
+                          userInfo: [NSLocalizedDescriptionKey: "附件解析内容超出服务限制，原文件保留在本机。"])
+        }
+        return data
+    }
+
+    private func completeProjectDerivatives(_ attachment: MordeOutboxAttachment, messageID: String,
+                                            clientMessageID: String, base: String, scope: MordeClientDataScope,
+                                            supportsDerivatives: Bool) async throws -> MordeOutboxMessage {
+        func checkScope() throws {
+            guard signedIn, currentDataScope?.hasSameAccount(as: scope) == true else {
+                throw URLError(.userAuthenticationRequired)
+            }
+        }
+        try checkScope()
+        guard supportsDerivatives else {
+            throw NSError(domain: "Morde", code: 501,
+                          userInfo: [NSLocalizedDescriptionKey: "当前服务尚不支持项目附件解析，原文件和消息已保存在本机。"])
+        }
+        let source = try await Task.detached(priority: .userInitiated) {
+            try MordeChatAttachmentPreparation.ensureStagedSource(attachment)
+        }.value
+        let mode = attachment.projectDerivativeMode ?? (source.pathExtension.lowercased() == "pdf" ? "pdf" : "image")
+        guard ["pdf", "image"].contains(mode), let attachmentID = attachment.attachmentID,
+              MordeProjectAttachmentContract.isValidAttachmentID(attachmentID),
+              let mediaType = MordeChatAttachmentPreparation.uploadMediaType(for: source) else {
+            throw URLError(.cannotParseResponse)
+        }
+        let measured = try await Task.detached(priority: .utility) {
+            try MordePersonalAttachmentHash.measure(fileURL: source)
+        }.value
+        let path = "\(base)/\(messageID)/attachments/\(attachment.id)"
+        let headers = ["X-Morde-Service-Instance-ID": scope.serviceInstanceID, "X-Morde-Actor-ID": scope.accountID]
+        let status: MordeProjectAttachmentUploadStatus = try await call(path, headers: headers)
+        try checkScope()
+        let sourceName = attachment.originalFilename ?? source.lastPathComponent
+        guard status.isValid(name: sourceName, mediaType: mediaType, size: measured.sizeBytes,
+                             digest: measured.sha256, existingID: attachmentID, derivativeMode: mode),
+              status.state == "committed" else {
+            throw NSError(domain: "Morde", code: 409,
+                          userInfo: [NSLocalizedDescriptionKey: "项目附件的解析状态与本机记录不一致，请重新发送原文件。"])
+        }
+        var queued = try messageOutbox.messages(scope: scope).first(where: { $0.id == clientMessageID })
+        guard var item = queued?.attachments.first(where: { $0.id == attachment.id }) else { throw URLError(.fileDoesNotExist) }
+        if item.projectDerivativePayloadPath == nil {
+            guard status.derivative_state == "awaiting" else {
+                throw NSError(domain: "Morde", code: 409,
+                              userInfo: [NSLocalizedDescriptionKey: "项目附件的解析结果待核对，原文件仍保存在本机。"])
+            }
+            if item.derivedLocalPaths == nil {
+                let derived = try await Task.detached(priority: .userInitiated) {
+                    let prepared = try MordeChatAttachmentPreparation.prepare(source)
+                    defer { prepared.discardTemporaryFiles() }
+                    let files = mode == "pdf" ? Array(prepared.files.dropFirst()) : prepared.files
+                    return try MordeChatAttachmentPreparation.stageDerivedFiles(files)
+                }.value
+                try checkScope()
+                queued = try messageOutbox.update(id: clientMessageID, scope: scope) { message in
+                    if let index = message.attachments.firstIndex(where: { $0.id == attachment.id }) {
+                        message.attachments[index].projectDerivativeMode = mode
+                        message.attachments[index].derivedLocalPaths = derived
+                    }
+                }
+                guard let updated = queued?.attachments.first(where: { $0.id == attachment.id }) else {
+                    throw URLError(.fileDoesNotExist)
+                }
+                item = updated
+            }
+            let paths = item.derivedLocalPaths ?? []
+            let payload = try await Task.detached(priority: .utility) {
+                try Self.prepareProjectDerivativeRequest(mode: mode, paths: paths)
+            }.value
+            let payloadPath = try await Task.detached(priority: .utility) {
+                try MordeChatAttachmentPreparation.stageDerivativeRequest(payload)
+            }.value
+            try checkScope()
+            queued = try messageOutbox.update(id: clientMessageID, scope: scope) { message in
+                if let index = message.attachments.firstIndex(where: { $0.id == attachment.id }) {
+                    message.attachments[index].projectDerivativeMode = mode
+                    message.attachments[index].projectDerivativePayloadPath = payloadPath
+                    message.attachments[index].projectDerivativePayloadDigest = MordeMessageChunking.digest(payload)
+                }
+            }
+            guard let updated = queued?.attachments.first(where: { $0.id == attachment.id }) else {
+                throw URLError(.fileDoesNotExist)
+            }
+            item = updated
+        }
+        guard let payloadPath = item.projectDerivativePayloadPath,
+              MordeChatAttachmentPreparation.validStagedPath(payloadPath),
+              let expectedDigest = item.projectDerivativePayloadDigest else { throw URLError(.fileDoesNotExist) }
+        let (payload, outcome) = try await Task.detached(priority: .utility) { () -> (Data, String) in
+            let attributes = try FileManager.default.attributesOfItem(atPath: payloadPath)
+            guard let size = (attributes[.size] as? NSNumber)?.int64Value,
+                  size >= 0, size <= 8 * 1024 * 1024 else { throw URLError(.dataLengthExceedsMaximum) }
+            let data = try Data(contentsOf: URL(fileURLWithPath: payloadPath))
+            guard data.count <= 8 * 1024 * 1024 else { throw URLError(.dataLengthExceedsMaximum) }
+            guard MordeMessageChunking.digest(data) == expectedDigest,
+                  let request = try? JSONDecoder().decode(MordeProjectDerivativeRequest.self, from: data),
+                  request.encoded(mode: mode) == data else { throw URLError(.cannotParseResponse) }
+            return (data, request.outcome)
+        }.value
+        try checkScope()
+        let (response, _) = try await responseData("\(path)/derivatives", method: "PUT", body: nil, key: nil,
+            authorized: true, handleUnauthorized: true, scheduleAuthorized: false, rawBody: payload,
+            contentType: "application/json", headers: headers)
+        let completed = try JSONDecoder().decode(MordeProjectAttachmentUploadStatus.self, from: response)
+        try checkScope()
+        guard completed.isValid(name: sourceName, mediaType: mediaType, size: measured.sizeBytes,
+                                digest: measured.sha256, existingID: attachmentID, derivativeMode: mode),
+              completed.state == "committed", completed.derivative_state == outcome else {
+            throw URLError(.cannotParseResponse)
+        }
+        return try messageOutbox.update(id: clientMessageID, scope: scope) { message in
+            if let index = message.attachments.firstIndex(where: { $0.id == attachment.id }) {
+                message.attachments[index].derivedAssociationPending = false
+            }
+            message.error = nil
+        }
+    }
+
+    private func submitPendingMessage(_ queued: MordeOutboxMessage, base: String,
+                                      scope: MordeClientDataScope) async throws -> MordeClientMessage {
+        struct Upload: Decodable {
+            let client_message_id: String
+            let state: String
+            let total_bytes: Int
+            let total_chunks: Int
+            let received_sequences: [Int]
+            let message: MordeClientMessage?
+        }
+        func ensureScope() throws {
+            guard signedIn, currentDataScope?.hasSameAccount(as: scope) == true else {
+                throw URLError(.userAuthenticationRequired)
+            }
+        }
+
+        let bytes = Data(queued.content.utf8)
+        let instanceHeader = ["X-Morde-Service-Instance-ID": scope.serviceInstanceID,
+                              "X-Morde-Actor-ID": scope.accountID]
+        guard bytes.count <= MordeMessageChunking.messageLimit else {
+            throw NSError(domain: "Morde", code: 413,
+                          userInfo: [NSLocalizedDescriptionKey: AppLocalized("The message exceeds 8 MiB; the full text is saved on this device.")])
+        }
+        if bytes.count <= MordeMessageChunking.directLimit {
+            let (data, response) = try await responseData(base, method: "POST",
+                body: MordeConversationMessagePayload.direct(queued), key: queued.id,
+                authorized: true, handleUnauthorized: true, scheduleAuthorized: false, headers: instanceHeader)
+            guard response.statusCode == 202 else { throw URLError(.cannotParseResponse) }
+            return try JSONDecoder().decode(MordeConversationMessageReceipt.self, from: data).message
+        }
+
+        let chunks = MordeMessageChunking.count(for: bytes)
+        guard base.hasSuffix("/messages") else { throw URLError(.badURL) }
+        let upload = String(base.dropLast("messages".count)) + "message-uploads/\(queued.id)"
+        let fields = MordeConversationMessagePayload.uploadInitialization(queued, bytes: bytes)
+        _ = try await responseData(upload, method: "PUT", body: fields, key: queued.id,
+            authorized: true, handleUnauthorized: true, scheduleAuthorized: false, headers: instanceHeader)
+        try ensureScope()
+        let progress: Upload = try await call(upload, headers: instanceHeader)
+        guard progress.client_message_id == queued.id, progress.total_bytes == bytes.count,
+              progress.total_chunks == chunks, ["uploading", "committed"].contains(progress.state),
+              Set(progress.received_sequences).count == progress.received_sequences.count,
+              progress.received_sequences.allSatisfy({ $0 >= 0 && $0 < chunks }) else {
+            throw URLError(.cannotParseResponse)
+        }
+        if progress.state == "committed" {
+            guard let message = progress.message else { throw URLError(.cannotParseResponse) }
+            return message
+        }
+        let received = Set(progress.received_sequences)
+        for sequence in 0..<chunks where !received.contains(sequence) {
+            try ensureScope()
+            guard let chunk = MordeMessageChunking.chunk(bytes, sequence: sequence) else { throw URLError(.cannotParseResponse) }
+            _ = try await responseData("\(upload)/chunks/\(sequence)", method: "PUT",
+                body: ["content_base64": chunk.base64EncodedString(), "sha256": MordeMessageChunking.digest(chunk)], key: nil,
+                authorized: true, handleUnauthorized: true, scheduleAuthorized: false, headers: instanceHeader)
+        }
+        try ensureScope()
+        let (data, response) = try await responseData("\(upload)/commit", method: "POST", body: nil, key: queued.id,
+            authorized: true, handleUnauthorized: true, scheduleAuthorized: false, headers: instanceHeader)
+        guard response.statusCode == 202 else { throw URLError(.cannotParseResponse) }
+        return try JSONDecoder().decode(MordeConversationMessageReceipt.self, from: data).message
+    }
+
+    private func resolvePendingConversation(_ localID: String, scope: MordeClientDataScope) async throws -> String {
+        guard localID.hasPrefix("local-") else { return localID }
+        let mapped = try messageOutbox.resolvedConversationID(localID, scope: scope)
+        if mapped != localID { return mapped }
+        let taskKey = "\(scope.messageOutboxKey):\(localID)"
+        let task: Task<MordeConversation, Error>
+        if let existing = pendingConversationCreations[taskKey] {
+            task = existing
+        } else {
+            task = Task { @MainActor in
+                try await self.call("/api/conversations", method: "POST", body: ["title": "新对话"],
+                    key: localID, headers: ["X-Morde-Service-Instance-ID": scope.serviceInstanceID,
+                                            "X-Morde-Actor-ID": scope.accountID])
+            }
+            pendingConversationCreations[taskKey] = task
+        }
+        let conversation: MordeConversation
+        do { conversation = try await task.value }
+        catch { pendingConversationCreations.removeValue(forKey: taskKey); throw error }
+        pendingConversationCreations.removeValue(forKey: taskKey)
+        guard signedIn, currentDataScope?.hasSameAccount(as: scope) == true,
+              MordeProjectPolicy.hasValidConversationID(conversation.id) else { throw CancellationError() }
+        try messageOutbox.resolveLocalConversation(localID, serverID: conversation.id, scope: scope)
+        draftConversationAliases[conversation.id] = localID
+        conversations.removeAll { $0.id == localID || $0.id == conversation.id }
+        conversations.insert(conversation, at: 0)
+        if currentConversation == localID {
+            currentConversation = conversation.id
+            saveRecentConversation(conversation.id)
+        }
+        refreshPendingMessages(scope: scope)
+        return conversation.id
+    }
+
+    private func processPendingMessage(id: String, scope: MordeClientDataScope) async {
+        var scheduleAfterFailure = false
+        defer {
+            outboxInFlight.remove(id)
+            if scheduleAfterFailure { schedulePendingMessages() }
+        }
+        guard signedIn, currentDataScope?.hasSameAccount(as: scope) == true else { return }
+        var requestMayBeCommitted = false
+        var submissionBegan = false
+        var firstSubmission = false
+        var hadUncertainSubmission = true
+        var localPreflightRejected = false
+        do {
+            guard var queued = try messageOutbox.messages(scope: scope).first(where: { $0.id == id }) else { return }
+            requestMayBeCommitted = queued.state == .unknown || queued.state == .sending ||
+                queued.serverMessageID != nil || queued.submissionUncertain == true
+            firstSubmission = queued.submissionStarted == false
+            hadUncertainSubmission = queued.submissionUncertain ?? (queued.submissionStarted != false)
+            if queued.serverMessageID == nil && queued.content.utf8.count > MordeMessageChunking.messageLimit &&
+                firstSubmission && !hadUncertainSubmission {
+                localPreflightRejected = true
+                throw NSError(domain: "Morde", code: 413,
+                              userInfo: [NSLocalizedDescriptionKey: AppLocalized("The message exceeds 8 MiB; the full text is saved on this device.")])
+            }
+            let capabilities: MordeCapabilities = try await call("/api/capabilities", authorized: false)
+            guard capabilities.service_instance_id.lowercased() == scope.serviceInstanceID else {
+                throw NSError(domain: "Morde", code: 409,
+                              userInfo: [NSLocalizedDescriptionKey: "服务实例已变化，消息保留在原账号中。"])
+            }
+            guard capabilities.supported_features.contains("conversation_auto_routing_v1") else {
+                autoRoutingAvailable = false
+                try messageOutbox.update(id: id, scope: scope) {
+                    if $0.serverMessageID != nil { $0.state = .accepted }
+                    else if $0.state == .unknown || $0.state == .sending || $0.submissionUncertain != false {
+                        $0.state = .unknown
+                    } else { $0.state = .pending }
+                    $0.error = "当前服务需要更新后才能发送此消息。"
+                }
+                refreshPendingMessages(scope: scope)
+                scheduleMessageRetry(id, scope: scope)
+                return
+            }
+            guard signedIn, currentDataScope?.hasSameAccount(as: scope) == true else { return }
+            if queued.awaitingAttachmentBatch == true {
+                // Recover messages persisted by the former preparation-first client without losing their sources.
+                queued = try messageOutbox.update(id: id, scope: scope) { message in
+                    if message.preparedBatchAttachmentIDs == nil {
+                        let existing = Set(message.attachments.compactMap(\.localPath))
+                        for path in Set(message.pendingUploadPaths ?? []).subtracting(existing).sorted() {
+                            message.attachments.append(MordeOutboxAttachment(id: UUID().uuidString.lowercased(),
+                                attachmentID: nil, localPath: path, linked: false,
+                                derivedAssociationPending: URL(fileURLWithPath: path).pathExtension.lowercased() == "pdf"))
+                        }
+                    }
+                    message.awaitingAttachmentBatch = false
+                }
+                refreshPendingMessages(scope: scope)
+            }
+            if queued.projectID == nil && queued.conversationID.hasPrefix("local-") {
+                _ = try await resolvePendingConversation(queued.conversationID, scope: scope)
+                guard let refreshed = try messageOutbox.messages(scope: scope).first(where: { $0.id == id }) else { return }
+                queued = refreshed
+            }
+            let base: String
+            if let projectID = queued.projectID {
+                base = "/api/projects/\(projectID)/conversations/\(queued.conversationID)/messages"
+            } else {
+                base = "/api/conversations/\(queued.conversationID)/messages"
+            }
+            var received: MordeClientMessage?
+            if queued.serverMessageID == nil &&
+                (queued.state == .unknown || queued.state == .sending || queued.submissionUncertain == true) {
+                let page: MordePage<MordeClientMessage> = try await call("\(base)?client_message_id=\(id)",
+                    headers: ["X-Morde-Service-Instance-ID": scope.serviceInstanceID,
+                              "X-Morde-Actor-ID": scope.accountID])
+                guard page.items.count <= 1, page.next_cursor == nil else { throw URLError(.cannotParseResponse) }
+                received = page.items.first
+            }
+            if queued.serverMessageID == nil && received == nil {
+                guard signedIn, currentDataScope?.hasSameAccount(as: scope) == true else { return }
+                queued = try messageOutbox.update(id: id, scope: scope) {
+                    $0.state = .sending; $0.error = nil
+                    $0.submissionStarted = true; $0.submissionUncertain = true; $0.confirmedNotAccepted = false
+                }
+                refreshPendingMessages(scope: scope)
+                requestMayBeCommitted = true
+                submissionBegan = true
+                received = try await submitPendingMessage(queued, base: base, scope: scope)
+            }
+            if let received {
+                guard MordeConversationMessageReceiptPolicy.matches(received, clientMessageID: id,
+                      conversationID: queued.conversationID, content: queued.content),
+                      (received.attachment_ids ?? []).allSatisfy({ attachmentID in
+                          queued.projectID == nil ? MordePersonalDataContract.isValidAttachmentID(attachmentID)
+                              : MordeProjectAttachmentContract.isValidAttachmentID(attachmentID)
+                      }) else { throw URLError(.cannotParseResponse) }
+                if queued.projectID != nil && received.actor_id != scope.accountID {
+                    throw URLError(.cannotParseResponse)
+                }
+                queued = try messageOutbox.update(id: id, scope: scope) {
+                    $0.state = .accepted; $0.serverMessageID = received.id; $0.error = nil
+                    $0.submissionUncertain = false; $0.confirmedNotAccepted = false
+                }
+                if currentDataScope?.hasSameAccount(as: scope) == true,
+                   currentConversation == queued.conversationID, queued.projectID == nil {
+                    conversationMessagesRefreshGeneration = UUID()
+                    messages.removeAll { $0.id == received.id || $0.client_message_id == id }
+                    messages.append(received)
+                    messages = orderedConversationMessages(messages)
+                }
+                if currentDataScope?.hasSameAccount(as: scope) == true,
+                   selectedProjectID == queued.projectID, selectedProjectConversationID == queued.conversationID,
+                   let ownerID = received.owner_id, let actorID = received.actor_id {
+                    let projectMessage = MordeProjectConversationMessage(id: received.id,
+                        conversation_id: queued.conversationID, sequence: received.sequence, role: received.role,
+                        content: received.content, task_id: received.task_id, delivery_status: received.delivery_status,
+                        created_at: received.created_at ?? queued.createdAt, owner_id: ownerID, actor_id: actorID,
+                        client_message_id: received.client_message_id, routing_status: received.routing_status,
+                        routing_failure_reason: received.routing_failure_reason, attachment_ids: received.attachment_ids,
+                        output_status: received.output_status, output_task_revision: received.output_task_revision,
+                        output_result_event_sequence: received.output_result_event_sequence,
+                        local_send_status: nil, sources: received.sources)
+                    projectConversationMessages.removeAll { $0.id == received.id || $0.client_message_id == id }
+                    projectConversationMessages.append(projectMessage)
+                    projectConversationMessages = orderedProjectConversationMessages(projectConversationMessages)
+                }
+                refreshPendingMessages(scope: scope)
+                schedulePendingMessages()
+            }
+            guard let messageID = queued.serverMessageID else { throw URLError(.cannotParseResponse) }
+            for attachment in queued.attachments where !attachment.linked {
+                guard signedIn, currentDataScope?.hasSameAccount(as: scope) == true else { return }
+                if queued.projectID != nil {
+                    let attachmentID = try await uploadProjectAttachment(attachment, messageID: messageID,
+                        clientMessageID: id, base: base, scope: scope,
+                        supportsDerivatives: capabilities.supported_features.contains("project_attachment_derivatives_v1"))
+                    queued = try messageOutbox.update(id: id, scope: scope) { message in
+                        if let index = message.attachments.firstIndex(where: { $0.id == attachment.id }) {
+                            message.attachments[index].attachmentID = attachmentID
+                            message.attachments[index].linked = true
+                        }
+                    }
+                    refreshPendingMessages(scope: scope)
+                    continue
+                }
+                var attachmentID = attachment.attachmentID
+                if attachmentID == nil {
+                    let source = try await Task.detached(priority: .userInitiated) {
+                        try MordeChatAttachmentPreparation.ensureStagedSource(attachment)
+                    }.value
+                    let uploaded = try await uploadChatAttachment(from: source, expectedScope: scope,
+                                                                  originalFilename: attachment.originalFilename)
+                    attachmentID = uploaded.attachmentID
+                    queued = try messageOutbox.update(id: id, scope: scope) { message in
+                        if let index = message.attachments.firstIndex(where: { $0.id == attachment.id }) {
+                            message.attachments[index].attachmentID = uploaded.attachmentID
+                        }
+                    }
+                    refreshPendingMessages(scope: scope)
+                }
+                guard let attachmentID else { throw URLError(.cannotParseResponse) }
+                guard signedIn, currentDataScope?.hasSameAccount(as: scope) == true else { return }
+                _ = try await responseData("\(base)/\(messageID)/attachments/\(attachment.id)",
+                    method: "PUT", body: ["attachment_id": attachmentID], key: attachment.id,
+                    authorized: true, handleUnauthorized: true, scheduleAuthorized: false,
+                    headers: ["X-Morde-Service-Instance-ID": scope.serviceInstanceID,
+                              "X-Morde-Actor-ID": scope.accountID])
+                queued = try messageOutbox.update(id: id, scope: scope) { message in
+                    if let index = message.attachments.firstIndex(where: { $0.id == attachment.id }) {
+                        message.attachments[index].linked = true
+                    }
+                }
+                refreshPendingMessages(scope: scope)
+            }
+            for attachment in queued.attachments where attachment.linked && attachment.derivedAssociationPending == true {
+                if queued.projectID != nil {
+                    queued = try await completeProjectDerivatives(attachment, messageID: messageID,
+                        clientMessageID: id, base: base, scope: scope,
+                        supportsDerivatives: capabilities.supported_features.contains("project_attachment_derivatives_v1"))
+                    refreshPendingMessages(scope: scope)
+                    continue
+                }
+                guard attachment.derivedLocalPaths == nil else { continue }
+                guard let path = attachment.localPath else { continue }
+                let derived = try await Task.detached(priority: .userInitiated) {
+                    let source = URL(fileURLWithPath: path)
+                    let prepared = try MordeChatAttachmentPreparation.prepare(source)
+                    defer { prepared.discardTemporaryFiles() }
+                    let files = source.pathExtension.lowercased() == "pdf"
+                        ? Array(prepared.files.dropFirst()) : prepared.files
+                    return try MordeChatAttachmentPreparation.stageDerivedFiles(files)
+                }.value
+                queued = try messageOutbox.update(id: id, scope: scope) { message in
+                    if let index = message.attachments.firstIndex(where: { $0.id == attachment.id }) {
+                        message.attachments[index].derivedLocalPaths = derived
+                    }
+                }
+            }
+            if queued.attachments.contains(where: { $0.derivedAssociationPending == true }) {
+                try messageOutbox.update(id: id, scope: scope) {
+                    $0.error = "原文件已关联；提取文本或图片预览保存在本机，尚未关联到消息。"
+                }
+                refreshPendingMessages(scope: scope)
+                return
+            }
+            try messageOutbox.remove(id: id, scope: scope)
+            outboxRetryAttempts.removeValue(forKey: id)
+            let completedPaths = (queued.pendingUploadPaths ?? []) + queued.attachments.compactMap(\.localPath) +
+                queued.attachments.flatMap { $0.derivedLocalPaths ?? [] } +
+                queued.attachments.compactMap(\.projectDerivativePayloadPath)
+            MordeChatAttachmentPreparation.discardStagedFiles(completedPaths.filter { !isUnconfirmedAttachmentPath($0) })
+            refreshPendingMessages(scope: scope)
+        } catch {
+            let failure = error as NSError
+            let confirmedRejection = localPreflightRejected || MordeOutboxFailurePolicy.confirmsRejection(
+                submissionBegan: submissionBegan, firstSubmission: firstSubmission,
+                hadUncertainSubmission: hadUncertainSubmission, domain: failure.domain, code: failure.code)
+            let state = MordeOutboxFailurePolicy.state(mayHaveBeenAccepted: requestMayBeCommitted,
+                confirmedRejection: confirmedRejection, domain: failure.domain, code: failure.code)
+            do {
+                try messageOutbox.update(id: id, scope: scope) { message in
+                    message.state = message.serverMessageID == nil ? state : .accepted
+                    message.error = error.localizedDescription
+                    if message.serverMessageID == nil {
+                        if submissionBegan {
+                            message.submissionUncertain = !confirmedRejection
+                            message.confirmedNotAccepted = confirmedRejection
+                        } else if localPreflightRejected {
+                            message.submissionUncertain = false
+                            message.confirmedNotAccepted = true
+                        } else if state == .failed { message.confirmedNotAccepted = false }
+                    }
+                }
+                refreshPendingMessages(scope: scope)
+                if state == .failed, let failed = pendingMessages.first(where: { $0.id == id && $0.serverMessageID == nil }) {
+                    let sameConversation = pendingMessages.filter {
+                        $0.scope.hasSameAccount(as: scope) && $0.projectID == failed.projectID &&
+                            $0.conversationID == failed.conversationID && $0.serverMessageID == nil
+                    }
+                    scheduleAfterFailure = !sameConversation.contains { $0.previousClientMessageID == id } &&
+                        sameConversation.contains { $0.id != id && $0.state != .failed }
+                }
+                let transient = !(error is CancellationError) &&
+                    (failure.domain != "Morde" || failure.code == 429 || (500...599).contains(failure.code)) &&
+                    !(failure.domain == "Morde" && failure.code == 501)
+                if transient { scheduleMessageRetry(id, scope: scope) }
+            } catch { self.error = "无法保存消息状态：\(error.localizedDescription)" }
+        }
     }
     private var token: String? {
         guard let authorization else { return nil }
@@ -4382,8 +6531,24 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
     func refreshExpiredAuthorization(now: Date = Date()) {
         guard let authorization,
               MordeCredentialExpiry.status(expiresAt: authorization.expiresAt, now: now) == .expired else { return }
+        let offlineScope = currentDataScope
+        let preserveConversation = offlineScope.map {
+            currentConversation != nil || !MordeOfflineProjectQueue.messages(pendingMessages, scope: $0).isEmpty
+        } ?? false
+        retainedOfflineScope = offlineScope
+        if preserveConversation {
+            expiredConversationAvailable = true
+            offlineRequiresLoginScreen = false
+        }
         if let installation { clearAuthorization(for: installation) }
-        resetViewState()
+        if preserveConversation {
+            autoRoutingAvailable = nil
+            modelConfigurationStatus = "unknown"
+            modelConfigurationCheckedAt = nil
+            publishShellAuthorization()
+        } else {
+            resetViewState()
+        }
         error = "登录已到期，请重新登录"
     }
 
@@ -4395,6 +6560,7 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
         // nanoMuse: Keep submission disabled while the capability endpoint is pending or has failed.
         cloudTasksAvailable = nil
         taskAPIAvailable = nil
+        autoRoutingAvailable = nil
         workspaceSyncAvailable = nil
         projectBudgetExecutionAvailable = nil
         projectWorkItemsV2Available = nil
@@ -4425,6 +6591,7 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
         }
         cloudTasksAvailable = MordeTaskCapability.cloudWorkerIsAvailable(capabilities.supported_features)
         taskAPIAvailable = MordeTaskCapability.taskAPIIsAvailable(capabilities.supported_features)
+        autoRoutingAvailable = capabilities.supported_features.contains("conversation_auto_routing_v1")
         workspaceSyncAvailable = MordeWorkspaceSyncCapability.isAvailable(capabilities.supported_features)
         projectBudgetExecutionAvailable = MordeProjectExecutionCapability.isAvailable(capabilities.supported_features)
         projectWorkItemsV2Available = capabilities.supported_features.contains("project_work_items_v2")
@@ -4452,9 +6619,33 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
         UserDefaults.standard.set(normalized, forKey: "morde.server")
     }
 
+    private func retainOfflineOnServiceChange() {
+        let oldScope = currentDataScope ?? (signedIn ? nil : retainedOfflineScope)
+        let oldConversation = currentConversation
+        let oldMessages = messages
+        let hasProjectMessages = oldScope.map { !MordeOfflineProjectQueue.messages(pendingMessages, scope: $0).isEmpty } ?? false
+        verifiedServiceInstanceID = nil
+        resetViewState()
+        if let oldScope, oldConversation != nil || hasProjectMessages {
+            retainedOfflineScope = oldScope
+            expiredConversationAvailable = true
+            offlineRequiresLoginScreen = true
+            currentConversation = oldConversation
+            messages = oldMessages
+            refreshPendingMessages(scope: oldScope)
+            publishShellAuthorization()
+        }
+        error = "Morde 后端服务实例已变化，请重新登录"
+    }
+
     private func resetViewState() {
         // nanoMuse: Keep the original app shell's Morde sign-in gate in sync with local authorization resets.
         resourceLoadGeneration = UUID()
+        expiredConversationAvailable = false
+        offlineRequiresLoginScreen = false
+        retainedOfflineScope = nil
+        retainedOfflineConversationID = nil
+        retainedOfflineMessages = []
         resourceLoadIsInProgress = false
         conversationLoadGeneration = UUID()
         conversationLoadMoreGeneration = UUID()
@@ -4472,6 +6663,11 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
         hostControlActionGeneration = UUID()
         user = nil; hosts = []; sharedHosts = []; workspaces = []; models = []
         defaultModelConfigured = false; defaultModelID = nil; personalModelIDs = []
+        modelConfigurationStatus = "unknown"; modelConfigurationCheckedAt = nil
+        pendingMessages = []
+        draftConversationAliases = [:]
+        routingRetryInFlight = []
+        routingRetryErrors = [:]
         defaultHostID = nil; defaultHostPreferenceState = .failed("Not signed in to Morde.")
         hostOpenErrors = [:]
         conversations = []; conversationNextCursor = nil; loadingMoreConversations = false
@@ -4490,7 +6686,7 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
         projectWorkItemsState = .failed("Not signed in to Morde.")
         projectBudgetState = .failed("Not signed in to Morde.")
         projectConversations = []; selectedProjectConversationID = nil; projectConversationMessages = []
-        projectConversationTask = nil; projectConversationError = nil
+        projectConversationTask = nil; projectConversationTasks = []; projectAssistantSnapshots = []; projectConversationError = nil
         projectConversationsState = .failed("Not signed in to Morde.")
         projectConversationMessagesState = .failed("Not signed in to Morde.")
         recentProjectInvitations = [:]; selectedProjectID = nil
@@ -4501,7 +6697,7 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
         clientInstallationsState = .failed(String(localized: "Not signed in to Morde."))
         clientInstallationsActionError = nil; clientInstallationsNotice = nil
         revokingClientInstallationID = nil
-        currentConversation = nil; currentTask = nil; hostURL = nil
+        currentConversation = nil; currentTask = nil; conversationTasks = []; conversationTasksLoaded = false; hostURL = nil
         mainConversation = nil; mainConversationLoadError = nil; followsMainConversation = false
         executionControl = nil; executionControlError = nil; executionControlIsLoading = false
         executionControlActionInFlight = false
@@ -4509,6 +6705,7 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
         portalSessionCredential = nil; portalSessionExpiresAt = nil; portalSessionScope = nil
         cloudTasksAvailable = nil
         taskAPIAvailable = nil
+        autoRoutingAvailable = nil
         workspaceSyncAvailable = nil
         projectBudgetExecutionAvailable = nil
         projectWorkItemsV2Available = nil
@@ -4569,7 +6766,10 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
         if ProcessInfo.processInfo.arguments.contains(MordeAuthURLProtocol.taskSequentialSendFixtureLaunchArgument),
            method == "POST", path == "/api/conversations/c1234567/messages",
            let content = body?["content"] as? String {
-            request.setValue(content, forHTTPHeaderField: "X-Morde-Local-Task-Prompt")
+            request.setValue(Data(content.utf8).base64EncodedString(), forHTTPHeaderField: "X-Morde-Local-Task-Prompt-Base64")
+            request.setValue(body?["client_message_id"] as? String, forHTTPHeaderField: "X-Morde-Local-Client-Message-ID")
+            request.setValue(body?["previous_client_message_id"] as? String ?? "",
+                             forHTTPHeaderField: "X-Morde-Local-Previous-Client-Message-ID")
         }
         if ProcessInfo.processInfo.arguments.contains(MordeAuthURLProtocol.taskMediaFixtureLaunchArgument),
            method == "POST", path == "/api/tasks/q1234567/approvals/r1234567/responses",
@@ -4604,7 +6804,19 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
             hasPendingLoginIntent: loginStateStore.hasPendingIntent(
                 origin: requestOrigin, accountName: requestInstallation.accountName),
             isCancelled: Task.isCancelled) {
+            let offlineScope = currentDataScope
+            let offlineConversation = currentConversation
+            let offlineMessages = messages
+            let hasProjectMessages = offlineScope.map { !MordeOfflineProjectQueue.messages(pendingMessages, scope: $0).isEmpty } ?? false
             signOutLocally(installation: requestInstallation)
+            if let offlineScope, offlineConversation != nil || hasProjectMessages {
+                retainedOfflineScope = offlineScope
+                expiredConversationAvailable = true
+                currentConversation = offlineConversation
+                messages = offlineMessages
+                refreshPendingMessages(scope: offlineScope)
+                publishShellAuthorization()
+            }
             recordedUnconfirmedLogout = true
         }
         guard (200..<300).contains(http.statusCode) else {
@@ -4618,7 +6830,7 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
         return (data, http)
     }
 
-    private func downloadResponseFile(_ path: String) async throws -> (URL, HTTPURLResponse) {
+    private func downloadResponseFile(_ path: String, headers: [String: String] = [:]) async throws -> (URL, HTTPURLResponse) {
         let requestServer = server
         let requestInstallation = installation
         let requestOrigin = MordeLoginStateStore.serviceOrigin(requestServer)
@@ -4639,6 +6851,7 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
         request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
         request.setValue(UUID().uuidString, forHTTPHeaderField: "X-Request-Id")
         request.setValue("Bearer \(credential)", forHTTPHeaderField: "Authorization")
+        for (name, value) in headers { request.setValue(value, forHTTPHeaderField: name) }
         let temporaryURL: URL
         let response: URLResponse
 #if DEBUG
@@ -4762,7 +6975,8 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
     func uploadPersonalAttachment(objectID: String, baseRevision: Int64, fileURL: URL, sizeBytes: Int64,
                                   sha256: String, mediaType: String, idempotencyKey: String,
                                   progress: (@MainActor (Int64, Int64) -> Void)? = nil) async throws -> MordePersonalAttachmentCommitReceipt {
-        guard fileURL.isFileURL, baseRevision >= 0, sizeBytes >= 0,
+        guard signedIn, let uploadScope = currentDataScope,
+              fileURL.isFileURL, baseRevision >= 0, sizeBytes >= 0,
               sizeBytes <= Int64(Int32.max) * Int64(MordePersonalAttachmentHash.chunkBytes),
               MordePersonalDataContract.isValidObjectIdentifier(type: "library_item", id: objectID),
               MordePersonalDataContract.isValidIdempotencyKey(idempotencyKey),
@@ -4778,12 +6992,17 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
             throw NSError(domain: "Morde", code: 400,
                           userInfo: [NSLocalizedDescriptionKey: "附件暂存文件大小或 SHA-256 已变化，请重新暂存。"])
         }
+        guard currentDataScope == uploadScope else { throw CancellationError() }
+        let instanceHeader = ["X-Morde-Service-Instance-ID": uploadScope.serviceInstanceID,
+                              "X-Morde-Actor-ID": uploadScope.accountID]
         let createBody: [String: Any] = [
             "object_id": objectID, "base_revision": baseRevision, "size_bytes": sizeBytes,
             "sha256": sha256, "media_type": mediaType,
         ]
         let upload: MordePersonalAttachmentUploadReceipt = try await call(
-            "/api/personal-data/uploads", method: "POST", body: createBody, key: idempotencyKey)
+            "/api/personal-data/uploads", method: "POST", body: createBody, key: idempotencyKey,
+            headers: instanceHeader)
+        guard currentDataScope == uploadScope else { throw CancellationError() }
         guard MordePersonalDataContract.isValidUploadID(upload.upload_id),
               upload.chunk_count == expectedChunkCount,
               ["active", "committed"].contains(upload.state) else {
@@ -4793,7 +7012,9 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
         let commitKey = MordePersonalAttachmentHash.sha256(Data((idempotencyKey + "\u{0}commit").utf8))
         if upload.state == "committed" {
             let receipt: MordePersonalAttachmentCommitReceipt = try await call(
-                "/api/personal-data/uploads/\(upload.upload_id)/commit", method: "POST", key: commitKey)
+                "/api/personal-data/uploads/\(upload.upload_id)/commit", method: "POST", key: commitKey,
+                headers: instanceHeader)
+            guard currentDataScope == uploadScope else { throw CancellationError() }
             guard MordePersonalDataContract.isValidAttachmentID(receipt.attachment_id),
                   receipt.object_type == "library_item", receipt.object_id == objectID,
                   receipt.result_revision > 0, receipt.account_change_sequence > 0 else {
@@ -4806,6 +7027,7 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
         defer { try? file.close() }
         var sentBytes: Int64 = 0
         for sequence in 0..<expectedChunkCount {
+            guard currentDataScope == uploadScope else { throw CancellationError() }
             guard let chunkSize = MordePersonalAttachmentHash.chunkSize(sizeBytes: sizeBytes, sequence: sequence) else {
                 throw URLError(.cannotParseResponse)
             }
@@ -4819,7 +7041,9 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
             let chunkReceipt: MordePersonalAttachmentChunkReceipt = try await call(
                 "/api/personal-data/uploads/\(upload.upload_id)/chunks/\(sequence)", method: "PUT",
                 key: nil, rawBody: chunk, contentType: "application/octet-stream",
-                headers: ["X-Chunk-SHA256": chunkDigest, "Content-Length": String(chunk.count)])
+                headers: ["X-Chunk-SHA256": chunkDigest, "Content-Length": String(chunk.count),
+                          "X-Morde-Service-Instance-ID": uploadScope.serviceInstanceID,
+                          "X-Morde-Actor-ID": uploadScope.accountID])
             guard chunkReceipt.upload_id == upload.upload_id, chunkReceipt.sequence == sequence else {
                 throw URLError(.cannotParseResponse)
             }
@@ -4827,8 +7051,11 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
             progress?(sentBytes, sizeBytes)
         }
 
+        guard currentDataScope == uploadScope else { throw CancellationError() }
         let receipt: MordePersonalAttachmentCommitReceipt = try await call(
-            "/api/personal-data/uploads/\(upload.upload_id)/commit", method: "POST", key: commitKey)
+            "/api/personal-data/uploads/\(upload.upload_id)/commit", method: "POST", key: commitKey,
+            headers: instanceHeader)
+        guard currentDataScope == uploadScope else { throw CancellationError() }
         guard MordePersonalDataContract.isValidAttachmentID(receipt.attachment_id),
               receipt.object_type == "library_item", receipt.object_id == objectID,
               receipt.result_revision > 0, receipt.account_change_sequence > 0 else {
@@ -5069,6 +7296,7 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
     private func portalData(_ path: String, method: String = "GET", body: Data? = nil,
                             contentType: String? = nil, key: String? = nil,
                             expectedScope: MordeClientDataScope? = nil,
+                            headers: [String: String] = [:],
                             renewalAttempt: Int = 0) async throws -> Data {
         guard let requestScope = expectedScope ?? currentDataScope,
               requestScope == currentDataScope else { throw CancellationError() }
@@ -5094,6 +7322,7 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
         origin.port = base.port
         if let origin = origin.string { request.setValue(origin, forHTTPHeaderField: "Origin") }
         if let key { request.setValue(key, forHTTPHeaderField: "Idempotency-Key") }
+        for (name, value) in headers { request.setValue(value, forHTTPHeaderField: name) }
         if let contentType { request.setValue(contentType, forHTTPHeaderField: "Content-Type") }
         if let body { request.httpBody = body }
         let (data, response) = try await urlSession.data(for: request)
@@ -5104,7 +7333,7 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
             portalSessionExpiresAt = nil
             portalSessionScope = nil
             return try await portalData(path, method: method, body: body, contentType: contentType,
-                                        key: key, expectedScope: requestScope, renewalAttempt: 1)
+                                        key: key, expectedScope: requestScope, headers: headers, renewalAttempt: 1)
         }
         guard requestScope == currentDataScope else { throw CancellationError() }
         guard (200..<300).contains(http.statusCode) else {
@@ -5265,6 +7494,71 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
         throw URLError(.cannotParseResponse)
     }
 
+    private func conversationActiveTasks(_ conversationID: String, projectID: String?,
+                                         scope: MordeClientDataScope) async throws -> [MordeTask] {
+        let path = projectID.map { "/api/projects/\($0)/conversations/\(conversationID)/tasks" }
+            ?? "/api/conversations/\(conversationID)/tasks"
+        var cursor: String?
+        var seenCursors = Set<String>()
+        var summaries: [MordeTask] = []
+        for _ in 0..<100 {
+            guard scope == currentDataScope, let pagePath = projectPagePath(path, cursor: cursor) else {
+                throw CancellationError()
+            }
+            let page: MordePage<MordeTask>
+            if projectID != nil {
+                page = try await portalCall(pagePath, expectedScope: scope)
+            } else {
+                page = try await call(pagePath)
+            }
+            summaries.append(contentsOf: page.items)
+            guard MordeConversationTasksPolicy.valid(summaries, conversationID: conversationID) else {
+                throw URLError(.cannotParseResponse)
+            }
+            guard let next = page.next_cursor else {
+                var snapshots: [MordeTask] = []
+                for summary in summaries {
+                    let snapshot: MordeTask = try await call("/api/tasks/\(summary.id)")
+                    guard scope == currentDataScope, snapshot.id == summary.id,
+                          MordeConversationTasksPolicy.valid([snapshot], conversationID: conversationID),
+                          let snapshotSequence = snapshot.event_sequence,
+                          let summarySequence = summary.event_sequence,
+                          snapshotSequence >= summarySequence else {
+                        throw URLError(.cannotParseResponse)
+                    }
+                    snapshots.append(snapshot)
+                }
+                return snapshots
+            }
+            guard !next.isEmpty, next.utf8.count <= 1024,
+                  !MordePersonalSnapshotCursorPolicy.repeats(next, seen: &seenCursors) else {
+                throw URLError(.cannotParseResponse)
+            }
+            cursor = next
+        }
+        throw URLError(.cannotParseResponse)
+    }
+
+    private func includePendingResultSnapshots(_ tasks: [MordeTask], previous: [MordeTask],
+                                               conversationID: String, scope: MordeClientDataScope) async -> [MordeTask] {
+        var result = tasks
+        let existing = Set(tasks.map(\.id))
+        for old in previous where old.result_message_pending == true && !existing.contains(old.id) {
+            do {
+                let snapshot: MordeTask = try await call("/api/tasks/\(old.id)")
+                guard scope == currentDataScope, snapshot.id == old.id, snapshot.conversation_id == conversationID,
+                      (snapshot.event_sequence ?? -1) >= (old.event_sequence ?? -1) else { continue }
+                if snapshot.result_message_pending == true || snapshot.result_message_published == true { result.append(snapshot) }
+            } catch {
+                let failure = error as NSError
+                if scope == currentDataScope && !(failure.domain == "Morde" && [403, 404].contains(failure.code)) {
+                    result.append(old)
+                }
+            }
+        }
+        return result
+    }
+
     private func isValidProject(_ value: MordeProject) -> Bool {
         MordeProjectPolicy.hasValidID(value.id) && MordeProjectPolicy.hasValidUserID(value.owner_id) &&
             !value.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && value.name.unicodeScalars.count <= 120 &&
@@ -5326,7 +7620,7 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
                 projectMembers = []; projectResources = []; recentProjectInvitations = [:]
                 projectWorkItems = []; projectBudget = nil; projectBudgetLedger = []
                 projectConversations = []; selectedProjectConversationID = nil; projectConversationMessages = []
-                projectConversationTask = nil
+                projectConversationTask = nil; projectConversationTasks = []; projectAssistantSnapshots = []
                 projectDetailState = .loaded
                 projectWorkItemsState = .loaded; projectBudgetState = .loaded
                 projectConversationsState = .loaded; projectConversationMessagesState = .loaded
@@ -5336,7 +7630,7 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
             projects = []; selectedProjectID = nil; projectMembers = []; projectResources = []
             projectWorkItems = []; projectBudget = nil; projectBudgetLedger = []
             projectConversations = []; selectedProjectConversationID = nil; projectConversationMessages = []
-            projectConversationTask = nil
+            projectConversationTask = nil; projectConversationTasks = []; projectAssistantSnapshots = []
             projectsState = .failed(error.localizedDescription)
             projectDetailState = .failed(error.localizedDescription)
             projectWorkItemsState = .failed(error.localizedDescription)
@@ -5371,6 +7665,7 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
         guard MordeProjectPolicy.hasValidID(id), projects.contains(where: { $0.id == id }) else { return }
         if selectedProjectID != id {
             selectedProjectConversationID = nil; projectConversationMessages = []; projectConversationTask = nil
+            projectConversationTasks = []; projectAssistantSnapshots = []
             projectConversations = []; projectConversationMessagesState = .loading
         }
         selectedProjectID = id
@@ -5448,17 +7743,32 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
                                                    conversationID: String) -> Bool {
         value.id.range(of: #"^m[a-z0-9]{7}$"#, options: .regularExpression) != nil &&
             value.conversation_id == conversationID && ["user", "assistant"].contains(value.role) &&
-            value.content.unicodeScalars.count <= 32768 && ["pending", "applied", "unknown"].contains(value.delivery_status) &&
+            (value.delivery_status.map { ["pending", "applied", "unknown"].contains($0) } ?? true) &&
+            (value.attachment_ids.map { ids in
+                Set(ids).count == ids.count && ids.allSatisfy(MordeProjectAttachmentContract.isValidAttachmentID)
+            } ?? true) &&
+            (value.output_status.map { ["streaming", "interrupted", "completed"].contains($0) && value.role == "assistant" } ?? true) &&
+            (value.output_task_revision.map { $0 >= 0 } ?? true) &&
+            (value.output_result_event_sequence.map { $0 > 0 && value.output_status == "completed" } ?? true) &&
             MordeProjectPolicy.hasValidUserID(value.owner_id) && MordeProjectPolicy.hasValidUserID(value.actor_id) &&
             value.task_id.map { $0.range(of: #"^q[a-z0-9]{7}$"#, options: .regularExpression) != nil } ?? true
+    }
+
+    private func orderedConversationMessages(_ values: [MordeClientMessage]) -> [MordeClientMessage] {
+        MordeConversationMessageOrder.ascending(
+            MordeTaskSnapshotMessageMerge.deduplicatingPublished(values),
+            sequence: { $0.sequence }, createdAt: { $0.created_at }, id: { $0.id })
+    }
+
+    private func orderedProjectConversationMessages(_ values: [MordeProjectConversationMessage]) -> [MordeProjectConversationMessage] {
+        MordeConversationMessageOrder.ascending(
+            values, sequence: { $0.sequence }, createdAt: { $0.created_at }, id: { $0.id })
     }
 
     func loadProjectConversations(_ projectID: String) async {
         guard projectBudgetExecutionAvailable == true, let scope = currentDataScope,
               MordeProjectPolicy.hasValidID(projectID), projects.contains(where: { $0.id == projectID }) else {
-            projectConversations = []; selectedProjectConversationID = nil; projectConversationMessages = []
             projectConversationsState = .failed("当前服务未声明项目会话能力。")
-            projectConversationMessagesState = .failed("当前服务未声明项目会话能力。")
             return
         }
         let generation = UUID()
@@ -5473,13 +7783,17 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
             projectConversationsState = .loaded
             if let selectedProjectConversationID, !values.contains(where: { $0.id == selectedProjectConversationID }) {
                 self.selectedProjectConversationID = nil; projectConversationMessages = []; projectConversationTask = nil
+                projectConversationTasks = []; projectAssistantSnapshots = []
                 projectConversationMessagesState = .loaded
             }
         } catch {
             guard generation == projectConversationLoadGeneration, selectedProjectID == projectID, scope == currentDataScope else { return }
-            projectConversations = []; selectedProjectConversationID = nil; projectConversationMessages = []
-            projectConversationTask = nil; projectConversationsState = .failed(error.localizedDescription)
-            projectConversationMessagesState = .failed(error.localizedDescription)
+            let failure = error as NSError
+            if failure.domain == "Morde" && [403, 404].contains(failure.code) {
+                projectConversations = []; selectedProjectConversationID = nil; projectConversationMessages = []
+                projectConversationTask = nil; projectConversationTasks = []; projectAssistantSnapshots = []
+            }
+            projectConversationsState = .failed(error.localizedDescription)
             return
         }
         if let selected = selectedProjectConversationID { await loadProjectConversationMessages(projectID: projectID, conversationID: selected) }
@@ -5489,7 +7803,7 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
         guard MordeProjectPolicy.hasValidConversationID(conversationID),
               projectConversations.contains(where: { $0.id == conversationID && $0.project_id == selectedProjectID }) else { return }
         selectedProjectConversationID = conversationID
-        projectConversationMessages = []; projectConversationTask = nil
+        projectConversationMessages = []; projectConversationTask = nil; projectConversationTasks = []; projectAssistantSnapshots = []
         projectConversationError = nil
         await loadProjectConversationMessages(projectID: selectedProjectID ?? "", conversationID: conversationID)
     }
@@ -5500,8 +7814,7 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
               projectConversations.contains(where: { $0.id == conversationID && $0.project_id == projectID }) else { return }
         let generation = UUID()
         projectConversationMessagesGeneration = generation
-        projectConversationMessagesState = .loading
-        projectConversationError = nil
+        if !projectConversationMessagesState.isLoaded { projectConversationMessagesState = .loading }
         do {
             let values: [MordeProjectConversationMessage] = try await projectPages(
                 "/api/projects/\(projectID)/conversations/\(conversationID)/messages", scope: scope)
@@ -5510,33 +7823,130 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
                   scope == currentDataScope else { return }
             guard values.allSatisfy({ isValidProjectConversationMessage($0, conversationID: conversationID) }),
                   Set(values.map(\.id)).count == values.count else { throw URLError(.cannotParseResponse) }
-            projectConversationMessages = values
+            projectConversationMessages = orderedProjectConversationMessages(values)
             projectConversationMessagesState = .loaded
-            projectConversationTask = nil
-            guard let conversation = projectConversations.first(where: { $0.id == conversationID }),
-                  let taskID = MordeProjectPolicy.restorableTaskID(
-                    ownerID: conversation.owner_id, currentUserID: user?.id,
-                    messages: values.map { (actorID: $0.actor_id, taskID: $0.task_id) }) else { return }
-            do {
-                let task: MordeTask = try await call("/api/tasks/\(taskID)")
-                guard generation == projectConversationMessagesGeneration,
-                      selectedProjectID == projectID, selectedProjectConversationID == conversationID,
-                      scope == currentDataScope else { return }
-                guard task.id == taskID, task.conversation_id == conversationID else {
-                    throw URLError(.cannotParseResponse)
-                }
-                projectConversationTask = task
-            } catch {
-                guard generation == projectConversationMessagesGeneration,
-                      selectedProjectID == projectID, selectedProjectConversationID == conversationID,
-                      scope == currentDataScope else { return }
-                projectConversationError = "Task 状态恢复失败；请稍后刷新。"
-            }
         } catch {
             guard generation == projectConversationMessagesGeneration,
                   selectedProjectID == projectID, selectedProjectConversationID == conversationID,
                   scope == currentDataScope else { return }
-            projectConversationMessages = []; projectConversationMessagesState = .failed(error.localizedDescription)
+            let failure = error as NSError
+            if failure.domain == "Morde" && [403, 404].contains(failure.code) {
+                projectConversationMessages = []; projectConversationTasks = []; projectConversationTask = nil
+                projectAssistantSnapshots = []
+            }
+            projectConversationMessagesState = .failed(error.localizedDescription)
+            if failure.domain == "Morde" && [403, 404].contains(failure.code) { return }
+        }
+        do {
+            let fetched = try await conversationActiveTasks(conversationID, projectID: projectID, scope: scope)
+            let active = await includePendingResultSnapshots(fetched, previous: projectConversationTasks,
+                                                             conversationID: conversationID, scope: scope)
+            guard generation == projectConversationMessagesGeneration,
+                  selectedProjectID == projectID, selectedProjectConversationID == conversationID,
+                  scope == currentDataScope else { return }
+            projectConversationTasks = active
+            updateProjectAssistantSnapshots(active, conversationID: conversationID)
+            let selectedTask = projectConversationTask?.conversation_id == conversationID ? projectConversationTask : nil
+            projectConversationTask = active.first { $0.id == selectedTask?.id }
+                ?? selectedTask.flatMap { ["completed", "failed", "cancelled"].contains($0.status) ? $0 : nil }
+            for task in active { taskPageDetails[task.id] = task }
+        } catch {
+            let failure = error as NSError
+            if scope == currentDataScope, selectedProjectID == projectID, selectedProjectConversationID == conversationID,
+               failure.domain == "Morde", [403, 404].contains(failure.code) {
+                projectConversationTasks = []; projectConversationTask = nil; projectAssistantSnapshots = []
+            }
+            // Message reading and sending do not depend on the task-status endpoint.
+        }
+    }
+
+    private func updateProjectAssistantSnapshots(_ tasks: [MordeTask], conversationID: String) {
+        let activeIDs = Set(tasks.map(\.id))
+        var snapshots = projectAssistantSnapshots.filter {
+            $0.conversation_id == conversationID && $0.task_id.map(activeIDs.contains) == true
+        }
+        for task in tasks where task.conversation_id == conversationID {
+            snapshots.removeAll {
+                MordeTaskSnapshotMessageMerge.shouldDiscardPublishedSynthetic($0, taskID: task.id,
+                    currentRevision: task.current_revision, published: task.result_message_published)
+            }
+            if MordeTaskSnapshotMessageMerge.shouldIncludeSnapshot(resultMessagePending: task.result_message_pending,
+                resultMessagePublished: task.result_message_published, status: task.assistant_message?.displayStatus) {
+                snapshots = MordeTaskSnapshotMessageMerge.merge(snapshots, snapshot: task.assistant_message,
+                    taskID: task.id, conversationID: conversationID)
+            }
+        }
+        projectAssistantSnapshots = snapshots
+    }
+
+    func watchProjectConversation() async {
+        guard let projectID = selectedProjectID, let conversationID = selectedProjectConversationID,
+              let scope = currentDataScope else { return }
+        while !Task.isCancelled, scope == currentDataScope,
+              selectedProjectID == projectID, selectedProjectConversationID == conversationID {
+            let delay: UInt64 = projectConversationTasks.contains(where: {
+                $0.result_message_pending == true || $0.result_message_published == true
+            })
+                ? 500_000_000 : 3_000_000_000
+            try? await Task.sleep(nanoseconds: delay)
+            if Task.isCancelled { return }
+            await loadProjectConversationMessages(projectID: projectID, conversationID: conversationID)
+        }
+    }
+
+    private func canReadProjectAttachment(projectID: String, conversationID: String,
+                                          messageID: String, attachmentID: String,
+                                          scope: MordeClientDataScope) -> Bool {
+        guard signedIn, currentDataScope?.hasSameAccount(as: scope) == true,
+              selectedProjectID == projectID, selectedProjectConversationID == conversationID,
+              MordeProjectPolicy.hasValidID(projectID), MordeProjectPolicy.hasValidConversationID(conversationID),
+              messageID.range(of: #"^m[a-z0-9]{7}$"#, options: .regularExpression) != nil,
+              MordeProjectAttachmentContract.isValidAttachmentID(attachmentID) else { return false }
+        return projectConversationMessages.contains {
+            $0.id == messageID && $0.conversation_id == conversationID &&
+                ($0.attachment_ids ?? []).contains(attachmentID)
+        } || pendingMessages.contains {
+            $0.scope.hasSameAccount(as: scope) && $0.projectID == projectID && $0.conversationID == conversationID &&
+                $0.serverMessageID == messageID && $0.attachments.contains { $0.linked && $0.attachmentID == attachmentID }
+        }
+    }
+
+    func downloadProjectAttachment(projectID: String, conversationID: String, messageID: String,
+                                   attachmentID: String) async throws -> (MordeProjectAttachmentMetadata, URL) {
+        guard let scope = currentDataScope,
+              canReadProjectAttachment(projectID: projectID, conversationID: conversationID,
+                                       messageID: messageID, attachmentID: attachmentID, scope: scope) else {
+            throw URLError(.userAuthenticationRequired)
+        }
+        let path = "/api/projects/\(projectID)/conversations/\(conversationID)/messages/\(messageID)/attachments-by-id/\(attachmentID)"
+        let headers = ["X-Morde-Service-Instance-ID": scope.serviceInstanceID, "X-Morde-Actor-ID": scope.accountID]
+        let metadata: MordeProjectAttachmentMetadata = try await call(path, headers: headers)
+        guard metadata.isValid(for: attachmentID),
+              canReadProjectAttachment(projectID: projectID, conversationID: conversationID,
+                                       messageID: messageID, attachmentID: attachmentID, scope: scope) else {
+            throw URLError(.cannotParseResponse)
+        }
+        let (downloadedURL, response) = try await downloadResponseFile("\(path)/content", headers: headers)
+        do {
+            let measured = try await Task.detached(priority: .utility) {
+                try MordePersonalAttachmentHash.measure(fileURL: downloadedURL)
+            }.value
+            guard measured.sizeBytes == metadata.size_bytes, measured.sha256 == metadata.sha256,
+                  response.value(forHTTPHeaderField: "Content-Length").flatMap(Int64.init)
+                    .map({ $0 == measured.sizeBytes }) ?? true,
+                  canReadProjectAttachment(projectID: projectID, conversationID: conversationID,
+                                           messageID: messageID, attachmentID: attachmentID, scope: scope) else {
+                throw URLError(.cannotParseResponse)
+            }
+            let suggested = UTType(mimeType: metadata.media_type)?.preferredFilenameExtension?.lowercased() ?? "bin"
+            let safeExtension = suggested.range(of: "^[a-z0-9]{1,12}$", options: .regularExpression) == nil ? "bin" : suggested
+            let destination = FileManager.default.temporaryDirectory
+                .appendingPathComponent("morde-project-attachment-\(UUID().uuidString.lowercased()).\(safeExtension)")
+            try FileManager.default.moveItem(at: downloadedURL, to: destination)
+            return (metadata, destination)
+        } catch {
+            MIFLibraryTemporaryFileCleanup.discard(downloadedURL)
+            throw error
         }
     }
 
@@ -5554,7 +7964,9 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
         defer { projectActionInFlight = false }
         do {
             let conversation: MordeProjectConversation = try await projectMutation(
-                "/api/projects/\(projectID)/conversations", body: ["title": title], scope: scope)
+                "/api/projects/\(projectID)/conversations", body: ["title": title], scope: scope,
+                headers: ["X-Morde-Service-Instance-ID": scope.serviceInstanceID,
+                          "X-Morde-Actor-ID": scope.accountID])
             guard scope == currentDataScope, isValidProjectConversation(conversation, projectID: projectID),
                   conversation.owner_id == user?.id else { throw URLError(.cannotParseResponse) }
             await loadProjectConversations(projectID)
@@ -5570,58 +7982,27 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
     }
 
     func appendProjectConversationMessage(projectID: String, conversationID: String, content: String,
-                                          modelID: String, hostID: String, workspaceID: String) async -> Bool {
-        let content = content.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !projectActionInFlight, projectBudgetExecutionAvailable == true,
-              let scope = currentDataScope, projects.contains(where: { $0.id == projectID }),
-              selectedProjectConversationID == conversationID,
-              projectConversations.contains(where: { $0.id == conversationID && $0.project_id == projectID }),
-              projectMembers.first(where: { $0.project_id == projectID && $0.user_id == user?.id })
-                .map({ MordeProjectPolicy.canManageWorkItems(role: $0.role) }) == true,
-              (1...32768).contains(content.unicodeScalars.count), !content.contains("\0"),
-              models.contains(where: { $0.id == modelID && $0.capabilities.text && $0.capabilities.tools }),
-              !targetIsUnavailable(hostID: hostID, workspaceID: workspaceID) else {
-            projectConversationError = "请核对项目权限、模型和唯一就绪的电脑/Workspace 目标后重试。"
+                                          modelID: String, hostID: String, workspaceID: String,
+                                          targetTaskID: String? = nil,
+                                          stagedAttachments: [MordeOutboxAttachment] = []) -> Bool {
+        guard selectedProjectConversationID == conversationID,
+              projectConversations.contains(where: { $0.id == conversationID && $0.project_id == projectID }) else {
+            projectConversationError = "无法确认项目会话，输入内容已保留。"
             return false
         }
-        let host = hostID.isEmpty ? nil : ownedHost(hostID)
-        guard hostID.isEmpty || host.map(canOpenHost) == true,
-              workspaceID.isEmpty || host.flatMap({ workspaceBindings(for: $0.id).first(where: { $0.workspace.id == workspaceID }) })
-                .map(workspaceIsReady) == true else {
-            projectConversationError = "所选电脑或 Workspace 当前未就绪；项目会话不会提交。"
-            return false
+        var safeTargetTaskID = targetTaskID
+        if let targetTaskID, let target = projectConversationTasks.first(where: {
+            $0.id == targetTaskID && $0.conversation_id == conversationID
+        }), !MordeProjectExecutionCapability.canContinueTask(status: target.status, waitingReason: target.waiting_reason) {
+            safeTargetTaskID = nil
         }
-        var body: [String: Any] = ["model_id": modelID, "content": content]
-        if let task = projectConversationTask, task.conversation_id == conversationID,
-           MordeProjectExecutionCapability.canContinueTask(status: task.status) {
-            body["expected_task_id"] = task.id
-        }
-        if !hostID.isEmpty { body["host_id"] = hostID }
-        if !workspaceID.isEmpty {
-            guard let binding = workspaceBindings(for: hostID).first(where: { $0.workspace.id == workspaceID }),
-                  workspaceIsReady(binding) else { return false }
-            body["workspace_id"] = workspaceID
-            body["input_revision"] = binding.workspace.revision
-        }
-        projectActionInFlight = true; projectConversationError = nil
-        defer { projectActionInFlight = false }
-        do {
-            let response: MordeProjectConversationAppendResponse = try await projectMutation(
-                "/api/projects/\(projectID)/conversations/\(conversationID)/messages", body: body, scope: scope)
-            let task = response.task.task
-            guard scope == currentDataScope, isValidProjectConversationMessage(response.message, conversationID: conversationID),
-                  response.message.actor_id == user?.id, response.task.project_id == projectID,
-                  response.task.initiator_id == user?.id, task.id.range(of: #"^q[a-z0-9]{7}$"#, options: .regularExpression) != nil,
-                  task.conversation_id == conversationID, task.updated_at.isEmpty == false,
-                  response.message.task_id == task.id else { throw URLError(.cannotParseResponse) }
-            projectConversationTask = task
-            await loadProjectConversationMessages(projectID: projectID, conversationID: conversationID)
-            projectNotice = "项目消息已提交，Task 状态以服务端返回为准。"
-            return true
-        } catch {
-            projectConversationError = error.localizedDescription
-            return false
-        }
+        guard let id = enqueueMessage(content, host: hostID, workspace: workspaceID, model: modelID,
+                                      referenceTaskID: safeTargetTaskID, projectID: projectID,
+                                      conversationID: conversationID, stagedAttachments: stagedAttachments) else { return false }
+        projectNotice = unconfirmedMessages.contains(where: { $0.id == id })
+            ? "消息已保存在本机，请处理待确认状态后恢复。"
+            : "消息已保存在本机，服务端确认后显示为已发送。"
+        return true
     }
 
     func refreshProjectConversationTask() async {
@@ -5985,14 +8366,15 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
 
     private func projectMutation<T: Decodable>(_ path: String, method: String = "POST",
                                                body: [String: Any]? = nil,
-                                               scope: MordeClientDataScope) async throws -> T {
+                                               scope: MordeClientDataScope,
+                                               headers: [String: String] = [:]) async throws -> T {
         let attempt = try projectMutationAttempt(scope: scope, path: path, body: body)
         let bytes = try body.map { try JSONSerialization.data(withJSONObject: $0) }
         let data: Data
         do {
             data = try await portalData(path, method: method, body: bytes,
                                         contentType: bytes == nil ? nil : "application/json",
-                                        key: attempt.key, expectedScope: scope)
+                                        key: attempt.key, expectedScope: scope, headers: headers)
         } catch {
             // nanoMuse: A server-confirmed version conflict did not apply; allow the refreshed action's new version.
             if (error as NSError).code == 409 { clearProjectMutationAttempt(scope: scope, key: attempt.key) }
@@ -6266,12 +8648,12 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
         let page: MordeWorkspaceManifest = try await portalCall(path)
         guard scope == currentDataScope else { throw CancellationError() }
         let directoryPaths = page.directories.map(\.path)
-        let workspacePaths = page.files.map(\.path) + directoryPaths.filter { $0 != "." }
         let hasValidRootMarker = directoryPaths.filter { $0 == "." }.count <= 1 &&
             (!directoryPaths.contains(".") || (prefix == nil && cursor == nil))
         guard page.workspace_id == workspaceID, page.revision == Int64(revision),
               hasValidRootMarker,
-              MordeWorkspaceTransferSupport.hasCaseInsensitiveUniquePaths(workspacePaths) else {
+              MordeWorkspaceTransferSupport.hasValidManifestPaths(
+                filePaths: page.files.map(\.path), directoryPaths: directoryPaths) else {
             throw URLError(.cannotParseResponse)
         }
         return page
@@ -6534,6 +8916,57 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
         }
     }
 
+    func openWorkspaceShareURL(_ url: URL) {
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              components.scheme?.lowercased() == "morde", components.host?.lowercased() == "workspace-share",
+              components.path.isEmpty, components.user == nil, components.password == nil,
+              components.port == nil, components.fragment == nil,
+              let items = components.queryItems, items.count == 1, items[0].name == "token",
+              let token = items[0].value, Self.validWorkspaceShareToken(token) else { return }
+        pendingWorkspaceShareToken = token
+    }
+
+    func createWorkspaceShare(workspaceID: String, revision: Int, permission: String) async throws -> MordeWorkspaceShareCreated {
+        guard let scope = currentDataScope, Self.validWorkspaceID(workspaceID), revision >= 0,
+              ["view", "edit"].contains(permission) else { throw URLError(.badURL) }
+        let result: MordeWorkspaceShareCreated = try await portalCall(
+            "/api/workspaces/\(workspaceID)/shares", method: "POST",
+            body: ["expected_current_revision": revision, "permission": permission], expectedScope: scope)
+        guard scope == currentDataScope, result.permission == permission, Self.validWorkspaceShareToken(result.token),
+              !result.workspace_name.isEmpty, result.workspace_name.unicodeScalars.count <= 120,
+              let expiresAt = Self.parseISO8601(result.expires_at), expiresAt > Date(),
+              expiresAt.timeIntervalSinceNow <= 7 * 24 * 60 * 60 + 60 else { throw URLError(.cannotParseResponse) }
+        return result
+    }
+
+    func previewWorkspaceShare(token: String) async throws -> MordeWorkspaceSharePreview {
+        guard let scope = currentDataScope, Self.validWorkspaceShareToken(token) else { throw URLError(.badURL) }
+        let result: MordeWorkspaceSharePreview = try await portalCall(
+            "/api/workspace-shares/preview", method: "POST", body: ["token": token], expectedScope: scope)
+        guard scope == currentDataScope, ["view", "edit"].contains(result.permission),
+              !result.workspace_name.isEmpty, result.workspace_name.unicodeScalars.count <= 120,
+              let expiresAt = Self.parseISO8601(result.expires_at), expiresAt > Date() else {
+            throw URLError(.cannotParseResponse)
+        }
+        return result
+    }
+
+    func acceptWorkspaceShare(token: String) async throws -> MordeWorkspaceShareAccepted {
+        guard let scope = currentDataScope, Self.validWorkspaceShareToken(token) else { throw URLError(.badURL) }
+        let result: MordeWorkspaceShareAccepted = try await portalCall(
+            "/api/workspace-shares/accept", method: "POST", body: ["token": token], expectedScope: scope)
+        guard scope == currentDataScope, Self.validWorkspaceID(result.workspace_id),
+              ["view", "edit"].contains(result.permission), !result.workspace_name.isEmpty else {
+            throw URLError(.cannotParseResponse)
+        }
+        await refreshWorkspaces()
+        return result
+    }
+
+    private static func validWorkspaceShareToken(_ value: String) -> Bool {
+        value.range(of: "^[A-Za-z0-9_-]{43}$", options: .regularExpression) != nil
+    }
+
     func localWorkspaceFileURL(workspaceID: String, path: String) -> URL? {
         try? Self.workspaceDownloadURL(workspaceID: workspaceID, path: path)
     }
@@ -6712,6 +9145,16 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
                 try saveInstallation(newInstallation, lookupKey: lookupKey, makeActive: true)
             }
             guard accepted else { return }
+            if expiredConversationAvailable {
+                let oldScope = retainedOfflineScope
+                let oldConversation = currentConversation
+                let oldMessages = messages
+                resetViewState()
+                retainedOfflineScope = oldScope
+                retainedOfflineConversationID = oldConversation
+                retainedOfflineMessages = oldMessages
+                expiredConversationAvailable = oldScope != nil && oldConversation != nil
+            }
             verifiedServiceInstanceID = loginAttempt.serviceInstanceID
             publishShellAuthorization()
             UserDefaults.standard.removeObject(forKey: "morde.installation")
@@ -6739,7 +9182,20 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
                 confirmed = true
             } catch { confirmed = false }
         }
+        let offlineScope = currentDataScope
+        let offlineConversation = currentConversation
+        let offlineMessages = messages
+        let hasProjectMessages = offlineScope.map { !MordeOfflineProjectQueue.messages(pendingMessages, scope: $0).isEmpty } ?? false
         signOutLocally(installation: oldInstallation, confirmed: confirmed)
+        if let offlineScope, offlineConversation != nil || hasProjectMessages {
+            retainedOfflineScope = offlineScope
+            expiredConversationAvailable = true
+            offlineRequiresLoginScreen = true
+            currentConversation = offlineConversation
+            messages = offlineMessages
+            refreshPendingMessages(scope: offlineScope)
+            publishShellAuthorization()
+        }
         if !confirmed { error = "本机已退出；服务器安装撤销尚未确认，撤销标识已保留。" }
     }
 
@@ -6867,7 +9323,10 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
     var isLoadingResources: Bool { resourceLoadIsInProgress }
 
     func refreshResourceLists() async {
-        guard signedIn, let scope = currentDataScope, !resourceLoadIsInProgress else { return }
+        while resourceLoadIsInProgress && !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+        guard !Task.isCancelled, signedIn, let scope = currentDataScope else { return }
         let generation = resourceLoadGeneration
         resourceLoadIsInProgress = true
         defer { if generation == resourceLoadGeneration { resourceLoadIsInProgress = false } }
@@ -6898,7 +9357,7 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
         taskAPIAvailable = nil
         guard let activeInstallation = installation else {
             verifiedServiceInstanceID = nil
-            resetViewState()
+            if !expiredConversationAvailable { resetViewState() }
             return
         }
         do {
@@ -6906,9 +9365,7 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
             guard generation == resourceLoadGeneration, !Task.isCancelled else { return }
             guard activeInstallation.serviceOrigin == MordeLoginStateStore.serviceOrigin(server),
                   activeInstallation.serviceInstanceID == capabilities.service_instance_id.lowercased() else {
-                verifiedServiceInstanceID = nil
-                resetViewState()
-                error = "Morde 后端服务实例已变化，请重新登录"
+                retainOfflineOnServiceChange()
                 return
             }
             verifiedServiceInstanceID = capabilities.service_instance_id.lowercased()
@@ -6930,8 +9387,25 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
                                                  revocationStatus: "active")
                 updateActiveInstallation(updated)
             }
+            if let oldScope = retainedOfflineScope,
+               (oldScope.accountID != me.id || oldScope.serviceInstanceID != capabilities.service_instance_id.lowercased() ||
+                oldScope.serviceOrigin != MordeLoginStateStore.serviceOrigin(server)) {
+                currentConversation = nil
+                followsMainConversation = false
+                messages = []
+                pendingMessages = []
+                retainedOfflineScope = nil
+            } else if let offlineConversation = retainedOfflineConversationID {
+                currentConversation = offlineConversation
+                messages = retainedOfflineMessages
+            }
+            retainedOfflineConversationID = nil
+            retainedOfflineMessages = []
             user = me
+            expiredConversationAvailable = false
+            offlineRequiresLoginScreen = false
             publishShellAuthorization()
+            if let scope = currentDataScope { restorePendingMessages(scope: scope) }
             await loadResource(.hosts, generation: generation, fetch: {
                 let page: MordePage<MordeHost> = try await self.call("/api/hosts")
                 return page.items
@@ -6947,7 +9421,7 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
             await loadResource(.models, generation: generation, fetch: {
                 let available: MordeAvailableModels = try await self.call("/api/available-models")
                 let connections: MordeModelConnectionList = try await self.call("/api/model-connections")
-                let eligible = available.items.filter { $0.capabilities.text && $0.capabilities.tools }
+                let eligible = available.items.filter { $0.capabilities.text }
                 let eligibleIDs = Set(eligible.map(\.id))
                 let defaultID = available.default_model_id.flatMap { eligibleIDs.contains($0) ? $0 : nil }
                 let configured = available.default_model_configured && defaultID != nil
@@ -6958,22 +9432,32 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
                     items: eligible.filter { allowedIDs.contains($0.id) },
                     defaultModelConfigured: configured,
                     defaultModelID: configured ? defaultID : nil,
-                    personalModelIDs: personalIDs)
+                    personalModelIDs: personalIDs,
+                    configurationStatus: ["configured", "not_configured", "unknown"].contains(available.configuration_status ?? "")
+                        ? (available.configuration_status ?? "unknown") : "unknown")
             }, apply: {
                 self.models = $0.items
                 self.defaultModelConfigured = $0.defaultModelConfigured
                 self.defaultModelID = $0.defaultModelID
                 self.personalModelIDs = $0.personalModelIDs
+                self.modelConfigurationStatus = $0.configurationStatus
+                self.modelConfigurationCheckedAt = Date()
             }, clear: {
                 self.models = []
                 self.defaultModelConfigured = false
                 self.defaultModelID = nil
                 self.personalModelIDs = []
+                self.modelConfigurationStatus = "unknown"
+                self.modelConfigurationCheckedAt = nil
             })
             await loadResource(.conversations, generation: generation, fetch: {
                 let page: MordePage<MordeConversation> = try await self.call("/api/conversations?limit=100")
                 return page
-            }, apply: { self.conversations = $0.items; self.conversationNextCursor = $0.next_cursor },
+            }, apply: {
+                self.conversations = $0.items
+                self.includeLocalConversations()
+                self.conversationNextCursor = $0.next_cursor
+            },
                clear: { self.conversations = []; self.conversationNextCursor = nil })
             await loadResource(.tasks, generation: generation, fetch: {
                 let page: MordePage<MordeTask> = try await self.call("/api/tasks?limit=100")
@@ -6996,7 +9480,7 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
                     ? mainConversation?.conversation_id : currentConversation
                 if currentID != nil { followsMainConversation = shouldFollowMain && mainConversation?.status == "ready" }
                 if let currentID {
-                    if !conversations.contains(where: { $0.id == currentID }) {
+                    if !currentID.hasPrefix("local-") && !conversations.contains(where: { $0.id == currentID }) {
                         do {
                             let item: MordeConversation = try await call("/api/conversations/\(currentID)")
                             guard generation == resourceLoadGeneration, !Task.isCancelled else { return }
@@ -7012,6 +9496,21 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
                     setResourceState(.loaded, for: .taskDetail)
                 }
             }
+#if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("-morde.localProjectQueueFixture"), let scope = currentDataScope {
+                let fixtureContent = "Local offline project message"
+                if !(try messageOutbox.messages(scope: scope)).contains(where: { $0.content == fixtureContent && $0.projectID != nil }) {
+                    _ = try messageOutbox.enqueue(scope: scope, conversationID: "c0000001", content: fixtureContent,
+                        modelID: nil, attachmentIDs: [], projectID: "j0000001")
+                }
+                // The fixture explicitly tests recovery without any saved personal conversation.
+                UserDefaults.standard.removeObject(forKey: "morde.recentConversation.\(scope.storageKey)")
+                UserDefaults.standard.removeObject(forKey: Self.offlineConversationKey(scope.serviceOrigin))
+                currentConversation = nil
+                messages = []
+                refreshPendingMessages(scope: scope)
+            }
+#endif
             error = nil
         } catch {
             guard generation == resourceLoadGeneration, !Task.isCancelled, signedIn else { return }
@@ -7022,15 +9521,14 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
 
     // nanoMuse: Restore only the signed-in fence before the original shell decides whether to show first-run setup.
     func restoreLoginForFirstRun() async {
+        publishShellAuthorization()
         guard let activeInstallation = installation else { return }
         do {
             let capabilities = try await checkCapabilities()
             guard installation?.id == activeInstallation.id else { return }
             guard activeInstallation.serviceOrigin == MordeLoginStateStore.serviceOrigin(server),
                   activeInstallation.serviceInstanceID == capabilities.service_instance_id.lowercased() else {
-                verifiedServiceInstanceID = nil
-                resetViewState()
-                error = "Morde 后端服务实例已变化，请重新登录"
+                retainOfflineOnServiceChange()
                 return
             }
             verifiedServiceInstanceID = capabilities.service_instance_id.lowercased()
@@ -7107,39 +9605,20 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
     }
 
     func createConversation() async -> Bool {
-        guard taskAPIAvailable == true else {
-            error = "当前服务未确认开放 Task API，暂时不能创建对话。"
-            return false
-        }
         guard let scope = currentDataScope else {
             error = "登录状态尚未确认，请稍后重试。"
             return false
         }
-        let fingerprint = MordeTaskAttempt.fingerprint(conversationID: nil, hostID: "", modelID: "", objective: "create-conversation")
-        let key = "morde.pendingConversationCreate.\(scope.storageKey)"
-        let attempt = (UserDefaults.standard.data(forKey: key)
-            .flatMap { try? JSONDecoder().decode(MordeRetryAttempt.self, from: $0) })
-            .flatMap { $0.matches(scope: scope, fingerprint: fingerprint) ? $0 : nil }
-            ?? MordeRetryAttempt(scope: scope, fingerprint: fingerprint, key: UUID().uuidString)
-        if let data = try? JSONEncoder().encode(attempt) { UserDefaults.standard.set(data, forKey: key) }
-        do {
-            let item: MordeConversation = try await call("/api/conversations", method: "POST",
-                                                         body: ["title": "新对话"], key: attempt.key)
-            guard scope == currentDataScope else { return false }
-            if (UserDefaults.standard.data(forKey: key)
-                .flatMap { try? JSONDecoder().decode(MordeRetryAttempt.self, from: $0) })?.key == attempt.key {
-                UserDefaults.standard.removeObject(forKey: key)
+        let id = "local-\(UUID().uuidString.lowercased())"
+        activateLocalConversation(id)
+        if signedIn {
+            Task { @MainActor in
+                // A failed or ambiguous creation is retried with the same key when a message is queued.
+                _ = try? await self.resolvePendingConversation(id, scope: scope)
             }
-            conversations.removeAll { $0.id == item.id }
-            conversations.insert(item, at: 0)
-            await showConversation(item.id, followsMain: false)
-            error = nil
-            return true
-        } catch {
-            guard scope == currentDataScope else { return false }
-            self.error = error.localizedDescription
-            return false
         }
+        error = nil
+        return true
     }
 
     func retryConversations() async {
@@ -7213,17 +9692,23 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
         guard let scope = currentDataScope else { return }
         let generation = UUID()
         conversationLoadGeneration = generation
+        conversationMessagesRefreshGeneration = UUID()
         messageLoadMoreGeneration = UUID()
         loadingEarlierMessages = false
         messageNextCursor = nil
         messageHistoryError = nil
         self.followsMainConversation = followsMain
+        let selectedTaskID = currentConversation == id ? currentTask?.id : nil
         currentConversation = id
         saveRecentConversation(id)
         messages = []
-        if !MordeConversationTaskState.belongs(taskConversationID: currentTask?.conversation_id,
-                                               toSelectedConversationID: id) {
-            currentTask = nil
+        currentTask = nil
+        conversationTasks = []
+        conversationTasksLoaded = false
+        if id.hasPrefix("local-") {
+            setResourceState(.loaded, for: .messages)
+            setResourceState(.loaded, for: .taskDetail)
+            return
         }
         setResourceState(.loading, for: .messages)
         setResourceState(.loading, for: .taskDetail)
@@ -7233,38 +9718,33 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
             let page: MordePage<MordeClientMessage> = try await call(path)
             guard scope == currentDataScope, generation == conversationLoadGeneration,
                   currentConversation == id else { return }
-            messages = page.items
+            messages = orderedConversationMessages(MordeTaskSnapshotMessageMerge.preservingInterrupted(
+                messages, in: page.items, conversationID: id))
             messageNextCursor = page.next_cursor
             setResourceState(.loaded, for: .messages)
-            if let cachedTask = currentTask,
-               MordeConversationTaskState.belongs(taskConversationID: cachedTask.conversation_id, toSelectedConversationID: id) {
-                messages = messagesIncludingAssistantSnapshot(cachedTask, in: messages)
+            loadingResource = .taskDetail
+            let active = try await conversationActiveTasks(id, projectID: nil, scope: scope)
+            guard scope == currentDataScope, generation == conversationLoadGeneration,
+                  currentConversation == id else { return }
+            conversationTasks = active
+            conversationTasksLoaded = true
+            currentTask = active.first { $0.id == selectedTaskID }
+            for task in active { taskPageDetails[task.id] = task }
+            let refreshGeneration = UUID()
+            conversationMessagesRefreshGeneration = refreshGeneration
+            let latestPage: MordePage<MordeClientMessage> = try await call(path)
+            guard scope == currentDataScope, generation == conversationLoadGeneration,
+                  currentConversation == id else { return }
+            if refreshGeneration == conversationMessagesRefreshGeneration {
+                messages = orderedConversationMessages(MordeTaskSnapshotMessageMerge.preservingInterrupted(
+                    messages, in: latestPage.items, conversationID: id))
+                messageNextCursor = latestPage.next_cursor
             }
-            let taskListState = resourceState(.tasks)
-            guard taskListState.isLoaded else {
-                if let failureMessage = taskListState.failureMessage {
-                    setResourceState(.failed(failureMessage), for: .taskDetail)
-                } else {
-                    setResourceState(.loading, for: .taskDetail)
-                }
-                return
-            }
-            if let latest = tasks.filter({ $0.conversation_id == id }).max(by: { $0.updated_at < $1.updated_at }) {
-                loadingResource = .taskDetail
-                let task: MordeTask = try await call("/api/tasks/\(latest.id)")
-                guard scope == currentDataScope, generation == conversationLoadGeneration,
-                      currentConversation == id else { return }
-                guard MordeConversationTaskState.belongs(
-                    taskConversationID: task.conversation_id, toSelectedConversationID: id) else {
-                    throw URLError(.cannotParseResponse)
-                }
-                currentTask = task
+            for task in conversationTasks {
                 messages = messagesIncludingAssistantSnapshot(task, in: messages)
-                setResourceState(.loaded, for: .taskDetail)
-            } else {
-                currentTask = nil
-                setResourceState(.loaded, for: .taskDetail)
             }
+            messages = orderedConversationMessages(messages)
+            setResourceState(.loaded, for: .taskDetail)
         } catch {
             if scope == currentDataScope, generation == conversationLoadGeneration, currentConversation == id {
                 setResourceState(.failed(error.localizedDescription), for: loadingResource)
@@ -7314,13 +9794,66 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
             }
             var existingIDs = Set(messages.map(\.id))
             let olderMessages = page.items.filter { existingIDs.insert($0.id).inserted }
-            messages = olderMessages + messages
+            messages = orderedConversationMessages(olderMessages + messages)
             messageNextCursor = page.next_cursor
         } catch {
             guard scope == currentDataScope, conversationGeneration == conversationLoadGeneration,
                   generation == messageLoadMoreGeneration, currentConversation == id else { return }
             messageHistoryError = error.localizedDescription
         }
+    }
+
+    func hostMembers(hostID: String) async throws -> [MordeHostMember] {
+        guard let scope = currentDataScope, let ownerID = user?.id,
+              ownedHost(hostID)?.owner_id == ownerID else {
+            throw NSError(domain: "Morde.HostSharing", code: 403,
+                          userInfo: [NSLocalizedDescriptionKey: "Only the computer owner can manage sharing."])
+        }
+        let result: MordeHostMemberList = try await portalCall("/api/hosts/\(hostID)/members", expectedScope: scope)
+        guard scope == currentDataScope,
+              Set(result.items.map(\.user_id)).count == result.items.count,
+              result.items.allSatisfy(isValidHostMember) else { throw URLError(.cannotParseResponse) }
+        return result.items.sorted { $0.user_id < $1.user_id }
+    }
+
+    func grantHostControl(hostID: String, userID: String) async throws {
+        guard let scope = currentDataScope, let ownerID = user?.id,
+              ownedHost(hostID)?.owner_id == ownerID,
+              MordeProjectPolicy.hasValidUserID(userID), userID != ownerID else {
+            throw NSError(domain: "Morde.HostSharing", code: 400,
+                          userInfo: [NSLocalizedDescriptionKey: "Enter another valid Morde user ID."])
+        }
+        let currentMembers = try await hostMembers(hostID: hostID)
+        guard scope == currentDataScope else { throw CancellationError() }
+        var permissions = Set(currentMembers.first(where: { $0.user_id == userID })?.permissions ?? [])
+        permissions.formUnion(["desktop:view", "desktop:control"])
+        let member: MordeHostMember = try await portalCall("/api/hosts/\(hostID)/members", method: "POST",
+            body: ["user_id": userID, "permissions": permissions.sorted()], expectedScope: scope)
+        guard scope == currentDataScope, isValidHostMember(member), member.user_id == userID,
+              Set(member.permissions) == permissions,
+              member.permissions.contains("desktop:view"), member.permissions.contains("desktop:control") else {
+            throw URLError(.cannotParseResponse)
+        }
+    }
+
+    func revokeHostMember(hostID: String, userID: String) async throws {
+        guard let scope = currentDataScope, let ownerID = user?.id,
+              ownedHost(hostID)?.owner_id == ownerID,
+              MordeProjectPolicy.hasValidUserID(userID), userID != ownerID else {
+            throw NSError(domain: "Morde.HostSharing", code: 403,
+                          userInfo: [NSLocalizedDescriptionKey: "Only the computer owner can revoke sharing."])
+        }
+        _ = try await portalData("/api/hosts/\(hostID)/members/\(userID)", method: "DELETE", expectedScope: scope)
+        guard scope == currentDataScope else { throw CancellationError() }
+    }
+
+    private func isValidHostMember(_ member: MordeHostMember) -> Bool {
+        let supportedPermissions: Set<String> = [
+            "desktop:view", "desktop:control", "terminal:control", "mcp:control", "workspace:file:read",
+        ]
+        return MordeProjectPolicy.hasValidUserID(member.user_id) &&
+            !member.permissions.isEmpty && Set(member.permissions).count == member.permissions.count &&
+            member.permissions.allSatisfy(supportedPermissions.contains) && Self.parseISO8601(member.created_at) != nil
     }
 
     func startNewConversation() async { _ = await createConversation() }
@@ -7501,130 +10034,74 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
         recentConversation?.scope == currentDataScope && recentConversation?.conversationID == id
     }
 
-    func send(_ objective: String, host: String, workspace: String, model: String,
-              attachmentIDs: [String] = [], queueingTask: MordeTask? = nil) async -> Bool {
-        guard !objective.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
-        let normalizedAttachmentIDs = attachmentIDs.sorted()
-        guard normalizedAttachmentIDs.count <= 16,
-              Set(normalizedAttachmentIDs).count == normalizedAttachmentIDs.count,
-              normalizedAttachmentIDs.allSatisfy(MordePersonalDataContract.isValidAttachmentID) else {
-            error = "聊天附件列表无效，请移除附件后重试。"
-            return false
+    func enqueueMessage(_ objective: String, host: String, workspace: String, model: String,
+                        attachmentIDs: [String] = [], referenceTaskID: String? = nil,
+                        projectID: String? = nil, conversationID: String? = nil,
+                        stagedAttachments: [MordeOutboxAttachment] = [],
+                        pendingUploadPaths: [String] = []) -> String? {
+        let attachmentIDs = attachmentIDs.sorted()
+        guard !objective.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachmentIDs.isEmpty ||
+                !stagedAttachments.isEmpty else {
+            return nil
         }
-        if queueingTask != nil && !normalizedAttachmentIDs.isEmpty {
-            error = "当前任务运行期间只能排入文字消息；附件请在任务结束后发送。"
-            return false
+        guard !definitelyNoModelConfigured else {
+            error = "请先配置云端模型，输入内容已保留。"
+            return nil
         }
-        guard taskAPIAvailable == true else {
-            error = "当前 Morde 服务未确认开放任务 API，请刷新服务状态后重试。"
-            return false
-        }
-        guard let conversationID = currentConversation else {
-            error = "尚未选择对话。请先从列表选择一条对话，或创建“新对话”后再发送。"
-            return false
-        }
-        guard defaultModelConfigured else {
-            error = "管理员尚未配置可用的默认模型，暂不能发送云端任务。"
-            return false
-        }
-        let allowedModelIDs = Set(models.map(\.id))
-        guard MordeTaskModelSelection.canSubmit(modelID: model, resourceState: resourceState(.models),
-                                                allowedModelIDs: allowedModelIDs) else {
-            error = "模型列表未成功读取，或所选模型已不可用。请刷新列表并重新选择。"
-            return false
-        }
-        guard !targetIsUnavailable(hostID: host, workspaceID: workspace) else {
-            error = "所选电脑或 Workspace 当前不可用，请刷新后重新选择。"
-            return false
-        }
-        let workspaceBinding: MordeWorkspaceBinding?
-        if !workspace.isEmpty {
-            guard let binding = workspaceBindings(for: host).first(where: { $0.workspace.id == workspace }),
-                  workspaceIsReady(binding) else {
-                error = "所选 Workspace 尚未就绪，请刷新后重新选择。"
-                return false
+        let scope = currentDataScope
+        let attachmentListValid = MordeMessageAttachmentValidation.isValid(
+            attachmentIDs: attachmentIDs, stagedAttachments: stagedAttachments, projectID: projectID,
+            personalAttachmentIsValid: MordePersonalDataContract.isValidAttachmentID)
+        if scope == nil || !attachmentListValid {
+            let hintScope = scope ?? (signedIn ? nil : retainedOfflineScope)
+            guard let origin = hintScope?.serviceOrigin ?? MordeLoginStateStore.serviceOrigin(server),
+                  let accountName = installation?.accountName ?? (hintScope == nil ? nil : "") else {
+                error = "无法保存消息所属的本机身份，输入内容已保留。"
+                return nil
             }
-            workspaceBinding = binding
-        } else {
-            workspaceBinding = nil
-        }
-        guard let sendScope = currentDataScope else { return false }
-        if let queueingTask {
-            guard queueingTask.conversation_id == conversationID,
-                  ["queued", "running"].contains(queueingTask.status),
-                  queueingTask.model_id == model,
-                  queueingTask.host_id == (host.isEmpty ? nil : host),
-                  queueingTask.workspace_id == (workspace.isEmpty ? nil : workspace),
-                  workspace.isEmpty || queueingTask.input_revision != nil else {
-                error = "当前任务的模型或执行目标已变化，无法加入队列；请确认任务后重试。"
-                return false
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            let message = MordeUnconfirmedMessage(id: UUID().uuidString.lowercased(), serviceOrigin: origin,
+                serviceInstanceID: hintScope?.serviceInstanceID ?? installation?.serviceInstanceID,
+                accountName: accountName, accountID: hintScope?.accountID ?? installation?.accountID,
+                installationID: installation?.id ?? hintScope?.installationID,
+                conversationID: conversationID ?? currentConversation, projectID: projectID, content: objective,
+                modelID: model.isEmpty ? nil : model, referenceTaskID: referenceTaskID,
+                hostID: host.isEmpty ? nil : host, workspaceID: workspace.isEmpty ? nil : workspace,
+                attachmentIDs: attachmentIDs, stagedAttachments: stagedAttachments,
+                pendingUploadPaths: pendingUploadPaths, createdAt: formatter.string(from: Date()),
+                reason: !attachmentListValid ? "附件列表需要处理；原消息和附件引用已保存在本机。" :
+                    "账号或服务身份待确认；消息仅保存在本机。")
+            do {
+                try unconfirmedMessageStore.append(message)
+                unconfirmedMessages = try unconfirmedMessageStore.messages()
+                stageUnconfirmedAttachments(message)
+                return message.id
+            } catch {
+                self.error = "无法保存本机待确认消息，输入内容已保留：\(error.localizedDescription)"
+                return nil
             }
         }
-        let previousAttempt = pendingSendAttempt(for: sendScope)
-        let expectedTaskID = queueingTask?.id ?? previousAttempt?.expectedTaskID
-        let fingerprint = MordeTaskAttempt.fingerprint(conversationID: currentConversation, hostID: host,
-                                                       workspaceID: workspace, modelID: model, objective: objective,
-                                                       attachmentIDs: normalizedAttachmentIDs,
-                                                       expectedTaskID: expectedTaskID)
-        var attempt = previousAttempt
-        // shortcut: one unresolved send per account scope until the service supports key reconciliation.
-        guard MordeTaskAttempt.canContinuePendingAttempt(attempt?.fingerprint, requestedFingerprint: fingerprint) else {
-            error = "上一条消息的处理结果尚未确认。恢复原内容和目标并重试，确认后再发送新消息。"
-            return false
-        }
-        if attempt == nil {
-            attempt = MordeRetryAttempt(scope: sendScope, fingerprint: fingerprint, key: UUID().uuidString,
-                                        inputRevision: queueingTask?.input_revision ?? workspaceBinding?.workspace.revision,
-                                        expectedTaskID: expectedTaskID)
-            storePendingSendAttempt(attempt, for: sendScope)
-        }
-        busy = true; defer { busy = false }
+        guard let scope else { return nil }
+        let selectedConversation = conversationID ?? currentConversation
+        let targetConversation = selectedConversation ?? "local-\(UUID().uuidString.lowercased())"
         do {
-            struct Appended: Decodable { let message: MordeClientMessage; let task: MordeTask }
-            let task: MordeTask
-            var target: [String: Any] = [:]
-            if !host.isEmpty { target["host_id"] = host }
-            if let workspaceBinding {
-                target["workspace_id"] = workspace
-                // A retry must keep the revision that was hashed into its original idempotency request.
-                target["input_revision"] = attempt?.inputRevision ?? workspaceBinding.workspace.revision
+            let message = try messageOutbox.enqueue(scope: scope, conversationID: targetConversation, content: objective,
+                modelID: model.isEmpty ? nil : model, attachmentIDs: attachmentIDs, projectID: projectID,
+                referenceTaskID: referenceTaskID, hostID: host.isEmpty ? nil : host,
+                workspaceID: workspace.isEmpty ? nil : workspace,
+                stagedAttachments: stagedAttachments, pendingUploadPaths: pendingUploadPaths)
+            if selectedConversation == nil {
+                activateLocalConversation(targetConversation)
             }
-            if let expectedTaskID { target["expected_task_id"] = expectedTaskID }
-            var messageBody: [String: Any] = ["model_id": model, "content": objective]
-            if !normalizedAttachmentIDs.isEmpty { messageBody["attachment_ids"] = normalizedAttachmentIDs }
-            let response: Appended = try await call("/api/conversations/\(conversationID)/messages", method: "POST",
-                                                     body: target.merging(messageBody) { _, new in new },
-                                                     key: attempt?.key)
-            task = response.task
-            guard task.conversation_id == conversationID,
-                  expectedTaskID == nil || task.id == expectedTaskID,
-                  response.message.conversation_id == conversationID,
-                  response.message.task_id == task.id else { throw URLError(.cannotParseResponse) }
-            if let key = attempt?.key { clearPendingSend(for: sendScope, matching: key) }
-            currentConversation = task.conversation_id; currentTask = task
-            setResourceState(.loaded, for: .taskDetail)
-            await load()
-            guard currentDataScope == sendScope,
-                  MordeConversationTaskState.belongs(taskConversationID: task.conversation_id,
-                                                     toSelectedConversationID: currentConversation) else { return true }
-            let displayedTask = currentTask.flatMap { $0.id == task.id ? $0 : nil } ?? task
-            currentTask = displayedTask
-            setResourceState(.loaded, for: .taskDetail)
-            messages = messagesIncludingAssistantSnapshot(displayedTask, in: messages)
-            if let index = messages.firstIndex(where: { $0.id == response.message.id }) {
-                let existing = messages[index]
-                if existing.delivery_status == nil, let deliveryStatus = response.message.delivery_status {
-                    messages[index] = MordeClientMessage(
-                        id: existing.id, conversation_id: existing.conversation_id, task_id: existing.task_id,
-                        role: existing.role, content: existing.content, attachment_ids: existing.attachment_ids,
-                        status: existing.status,
-                        delivery_status: deliveryStatus, created_at: existing.created_at)
-                }
-            } else {
-                messages.append(response.message)
-            }
-            return true
-        } catch { self.error = error.localizedDescription; return false }
+            refreshPendingMessages(scope: scope)
+            schedulePendingMessages()
+            if signedIn && autoRoutingAvailable != true { scheduleMessageRetry(message.id, scope: scope) }
+            return message.id
+        } catch {
+            self.error = "无法保存待发送消息，输入内容已保留：\(error.localizedDescription)"
+            return nil
+        }
     }
 
     // nanoMuse: preserve the caller's idempotency key after a lost action response.
@@ -7772,9 +10249,127 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
         }
     }
 
-    func watchCurrentTask() async {
-        guard let id = currentTask?.id, currentConversation == currentTask?.conversation_id else { return }
-        await watchTaskEvents(taskID: id, updatesCurrentConversation: true)
+    @discardableResult private func upsertConversationTask(_ task: MordeTask) -> Bool {
+        guard task.conversation_id == currentConversation else { return false }
+        if let index = conversationTasks.firstIndex(where: { $0.id == task.id }) {
+            guard (task.event_sequence ?? -1) >= (conversationTasks[index].event_sequence ?? -1) else { return false }
+            conversationTasks[index] = task
+        } else {
+            conversationTasks.append(task)
+        }
+        taskPageDetails[task.id] = task
+        if currentTask?.id == task.id { currentTask = task }
+        return true
+    }
+
+    private func refreshConversationSnapshot(_ task: MordeTask, scope: MordeClientDataScope) async throws {
+        guard task.conversation_id == currentConversation else { throw CancellationError() }
+        guard upsertConversationTask(task) else { return }
+        messages = messagesIncludingAssistantSnapshot(task, in: messages)
+        let generation = UUID()
+        conversationMessagesRefreshGeneration = generation
+        guard let path = conversationMessagesPath(id: task.conversation_id) else { throw URLError(.badURL) }
+        let page: MordePage<MordeClientMessage> = try await call(path)
+        guard currentDataScope == scope, currentConversation == task.conversation_id,
+              generation == conversationMessagesRefreshGeneration else { return }
+        let earliest = page.items.compactMap(\.sequence).min()
+        let earlier = messages.filter { message in
+            guard let earliest, let sequence = message.sequence else { return false }
+            return sequence < earliest
+        }
+        var refreshed = MordeTaskSnapshotMessageMerge.preservingInterrupted(
+            messages, in: earlier + page.items, conversationID: task.conversation_id)
+        for active in conversationTasks { refreshed = messagesIncludingAssistantSnapshot(active, in: refreshed) }
+        messages = orderedConversationMessages(refreshed)
+        if earlier.isEmpty { messageNextCursor = page.next_cursor }
+        messageHistoryError = nil
+        messageLoadMoreGeneration = UUID()
+        loadingEarlierMessages = false
+        setResourceState(.loaded, for: .taskDetail)
+        setResourceState(.loaded, for: .messages)
+    }
+
+    func watchConversationTasks() async {
+        let ids = conversationTasks.filter { !["completed", "failed", "cancelled"].contains($0.status) }.map(\.id)
+        await withTaskGroup(of: Void.self) { group in
+            for id in ids {
+                group.addTask { await self.watchTaskEvents(taskID: id, updatesCurrentConversation: true) }
+            }
+        }
+    }
+
+    func watchConversationRouting() async {
+        guard let scope = currentDataScope, let conversationID = currentConversation,
+              !conversationID.hasPrefix("local-") else { return }
+        while !Task.isCancelled, currentDataScope == scope, currentConversation == conversationID {
+            let generation = conversationMessagesRefreshGeneration
+            do {
+                guard let path = conversationMessagesPath(id: conversationID) else { return }
+                let page: MordePage<MordeClientMessage> = try await call(path)
+                guard !Task.isCancelled, currentDataScope == scope, currentConversation == conversationID else { return }
+                if generation == conversationMessagesRefreshGeneration {
+                    let earliest = page.items.compactMap(\.sequence).min()
+                    let earlier = messages.filter { message in
+                        guard let earliest, let sequence = message.sequence else { return false }
+                        return sequence < earliest
+                    }
+                    var values = MordeTaskSnapshotMessageMerge.preservingInterrupted(
+                        messages, in: earlier + page.items, conversationID: conversationID)
+                    for task in conversationTasks { values = messagesIncludingAssistantSnapshot(task, in: values) }
+                    messages = orderedConversationMessages(values)
+                    if earlier.isEmpty { messageNextCursor = page.next_cursor }
+                    setResourceState(.loaded, for: .messages)
+                }
+            } catch {
+                // Keep the last confirmed messages while the network is unavailable.
+            }
+            do {
+                let fetched = try await conversationActiveTasks(conversationID, projectID: nil, scope: scope)
+                let active = await includePendingResultSnapshots(fetched, previous: conversationTasks,
+                                                                 conversationID: conversationID, scope: scope)
+                guard !Task.isCancelled, currentDataScope == scope, currentConversation == conversationID else { return }
+                if generation == conversationMessagesRefreshGeneration {
+                    conversationTasks = active
+                    conversationTasksLoaded = true
+                    for task in active {
+                        taskPageDetails[task.id] = task
+                        messages = messagesIncludingAssistantSnapshot(task, in: messages)
+                    }
+                    messages = orderedConversationMessages(messages)
+                    setResourceState(.loaded, for: .taskDetail)
+                }
+            } catch {
+                // Task status is optional for reading conversation messages.
+            }
+            let delay: UInt64 = conversationTasks.contains(where: {
+                $0.result_message_pending == true || $0.result_message_published == true
+            })
+                ? 500_000_000 : 3_000_000_000
+            try? await Task.sleep(nanoseconds: delay)
+        }
+    }
+
+    func stopConversationTask(_ task: MordeTask) async {
+        guard task.conversation_id == currentConversation,
+              conversationTasks.contains(where: { $0.id == task.id }),
+              ["queued", "running", "paused", "waiting_user"].contains(task.status) else { return }
+        if await actOnTaskPage(taskID: task.id, action: .cancel(expectedStatus: task.status)),
+           let updated = taskPageDetails[task.id] {
+            upsertConversationTask(updated)
+        } else if let failure = taskPageActionErrors[task.id] {
+            error = failure
+        }
+    }
+
+    func stopProjectConversationTask(_ task: MordeTask) async {
+        guard let projectID = selectedProjectID, task.conversation_id == selectedProjectConversationID,
+              projectConversationTasks.contains(where: { $0.id == task.id }),
+              ["queued", "running", "paused", "waiting_user"].contains(task.status) else { return }
+        if await actOnTaskPage(taskID: task.id, action: .cancel(expectedStatus: task.status)) {
+            await loadProjectConversationMessages(projectID: projectID, conversationID: task.conversation_id)
+        } else {
+            projectConversationError = taskPageActionErrors[task.id] ?? error
+        }
     }
 
     func watchTaskTimeline(taskID: String) async {
@@ -7796,12 +10391,13 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
     private func watchTaskEvents(taskID: String, updatesCurrentConversation: Bool) async {
         guard let taskScope = currentDataScope else { return }
         let selectedConversationID = updatesCurrentConversation ? currentConversation : nil
-        let initialSequence = updatesCurrentConversation ? currentTask?.event_sequence ?? 0 : 0
+        let initialSequence = updatesCurrentConversation
+            ? conversationTasks.first(where: { $0.id == taskID })?.event_sequence ?? 0 : 0
         func selectedTaskIsCurrent() -> Bool {
             guard updatesCurrentConversation, let selectedConversationID else { return !updatesCurrentConversation }
-            return currentConversation == selectedConversationID && currentTask?.id == taskID
+            return currentConversation == selectedConversationID && conversationTasks.contains { $0.id == taskID }
         }
-        var cursor = ""
+        var cursor = initialSequence > 0 ? String(initialSequence) : ""
         taskTimelineLoading.insert(taskID)
         taskTimelineErrors.removeValue(forKey: taskID)
         while !Task.isCancelled && taskScope == currentDataScope &&
@@ -7842,13 +10438,20 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
                     taskTimelineNoHistory.remove(taskID)
                     taskTimelineErrors[taskID] = message
                     taskTimelineLoading.remove(taskID)
-                    if selectedTaskIsCurrent() {
+                    if updatesCurrentConversation && selectedTaskIsCurrent() {
                         setResourceState(.failed(message), for: .taskDetail)
                         self.error = message
                     }
                     return
                 }
                 if http.statusCode == 204 {
+                    if updatesCurrentConversation {
+                        let snapshot: MordeTask = try await call("/api/tasks/\(taskID)")
+                        guard snapshot.id == taskID, snapshot.conversation_id == selectedConversationID,
+                              snapshot.event_sequence.map({ $0 >= initialSequence }) == true,
+                              selectedTaskIsCurrent() else { throw URLError(.cannotParseResponse) }
+                        try await refreshConversationSnapshot(snapshot, scope: taskScope)
+                    }
                     if cursor.isEmpty && (taskTimelineEvents[taskID] ?? []).isEmpty {
                         taskTimelineNoHistory.insert(taskID)
                     }
@@ -7884,7 +10487,8 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
                             struct SnapshotRequired: Decodable { let sequence: Int64 }
                             let required = try JSONDecoder().decode(SnapshotRequired.self, from: Data(data.utf8))
                             guard required.sequence == sequence else { throw URLError(.cannotParseResponse) }
-                            let snapshot = try await task(id: taskID)
+                            let snapshot: MordeTask = try await call("/api/tasks/\(taskID)")
+                            guard snapshot.id == taskID else { throw URLError(.cannotParseResponse) }
                             guard let snapshotSequence = snapshot.event_sequence,
                                   let nextCursor = MordeTaskSnapshotCursor.resumeCursor(
                                     eventID: eventID, snapshotSequence: snapshotSequence) else {
@@ -7894,19 +10498,7 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
                             cursor = nextCursor
                             if updatesCurrentConversation {
                                 guard selectedTaskIsCurrent(), snapshot.conversation_id == selectedConversationID else { return }
-                                guard let path = conversationMessagesPath(id: snapshot.conversation_id) else {
-                                    throw URLError(.badURL)
-                                }
-                                let page: MordePage<MordeClientMessage> = try await call(path)
-                                guard selectedTaskIsCurrent(), taskScope == currentDataScope else { return }
-                                currentTask = snapshot
-                                messages = messagesIncludingAssistantSnapshot(snapshot, in: page.items)
-                                messageNextCursor = page.next_cursor
-                                messageHistoryError = nil
-                                messageLoadMoreGeneration = UUID()
-                                loadingEarlierMessages = false
-                                setResourceState(.loaded, for: .taskDetail)
-                                setResourceState(.loaded, for: .messages)
+                                try await refreshConversationSnapshot(snapshot, scope: taskScope)
                             }
                             if ["completed", "failed", "cancelled"].contains(snapshot.status) {
                                 taskTimelineLoading.remove(taskID)
@@ -7924,26 +10516,15 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
                                 event = ""; eventID = ""; data = ""
                                 continue
                             }
-                            let snapshot = try await task(id: taskID)
-                            guard let snapshotSequence = snapshot.event_sequence,
+                            let snapshot: MordeTask = try await call("/api/tasks/\(taskID)")
+                            guard snapshot.id == taskID, let snapshotSequence = snapshot.event_sequence,
                                   snapshot.conversation_id == selectedConversationID,
                                   let nextCursor = MordeTaskSnapshotCursor.resumeCursor(
                                     eventID: eventID, snapshotSequence: snapshotSequence) else {
                                 throw URLError(.cannotParseResponse)
                             }
-                            guard let path = conversationMessagesPath(id: snapshot.conversation_id) else {
-                                throw URLError(.badURL)
-                            }
-                            let page: MordePage<MordeClientMessage> = try await call(path)
                             guard selectedTaskIsCurrent(), taskScope == currentDataScope else { return }
-                            currentTask = snapshot
-                            messages = messagesIncludingAssistantSnapshot(snapshot, in: page.items)
-                            messageNextCursor = page.next_cursor
-                            messageHistoryError = nil
-                            messageLoadMoreGeneration = UUID()
-                            loadingEarlierMessages = false
-                            setResourceState(.loaded, for: .taskDetail)
-                            setResourceState(.loaded, for: .messages)
+                            try await refreshConversationSnapshot(snapshot, scope: taskScope)
                             cursor = nextCursor
                             if ["completed", "failed", "cancelled"].contains(snapshot.status) {
                                 taskTimelineLoading.remove(taskID)
@@ -7961,8 +10542,11 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
                 }
             } catch {
                 if !Task.isCancelled && taskScope == currentDataScope {
-                    taskTimelineErrors[taskID] = error.localizedDescription
-                    if selectedTaskIsCurrent() {
+                    let message = updatesCurrentConversation
+                        ? error.localizedDescription
+                        : AppLocalized("Task event connection interrupted. Retrying…")
+                    taskTimelineErrors[taskID] = message
+                    if updatesCurrentConversation && selectedTaskIsCurrent() {
                         setResourceState(.failed(error.localizedDescription), for: .taskDetail)
                         self.error = error.localizedDescription
                     }
@@ -7996,7 +10580,7 @@ private func withMordeSecurityScope<T>(_ url: URL, _ operation: () throws -> T) 
                 }
                 origin = host.url
             }
-            guard origin.scheme == "https", origin.host != nil else { throw URLError(.badURL) }
+            guard isAllowedMordeHostOrigin(origin) else { throw URLError(.badURL) }
             let suffix = shared ? "observation-ticket" : "enter"
             let ticket: MordeTicket = try await call("/api/hosts/\(id)/\(suffix)", method: "POST")
             guard scope == currentDataScope else { return }
@@ -8426,9 +11010,12 @@ struct MIFConversationDrawerItem: Identifiable {
     private static func status(_ value: String) -> MIFResourcePageState.Host.Status {
         switch value {
         case "running": .running
-        case "starting", "provisioning": .starting
+        case "creating": .starting
+        case "stopping": .stopping
         case "stopped": .stopped
-        case "offline", "failed", "deleting", "deleted": .offline
+        case "failed": .failed
+        case "deleting": .deleting
+        case "deleted": .deleted
         default: .unknown
         }
     }
@@ -8464,6 +11051,22 @@ struct MIFConversationDrawerItem: Identifiable {
     let objectWillChange = ObservableObjectPublisher()
     private let client = MordeClient.shared
     private var observation: AnyCancellable?
+    @Published private var storedConversationTaskChoices: [MordeTask] = []
+    private var taskChoicesScope: String?
+    private var taskChoicesConversationID: String?
+    private var taskChoicesGeneration = UUID()
+    private var taskSelectionGeneration = UUID()
+
+    var conversationTaskChoices: [MordeTask] {
+        guard let scope = client.taskPageScopeKey, let conversationID = client.selectedProjectConversationID else { return [] }
+        var choices = client.tasks.filter { $0.conversation_id == conversationID }
+        if taskChoicesScope == scope, taskChoicesConversationID == conversationID {
+            for task in storedConversationTaskChoices where !choices.contains(where: { $0.id == task.id }) {
+                choices.append(task)
+            }
+        }
+        return choices
+    }
 
     private init() {
         observation = client.objectWillChange.sink { [weak self] _ in
@@ -8512,8 +11115,66 @@ struct MIFConversationDrawerItem: Identifiable {
     }
     func canClaim(in projectID: String) -> Bool { supportsWorkItemsV2 && canManage(in: projectID) }
     func load() async { await client.loadProjects(includeProjectBudget: false) }
-    func selectProject(_ id: String) async { await client.selectProject(id, includeProjectBudget: false) }
-    func selectConversation(_ id: String) async { await client.selectProjectConversation(id) }
+    func selectProject(_ id: String) async {
+        taskChoicesGeneration = UUID(); taskSelectionGeneration = UUID(); storedConversationTaskChoices = []
+        taskChoicesScope = nil; taskChoicesConversationID = nil
+        await client.selectProject(id, includeProjectBudget: false)
+    }
+    func selectConversation(_ id: String) async {
+        let generation = UUID()
+        taskChoicesGeneration = generation
+        taskSelectionGeneration = UUID()
+        storedConversationTaskChoices = []
+        taskChoicesScope = nil; taskChoicesConversationID = nil
+        await client.selectProjectConversation(id)
+        guard generation == taskChoicesGeneration, client.selectedProjectConversationID == id,
+              let scope = client.taskPageScopeKey else { return }
+        taskChoicesScope = scope
+        taskChoicesConversationID = id
+        do {
+            var cursor: String?
+            var seen = Set<String>()
+            var choices: [MordeTask] = []
+            for _ in 0..<100 {
+                let page = try await client.taskPage(cursor: cursor)
+                guard generation == taskChoicesGeneration, client.taskPageScopeKey == scope,
+                      client.selectedProjectConversationID == id else { return }
+                for task in page.items where task.conversation_id == id && !choices.contains(where: { $0.id == task.id }) {
+                    choices.append(task)
+                }
+                guard let next = page.next_cursor else {
+                    storedConversationTaskChoices = choices
+                    return
+                }
+                guard seen.insert(next).inserted else { throw URLError(.cannotParseResponse) }
+                cursor = next
+            }
+            throw URLError(.cannotParseResponse)
+        } catch {
+            guard generation == taskChoicesGeneration, client.taskPageScopeKey == scope,
+                  client.selectedProjectConversationID == id else { return }
+            client.projectConversationError = error.localizedDescription
+        }
+    }
+    func selectTask(_ id: String) async {
+        guard let conversationID = client.selectedProjectConversationID,
+              let projectID = client.selectedProjectID,
+              conversationTaskChoices.contains(where: { $0.id == id && $0.conversation_id == conversationID }),
+              let scope = client.taskPageScopeKey else { return }
+        let generation = UUID()
+        taskSelectionGeneration = generation
+        do {
+            let task = try await client.task(id: id)
+            guard generation == taskSelectionGeneration, client.taskPageScopeKey == scope,
+                  client.selectedProjectID == projectID, client.selectedProjectConversationID == conversationID,
+                  task.conversation_id == conversationID else { return }
+            client.projectConversationTask = task
+        } catch {
+            guard generation == taskSelectionGeneration, client.taskPageScopeKey == scope,
+                  client.selectedProjectID == projectID, client.selectedProjectConversationID == conversationID else { return }
+            client.projectConversationError = error.localizedDescription
+        }
+    }
     func create(projectID: String, title: String, description: String,
                 category: String? = nil, unassigned: Bool = false) async -> Bool {
         await client.createProjectWorkItem(projectID: projectID, title: title, description: description,
@@ -8731,6 +11392,12 @@ private struct MordePortalSettingsView: View {
         .onChange(of: client.signedIn) { signedIn in
             if !signedIn { dismiss() }
         }
+        .onDisappear {
+            if case .modelConnections = page {
+                client.invalidateModelConfiguration()
+                if client.signedIn { Task { await client.load() } }
+            }
+        }
     }
 
     @MainActor
@@ -8836,11 +11503,18 @@ private struct MordeWorkspaceFilesView: View {
         var id: String { path }
     }
 
+    private static let workspaceIconBackground = Color(red: 0.925, green: 0.925, blue: 0.941)
+
     @StateObject private var client = MordeClient.shared
     @Environment(\.dismiss) private var dismiss
     @State private var selectedWorkspaceID = ""
     @State private var workspaceTool: WorkspaceTool?
-    @State private var shareUnavailable = false
+    @State private var shareSheetPresented = false
+    @State private var sharePermission = "view"
+    @State private var shareWorking = false
+    @State private var shareError: String?
+    @State private var showShareError = false
+    @State private var shareNotice: String?
     @State private var files: [MordeWorkspaceFile] = []
     @State private var directories: [String] = []
     @State private var currentDirectoryPath = ""
@@ -8857,6 +11531,7 @@ private struct MordeWorkspaceFilesView: View {
     @State private var manifestLoading = false
     @State private var manifestGeneration = 0
     @State private var manifestError: String?
+    @State private var manifestSeenCursors = Set<String>()
     @State private var showFileImporter = false
     @State private var selectedFiles: [MordeWorkspaceLocalSelection] = []
     @State private var confirmUpload = false
@@ -8882,6 +11557,26 @@ private struct MordeWorkspaceFilesView: View {
 
     private var selectedWorkspace: MordeWorkspace? {
         client.workspaces.first { $0.id == selectedWorkspaceID }
+    }
+
+    private var workspaceMountSummary: String? {
+        guard let workspace = selectedWorkspace,
+              client.resourceState(.hosts).isLoaded,
+              client.resourceState(.workspaces).isLoaded else { return nil }
+        guard let host = client.hosts.first(where: { host in
+            host.workspaces?.contains(where: { $0.workspace.id == workspace.id }) == true
+        }), let binding = host.workspaces?.first(where: { $0.workspace.id == workspace.id }) else {
+            return workspace.state == "ready" ? "未挂载" : "不可用"
+        }
+        let status: String
+        if binding.sync_state == "syncing" || binding.sync_state == "pending" {
+            status = "同步中"
+        } else if client.isReady(binding) {
+            status = "已挂载"
+        } else {
+            status = "未就绪"
+        }
+        return "\(status) · 云电脑 \(host.name)"
     }
 
     private var workspaceBreadcrumbs: [WorkspaceBreadcrumb] {
@@ -8936,7 +11631,7 @@ private struct MordeWorkspaceFilesView: View {
     private var canMutateWorkspaceFiles: Bool {
         guard client.workspaceSyncAvailable == true, !isTransferring,
               let manifestRevision, let selectedWorkspace else { return false }
-        return manifestRevision == Int64(selectedWorkspace.revision)
+        return selectedWorkspace.is_read_only != true && manifestRevision == Int64(selectedWorkspace.revision)
     }
 
     private var filePathOperationTarget: String? {
@@ -8991,38 +11686,53 @@ private struct MordeWorkspaceFilesView: View {
                     if !crumb.path.isEmpty {
                         Image(systemName: "chevron.right")
                             .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(Color.secondary.opacity(0.45))
                     }
                     if crumb.path == currentDirectoryPath {
-                        Text(crumb.title).foregroundStyle(.secondary)
+                        Text(crumb.title)
+                            .fontWeight(.medium)
+                            .foregroundStyle(.secondary)
                     } else {
                         Button(crumb.title) { navigateToDirectory(crumb.path) }
                             .buttonStyle(.plain)
+                            .fontWeight(.semibold)
                     }
                 }
             }
-            .font(.subheadline)
+            .font(.system(size: 14))
         }
+        .padding(.top, 6)
+        .padding(.bottom, 2)
         .accessibilityLabel("Workspace 路径")
     }
 
     private func directoryRow(_ path: String) -> some View {
         Button { navigateToDirectory(path) } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: 13) {
                 Image(systemName: "folder")
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 19, weight: .regular))
+                    .foregroundStyle(Color.primary.opacity(0.78))
+                    .frame(width: 44, height: 44)
+                    .background(Self.workspaceIconBackground, in: Circle())
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(workspacePathName(path)).font(.headline)
-                    Text("目录").font(.caption).foregroundStyle(.secondary)
+                    Text(workspacePathName(path))
+                        .font(.system(size: 16, weight: .semibold))
+                    Text("目录")
+                        .font(.system(size: 14))
+                        .foregroundStyle(.secondary)
                 }
+                .padding(.top, 1)
                 Spacer(minLength: 8)
                 Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.tertiary)
+                    .font(.system(size: 18, weight: .light))
+                    .foregroundStyle(Color.secondary.opacity(0.45))
+                    .padding(.top, 8)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .padding(.vertical, 13)
         .accessibilityIdentifier("morde.workspace.directory.\(path)")
     }
 
@@ -9062,39 +11772,70 @@ private struct MordeWorkspaceFilesView: View {
         }
     }
 
-    private var manifestSection: some View {
-        Section {
+    private var manifestContent: some View {
+        LazyVStack(alignment: .leading, spacing: 0) {
+            if let workspaceMountSummary {
+                Text(workspaceMountSummary)
+                    .font(.system(size: 14.5))
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 2)
+                    .padding(.bottom, 6)
+                    .accessibilityIdentifier("morde.workspace.mount.summary")
+            }
             workspaceBreadcrumbBar
             if client.workspaceSyncAvailable != true {
                 Text(client.workspaceSyncAvailable == false
                      ? "服务端未开放 Workspace 文件传输；上传和下载已锁定。"
                      : "正在确认服务端 Workspace 文件能力。")
+                    .font(.system(size: 14))
                     .foregroundStyle(.secondary)
+                    .padding(.vertical, 12)
             } else if let manifestError {
-                Text("文件清单暂不可用：\(manifestError)").foregroundStyle(.orange)
-            } else if manifestLoading {
+                Text("文件清单暂不可用：\(manifestError)")
+                    .font(.system(size: 14))
+                    .foregroundStyle(.orange)
+                    .padding(.vertical, 12)
+            } else if manifestLoading && manifestRevision == nil {
                 ProgressView("正在读取文件清单…")
-            } else if manifestRevision != nil && files.isEmpty && directories.isEmpty && nextCursor == nil {
+                    .padding(.vertical, 12)
+            } else if manifestRevision != nil && directFileRows.isEmpty && directSubdirectoryPaths.isEmpty && nextCursor == nil {
                 Text("此目录当前没有文件。")
+                    .font(.system(size: 14))
                     .foregroundStyle(.secondary)
+                    .padding(.vertical, 12)
             } else if manifestRevision == nil {
                 Text("选择获准 Workspace 后读取真实文件清单。")
+                    .font(.system(size: 14))
                     .foregroundStyle(.secondary)
+                    .padding(.vertical, 12)
             }
             ForEach(directSubdirectoryPaths, id: \.self) { path in directoryRow(path) }
             ForEach(directFileRows) { file in fileRow(file) }
             if nextCursor != nil {
                 ProgressView()
                     .frame(maxWidth: .infinity)
-                    .listRowSeparator(.hidden)
+                    .padding(.vertical, 16)
                     .task(id: nextCursor) { await loadManifest(reset: false) }
             }
-        } header: {
-            Text("文件")
-        } footer: {
-            if let manifestRevision {
-                Text("文件来自 Workspace v\(manifestRevision) 的真实清单。下载只写入本机应用目录；不会覆盖已存在的本机文件。")
+            if isTransferring {
+                transferStatus
+                    .padding(.vertical, 12)
             }
+        }
+        .padding(.horizontal, 22)
+        .padding(.top, 2)
+        .padding(.bottom, 108)
+    }
+
+    @ViewBuilder
+    private var transferStatus: some View {
+        if let (done, total) = transferProgress {
+            ProgressView(value: total == 0 ? 1 : Double(done) / Double(total))
+            Text("已确认 \(Self.fileSize(done)) / \(Self.fileSize(total))")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        } else {
+            ProgressView("正在提交 Workspace 操作…")
         }
     }
 
@@ -9161,10 +11902,76 @@ private struct MordeWorkspaceFilesView: View {
         }
     }
 
+    private var workspaceShareSheet: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("分享「\(selectedWorkspace?.name ?? "Workspace")」")
+                .font(.headline.weight(.semibold))
+                .accessibilityIdentifier("morde.workspace.share.title")
+            workspaceSharePermission("view", title: "可查看", detail: "只能看文件")
+            workspaceSharePermission("edit", title: "可编辑", detail: "能改文件")
+            Button {
+                Task { await copyWorkspaceShareLink() }
+            } label: {
+                Text(shareWorking ? "正在创建链接…" : "复制分享链接")
+                    .font(.body.weight(.semibold))
+                    .frame(maxWidth: .infinity, minHeight: 48)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(NanoMuseTones.action)
+            .disabled(shareWorking || selectedWorkspace == nil)
+            .accessibilityIdentifier("morde.workspace.share.copy")
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .presentationDetents([.height(260)])
+    }
+
+    private func workspaceSharePermission(_ value: String, title: String, detail: String) -> some View {
+        Button { sharePermission = value } label: {
+            HStack(spacing: 10) {
+                Image(systemName: sharePermission == value ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(sharePermission == value ? NanoMuseTones.action : Color.secondary)
+                Text(title).font(.body.weight(.medium))
+                Spacer()
+                Text(detail).font(.footnote).foregroundStyle(.secondary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityValue(sharePermission == value ? "selected" : "")
+        .accessibilityIdentifier("morde.workspace.share.permission.\(value)")
+    }
+
+    @MainActor
+    private func copyWorkspaceShareLink() async {
+        guard !shareWorking, let selectedWorkspace else { return }
+        shareWorking = true
+        defer { shareWorking = false }
+        do {
+            let created = try await client.createWorkspaceShare(workspaceID: selectedWorkspace.id,
+                revision: selectedWorkspace.revision, permission: sharePermission)
+            var components = URLComponents()
+            components.scheme = "morde"
+            components.host = "workspace-share"
+            components.queryItems = [URLQueryItem(name: "token", value: created.token)]
+            guard let url = components.url else { throw URLError(.badURL) }
+            UIPasteboard.general.string = url.absoluteString
+            shareSheetPresented = false
+            shareNotice = "分享链接已复制"
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                if shareNotice == "分享链接已复制" { shareNotice = nil }
+            }
+        } catch {
+            shareError = error.localizedDescription
+            showShareError = true
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                NanoMuseRoundButton(symbol: "chevron.left", label: "返回资源", size: 40) { dismiss() }
+            HStack(spacing: 0) {
+                NanoMuseRoundButton(symbol: "chevron.left", label: "返回资源", size: 38) { dismiss() }
                 Text(selectedWorkspace?.name ?? "Workspace")
                     .font(.headline.weight(.semibold))
                     .lineLimit(1)
@@ -9175,37 +11982,34 @@ private struct MordeWorkspaceFilesView: View {
                         } label: {
                             Label("上传文件", systemImage: "arrow.up.doc")
                         }
-                        .disabled(selectedWorkspace == nil || client.workspaceSyncAvailable != true || isTransferring)
+                        .disabled(selectedWorkspace == nil || selectedWorkspace?.is_read_only == true ||
+                                  client.workspaceSyncAvailable != true || isTransferring)
                         Button {
                             workspaceTool = .history
                         } label: {
                             Label("版本比较与恢复", systemImage: "clock.arrow.circlepath")
                         }
-                        .disabled(selectedWorkspace == nil || isTransferring)
+                        .disabled(selectedWorkspace == nil || selectedWorkspace?.is_read_only == true || isTransferring)
                     }
+                    .padding(.leading, 10)
                 Spacer(minLength: 8)
-                NanoMuseRoundButton(symbol: "square.and.arrow.up", label: "分享这个 Workspace", size: 40) {
-                    shareUnavailable = true
+                NanoMuseRoundButton(symbol: "square.and.arrow.up", label: "分享这个 Workspace", size: 38) {
+                    sharePermission = "view"
+                    shareError = nil
+                    shareSheetPresented = true
                 }
+                .disabled(selectedWorkspace == nil || selectedWorkspace?.is_read_only == true)
                 .accessibilityIdentifier("morde.workspace.share")
             }
-            .padding(.horizontal, 12)
-            .frame(minHeight: 52)
+            .padding(.horizontal, 22)
+            .padding(.top, 10)
+            .padding(.bottom, 4)
+            .frame(minHeight: 48)
 
-            List {
-            manifestSection
-            if isTransferring {
-                Section("传输中") {
-                    if let (done, total) = transferProgress {
-                        ProgressView(value: total == 0 ? 1 : Double(done) / Double(total))
-                        Text("已确认 \(Self.fileSize(done)) / \(Self.fileSize(total))")
-                            .font(.footnote).foregroundStyle(.secondary)
-                    } else {
-                        ProgressView("正在提交 Workspace 操作…")
-                    }
-                }
+            ScrollView {
+                manifestContent
             }
-            }
+            .refreshable { await loadManifest(reset: true) }
             .accessibilityIdentifier("morde.workspace.files")
         }
         .toolbar(.hidden, for: .navigationBar)
@@ -9244,12 +12048,22 @@ private struct MordeWorkspaceFilesView: View {
                 }
             }
         }
-        .alert("Workspace 分享暂未接入", isPresented: $shareUnavailable) {
-            Button("知道了", role: .cancel) {}
+        .sheet(isPresented: $shareSheetPresented) { workspaceShareSheet }
+        .alert("无法创建分享链接", isPresented: $showShareError) {
+            Button("确定", role: .cancel) { shareError = nil }
         } message: {
-            Text("当前服务没有分享链接和访问权限接口。")
+            Text(shareError ?? "")
         }
-        .refreshable { await loadManifest(reset: true) }
+        .overlay(alignment: .bottom) {
+            if let shareNotice {
+                Text(shareNotice)
+                    .font(.footnote.weight(.medium))
+                    .padding(.horizontal, 16).padding(.vertical, 10)
+                    .background(.regularMaterial, in: Capsule())
+                    .accessibilityIdentifier("morde.workspace.share.copied")
+                    .padding(.bottom, 18)
+            }
+        }
         .onChange(of: client.workspaces.map(\.id)) { ids in
             if !ids.contains(selectedWorkspaceID) { selectedWorkspaceID = ids.first ?? "" }
         }
@@ -9259,6 +12073,7 @@ private struct MordeWorkspaceFilesView: View {
             currentDirectoryPath = ""
             appliedDirectoryPath = nil
             files = []; directories = []; nextCursor = nil; manifestRevision = nil; manifestError = nil
+            manifestSeenCursors.removeAll()
             workspaceDiff = nil; selectedDiffChanges = []; workspaceHistoryError = nil; workspaceHistoryNotice = nil
         }
         .onChange(of: client.workspaceSyncAvailable) { available in
@@ -9268,6 +12083,7 @@ private struct MordeWorkspaceFilesView: View {
                 manifestGeneration += 1
                 manifestLoading = false
                 files = []; directories = []; nextCursor = nil; manifestRevision = nil
+                manifestSeenCursors.removeAll()
                 appliedDirectoryPath = nil
                 manifestError = nil
             }
@@ -9284,7 +12100,9 @@ private struct MordeWorkspaceFilesView: View {
             }
             Button("取消", role: .cancel) {}
         } message: {
-            Text(selectedDownload.map { "\($0.path) · \(Self.fileSize($0.sizeBytes)) · SHA-256 \($0.sha256)" } ?? "")
+            Text(selectedDownload.map {
+                "\($0.path) · \(Self.fileSize($0.sizeBytes)) · SHA-256 \($0.sha256)。下载只写入本机应用目录；同名文件已存在时不会覆盖。"
+            } ?? "")
         }
         .confirmationDialog("删除本机文件副本？", isPresented: $deleteLocalCopy, titleVisibility: .visible) {
             Button("删除本机副本", role: .destructive) {
@@ -9363,14 +12181,20 @@ private struct MordeWorkspaceFilesView: View {
     private func fileRow(_ file: MordeWorkspaceFile) -> some View {
         let localURL = client.localWorkspaceFileURL(workspaceID: selectedWorkspaceID, path: file.path)
         let exists = localURL.map(MordeWorkspaceTransferSupport.isRegularFileWithoutFollowingSymlinks) ?? false
-        HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .center, spacing: 13) {
             Image(systemName: "doc")
-                .foregroundStyle(.secondary)
+                .font(.system(size: 19, weight: .regular))
+                .foregroundStyle(Color.primary.opacity(0.78))
+                .frame(width: 44, height: 44)
+                .background(Self.workspaceIconBackground, in: Circle())
             VStack(alignment: .leading, spacing: 4) {
-                Text(workspacePathName(file.path)).font(.headline)
+                Text(workspacePathName(file.path))
+                    .font(.system(size: 16, weight: .semibold))
                 Text(Self.fileSize(file.sizeBytes))
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.system(size: 14))
+                    .foregroundStyle(.secondary)
             }
+            .padding(.top, 1)
             Spacer(minLength: 8)
             Menu {
                 if exists {
@@ -9424,7 +12248,7 @@ private struct MordeWorkspaceFilesView: View {
             .accessibilityLabel("\(file.path) 的操作")
             .accessibilityHint("显示此文件在本机和 Workspace 云端的操作")
         }
-        .padding(.vertical, 3)
+        .padding(.vertical, 13)
     }
 
     @MainActor
@@ -9496,10 +12320,17 @@ private struct MordeWorkspaceFilesView: View {
         }
         if reset {
             files = []; directories = []; nextCursor = nil; manifestRevision = nil; manifestError = nil
+            manifestSeenCursors.removeAll()
             appliedDirectoryPath = directoryPath
         }
         manifestGeneration += 1
         let requestGeneration = manifestGeneration
+        let requestedCursor = reset ? nil : nextCursor
+        if let requestedCursor, !manifestSeenCursors.insert(requestedCursor).inserted {
+            nextCursor = nil
+            manifestError = MordeWorkspaceTransferError.invalidManifest.localizedDescription
+            return
+        }
         manifestLoading = true
         defer {
             if requestGeneration == manifestGeneration { manifestLoading = false }
@@ -9507,7 +12338,7 @@ private struct MordeWorkspaceFilesView: View {
         do {
             let page = try await client.loadWorkspaceManifest(workspaceID: workspace.id,
                                                               revision: workspace.revision,
-                                                              cursor: reset ? nil : nextCursor,
+                                                              cursor: requestedCursor,
                                                               prefix: prefix)
             guard requestGeneration == manifestGeneration, !Task.isCancelled,
                   workspace.id == selectedWorkspaceID,
@@ -9517,8 +12348,10 @@ private struct MordeWorkspaceFilesView: View {
             let combinedFiles = reset ? page.files : files + page.files
             let pageDirectories = page.directories.map(\.path).filter { $0 != "." }
             let combinedDirectories = Array(Set((reset ? [] : directories) + pageDirectories)).sorted()
-            guard MordeWorkspaceTransferSupport.hasCaseInsensitiveUniquePaths(
-                combinedFiles.map(\.path) + combinedDirectories) else {
+            guard page.next_cursor?.isEmpty != true,
+                  page.next_cursor.map({ !manifestSeenCursors.contains($0) }) ?? true,
+                  MordeWorkspaceTransferSupport.hasValidManifestPaths(
+                    filePaths: combinedFiles.map(\.path), directoryPaths: combinedDirectories) else {
                 throw URLError(.cannotParseResponse)
             }
             files = combinedFiles
@@ -9533,6 +12366,7 @@ private struct MordeWorkspaceFilesView: View {
                   workspace.revision == selectedWorkspace?.revision,
                   directoryPath == appliedDirectoryPath else { return }
             manifestError = error.localizedDescription
+            if requestedCursor != nil { nextCursor = nil }
         }
     }
 
@@ -9685,6 +12519,88 @@ private struct MordeWorkspaceFilesView: View {
 
     private static func fileSize(_ bytes: Int64) -> String {
         ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+    }
+}
+
+private struct MordeWorkspaceShareAcceptanceView: View {
+    let token: String
+    @StateObject private var client = MordeClient.shared
+    @Environment(\.dismiss) private var dismiss
+    @State private var preview: MordeWorkspaceSharePreview?
+    @State private var loadError: String?
+    @State private var isLoading = true
+    @State private var isAccepting = false
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 16) {
+                if isLoading {
+                    ProgressView("正在读取分享信息…")
+                } else if let preview {
+                    Text(preview.workspace_name).font(.title3.weight(.semibold))
+                    Text(preview.permission == "view" ? "可查看 · 只能看文件" : "可编辑 · 能改文件")
+                        .foregroundStyle(.secondary)
+                    Text("领取后会创建归你所有的独立副本，之后与原 Workspace 无关。")
+                        .font(.footnote).foregroundStyle(.secondary)
+                    Button {
+                        Task { await accept() }
+                    } label: {
+                        Text(isAccepting ? "正在领取…" : "领取独立副本")
+                            .font(.body.weight(.semibold))
+                            .frame(maxWidth: .infinity, minHeight: 48)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(isAccepting)
+                    .accessibilityIdentifier("morde.workspace.share.accept")
+                } else if let loadError {
+                    Text(loadError).foregroundStyle(.secondary)
+                    Button("重新加载") { Task { await loadPreview() } }
+                        .disabled(isLoading)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(24)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .navigationTitle("领取 Workspace")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+        .presentationDetents([.medium])
+        .task(id: token) { await loadPreview() }
+        .onChange(of: client.user?.id) { _ in dismiss() }
+    }
+
+    @MainActor
+    private func loadPreview() async {
+        guard !isLoading || preview == nil else { return }
+        isLoading = true
+        loadError = nil
+        defer { isLoading = false }
+        do {
+            preview = try await client.previewWorkspaceShare(token: token)
+        } catch {
+            preview = nil
+            let failure = error as NSError
+            loadError = failure.domain == "Morde" && failure.code == 404
+                ? "此链接已失效或已被领取，请向分享者索取新链接。"
+                : error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func accept() async {
+        guard !isAccepting else { return }
+        isAccepting = true
+        defer { isAccepting = false }
+        do {
+            _ = try await client.acceptWorkspaceShare(token: token)
+            dismiss()
+        } catch {
+            let failure = error as NSError
+            loadError = failure.domain == "Morde" && failure.code == 404
+                ? "此链接已失效或已被领取，请向分享者索取新链接。"
+                : error.localizedDescription
+            preview = nil
+        }
     }
 }
 
@@ -9937,13 +12853,159 @@ public struct MordeComputerRoom: View {
     }
 }
 
+private struct MordeHostSharingSheet: View {
+    let hostID: String
+    @StateObject private var client = MordeClient.shared
+    @Environment(\.dismiss) private var dismiss
+    @State private var members: [MordeHostMember] = []
+    @State private var recipientUserID = ""
+    @State private var loadError: String?
+    @State private var actionError: String?
+    @State private var notice: String?
+    @State private var isLoading = true
+    @State private var isWorking = false
+    @State private var memberToRevoke: MordeHostMember?
+    @State private var confirmsRevoke = false
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section(AppLocalized("Desktop control")) {
+                    TextField(AppLocalized("Recipient Morde user ID"), text: $recipientUserID)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .accessibilityIdentifier("morde.hostShare.userID")
+                    Button(AppLocalized("Grant control")) { Task { await grantControl() } }
+                        .disabled(isWorking || !MordeProjectPolicy.hasValidUserID(recipientUserID) || recipientUserID == client.user?.id)
+                        .accessibilityIdentifier("morde.hostShare.grant")
+                    Text(AppLocalized("Control remains available until you revoke access. Each control session still follows the existing lease and renewal flow."))
+                        .font(.footnote).foregroundStyle(.secondary)
+                        .accessibilityIdentifier("morde.hostShare.leasePolicy")
+                }
+
+                Section(AppLocalized("Shared users")) {
+                    if isLoading {
+                        ProgressView()
+                    } else if let loadError {
+                        Text(loadError).foregroundStyle(.orange)
+                        Button(AppLocalized("Retry")) { Task { await reloadMembers() } }
+                    } else if members.isEmpty {
+                        Text(verbatim: emptyMembersMessage).foregroundStyle(Color.secondary)
+                    } else {
+                        ForEach(members) { member in
+                            HStack(alignment: .top, spacing: 12) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(member.user_id)
+                                        .font(.body.weight(.medium))
+                                    Text(permissionSummary(member.permissions))
+                                        .font(.footnote).foregroundStyle(.secondary)
+                                        .accessibilityIdentifier("morde.hostShare.member.permissions.\(member.user_id)")
+                                }
+                                Spacer(minLength: 8)
+                                Button(AppLocalized("Revoke access"), role: .destructive) {
+                                    memberToRevoke = member
+                                    confirmsRevoke = true
+                                }
+                                .disabled(isWorking)
+                                .accessibilityIdentifier("morde.hostShare.revoke.\(member.user_id)")
+                            }
+                        }
+                    }
+                }
+
+                if let notice {
+                    Section { Text(notice).foregroundStyle(.secondary) }
+                }
+                if let actionError {
+                    Section { Text(actionError).foregroundStyle(.orange) }
+                }
+            }
+            .navigationTitle(AppLocalized("Share cloud computer"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(AppLocalized("Done")) { dismiss() }
+                }
+            }
+            .task { await reloadMembers() }
+            .onChange(of: client.user?.id) { _ in dismiss() }
+            .confirmationDialog(AppLocalized("Revoke all access for this user on this computer?"),
+                                isPresented: $confirmsRevoke, titleVisibility: .visible) {
+                Button(AppLocalized("Revoke access"), role: .destructive) {
+                    guard let memberToRevoke else { return }
+                    Task { await revoke(memberToRevoke) }
+                }
+                .accessibilityIdentifier("morde.hostShare.confirmRevoke")
+                Button(AppLocalized("Cancel"), role: .cancel) { memberToRevoke = nil }
+            }
+        }
+    }
+
+    private func reloadMembers() async {
+        isLoading = true
+        loadError = nil
+        defer { isLoading = false }
+        do {
+            members = try await client.hostMembers(hostID: hostID)
+        } catch {
+            loadError = error.localizedDescription
+        }
+    }
+
+    private func grantControl() async {
+        guard !isWorking else { return }
+        isWorking = true
+        actionError = nil
+        notice = nil
+        defer { isWorking = false }
+        do {
+            try await client.grantHostControl(hostID: hostID, userID: recipientUserID)
+            recipientUserID = ""
+            notice = AppLocalized("Desktop control granted.")
+            await reloadMembers()
+        } catch {
+            actionError = error.localizedDescription
+        }
+    }
+
+    private func revoke(_ member: MordeHostMember) async {
+        guard !isWorking else { return }
+        isWorking = true
+        actionError = nil
+        notice = nil
+        defer { isWorking = false; memberToRevoke = nil }
+        do {
+            try await client.revokeHostMember(hostID: hostID, userID: member.user_id)
+            notice = AppLocalized("Access revoked.")
+            await reloadMembers()
+        } catch {
+            actionError = error.localizedDescription
+        }
+    }
+
+    private func permissionSummary(_ permissions: [String]) -> String {
+        let labels = [
+            "desktop:control": AppLocalized("Desktop control"),
+            "desktop:view": AppLocalized("Desktop view"),
+            "terminal:control": AppLocalized("Terminal control"),
+            "mcp:control": AppLocalized("MCP control"),
+            "workspace:file:read": AppLocalized("Workspace file read"),
+        ]
+        return permissions.compactMap { labels[$0] }.joined(separator: " · ")
+    }
+
+    private var emptyMembersMessage: String { AppLocalized("No users currently have access.") }
+}
+
 private enum MIFResourceSheetDestination: Identifiable, Equatable {
     case host(URL)
+    case hostSharing(String)
     case library
 
     var id: String {
         switch self {
         case .host(let url): return "host:\(url.absoluteString)"
+        case .hostSharing(let hostID): return "host-sharing:\(hostID)"
         case .library: return "library"
         }
     }
@@ -9956,6 +13018,7 @@ struct MIFResourcesRoot: View {
     private let onOpenHost: ((MIFResourcePageState.Host) -> Void)?
     @StateObject private var store = MIFResourcePageStore.shared
     @State private var workspaceFilesID: String?
+    @State private var hostSharingID: String?
     @State private var libraryPresented = false
 
     init(chrome: NanoMuseRoomChrome? = nil, onMenu: (() -> Void)? = nil,
@@ -9973,24 +13036,27 @@ struct MIFResourcesRoot: View {
         Binding(
             get: {
                 if let url = store.hostURL { return .host(url) }
+                if let hostSharingID { return .hostSharing(hostSharingID) }
                 return libraryPresented ? .library : nil
             },
             set: { value in
                 guard value == nil else { return }
                 store.dismissHost()
                 workspaceFilesID = nil
+                hostSharingID = nil
                 libraryPresented = false
             })
     }
 
     var body: some View {
         MIFResourceRoom(chrome: chrome, onMenu: onMenu, state: store.state, actions: MIFResourcePageActions(
-            refresh: { Task { await store.refresh() } },
+            refresh: { await store.refresh() },
             openLibrary: { libraryPresented = true },
             openHost: { host in
                 if let onOpenHost { onOpenHost(host) }
                 else { Task { await store.openHost(host.id) } }
             },
+            shareHost: { hostSharingID = $0 },
             refreshControl: { id in Task { await store.refreshControl(id) } },
             control: { id, action in Task { await store.control(id, action: action) } },
             openWorkspaceFiles: { workspaceFilesID = $0 }))
@@ -10004,6 +13070,8 @@ struct MIFResourcesRoot: View {
                 switch destination {
                 case .host(let url):
                     MordeHostView(url: url)
+                case .hostSharing(let id):
+                    MordeHostSharingSheet(hostID: id)
                 case .library:
                     NavigationStack {
                         MIFLibraryRoot(onMenu: onMenu, personalDataRoot: MordePersonalStorage.root)
@@ -10037,10 +13105,17 @@ private struct MordeClientContainer: View {
 
     var body: some View {
         MordeRoot(client: client, layout: layout, bottomOverlay: bottomOverlay)
+            .onOpenURL { client.openWorkspaceShareURL($0) }
             .task {
                 guard ownsLifecycle else { return }
                 client.refreshExpiredAuthorization()
                 await client.load()
+#if DEBUG
+                if ProcessInfo.processInfo.arguments.contains(MordeAuthURLProtocol.workspaceShareDeepLinkFixtureLaunchArgument),
+                   let url = URL(string: "morde://workspace-share?token=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA") {
+                    client.openWorkspaceShareURL(url)
+                }
+#endif
             }
             .task {
                 guard ownsLifecycle else { return }
@@ -10051,9 +13126,13 @@ private struct MordeClientContainer: View {
                     client.refreshExpiredAuthorization()
                 }
             }
-            .task(id: ownsLifecycle ? client.currentTask?.id : nil) {
+            .task(id: ownsLifecycle ? "\(client.currentConversation ?? ""):\(client.conversationTasks.map(\.id).sorted().joined(separator: ","))" : "") {
                 guard ownsLifecycle, layout != .computers else { return }
-                await client.watchCurrentTask()
+                await client.watchConversationTasks()
+            }
+            .task(id: ownsLifecycle ? "\(client.taskPageScopeKey ?? ""):\(client.currentConversation ?? ""):\(client.signedIn)" : "") {
+                guard ownsLifecycle, layout != .computers, client.signedIn else { return }
+                await client.watchConversationRouting()
             }
             .nmOnChange(of: scenePhase) { phase in
                 if ownsLifecycle, phase == .active {
@@ -10061,6 +13140,14 @@ private struct MordeClientContainer: View {
                         client.refreshExpiredAuthorization()
                         await client.load()
                     }
+                }
+            }
+            .sheet(isPresented: Binding(
+                get: { client.signedIn && client.user != nil && client.pendingWorkspaceShareToken != nil },
+                set: { if !$0 { client.pendingWorkspaceShareToken = nil } }
+            )) {
+                if let token = client.pendingWorkspaceShareToken {
+                    MordeWorkspaceShareAcceptanceView(token: token)
                 }
             }
     }
@@ -10082,6 +13169,7 @@ private struct MordeRoot: View {
     @State private var loginPassword = ""
     @State private var confirmationPassword = ""
     @State private var registrationMode = false
+    @State private var showExpiredSessionLogin = false
     @FocusState private var authFieldFocused: MordeAuthField?
     @State private var selectedTab = 0
     @State private var selectedDesignTab: MordeDesignTab = .chat
@@ -10099,23 +13187,38 @@ private struct MordeRoot: View {
     @State private var workspace = ""
     @State private var model = ""
     @State private var draft = ""
+    @State private var chatAppendTaskID: String?
     @State private var draftConversationKey: String?
     @State private var conversationDrafts: [String: String] = [:]
     @State private var composerColumnHeight: CGFloat = 0
+    @State private var latestMessageVisible = true
+    @State private var followsLatestMessage = true
+    @State private var showOfflineProjectMessages = false
     @State private var taskOptionsPresented = false
     @FocusState private var taskDraftFocused: Bool
     @State private var taskSpeechStarting = false
     @State private var taskSpeechStartAttempt = UUID()
     @State private var showChatAttachmentImporter = false
     @State private var isUploadingChatAttachments = false
+    @State private var chatUploadMessageID: String?
+    @State private var chatUploadConversationID: String?
+    @State private var chatUploadScopeKey: String?
+    @State private var chatUploadSourcePaths: [String] = []
+    @State private var chatUploadPlannedAttachments: [MordeOutboxAttachment] = []
     @State private var pendingChatAttachments: [MordeChatAttachment] = []
     @State private var chatAttachmentDrafts: [String: [MordeChatAttachment]] = [:]
     @State private var chatAttachmentPreviewItem: MIFPersonalAttachmentPreviewItem?
     @State private var chatAttachmentPreviewDownload: MordePersonalAttachmentDownload?
     @State private var chatAttachmentPreviewTask: Task<Void, Never>?
     @State private var chatAttachmentPreviewRequestID: UUID?
+    @State private var unconfirmedToRestore: MordeUnconfirmedMessage?
+    @State private var unconfirmedToReveal: MordeUnconfirmedMessage?
+    @State private var unconfirmedToDelete: MordeUnconfirmedMessage?
+    @State private var independentSendTarget: MordeIndependentSendTarget?
+    @State private var revealedUnconfirmedIDs = Set<String>()
 #if DEBUG
     @State private var localChatAttachmentFixtureStarted = false
+    @State private var localAttachmentCleanupRetryFixtureStarted = false
 #endif
     private var selectedHost: MordeHost? { client.hosts.first(where: { $0.id == host }) }
     private var workspaceBindings: [MordeWorkspaceBinding] { client.workspaceBindings(for: host) }
@@ -10123,25 +13226,19 @@ private struct MordeRoot: View {
         workspaceBindings.first(where: { $0.workspace.id == workspace })
     }
     private var selectedHostReady: Bool { selectedHost.map(client.isReady) ?? false }
-    private var targetUnavailable: Bool { client.targetIsUnavailable(hostID: host, workspaceID: workspace) }
     private var allowedTextModelIDs: Set<String> {
-        Set(client.models.map(\.id))
-    }
-    private var selectedTextModelReady: Bool {
-        guard client.defaultModelConfigured else { return false }
-        return MordeTaskModelSelection.canSubmit(modelID: model, resourceState: client.resourceState(.models),
-                                                 allowedModelIDs: allowedTextModelIDs)
+        Set(client.models.filter { $0.capabilities.text }.map(\.id))
     }
     private var activeConversationDraftKey: String? {
-        guard let scope = client.taskPageScopeKey, let conversationID = client.currentConversation else { return nil }
-        return "\(scope):\(conversationID)"
+        guard let scope = client.chatDraftScopeKey, let conversationID = client.currentConversation else { return nil }
+        return "\(scope):\(client.draftConversationID(conversationID))"
     }
     private func clearComposer() {
         taskSpeechStartAttempt = UUID()
         taskSpeechStarting = false
         if taskSpeech.state == .recording { taskSpeech.stopRecording() }
         taskSpeech.recognizedText = ""
-        host = ""; workspace = ""; model = ""; draft = ""; selectedTab = 0
+        host = ""; workspace = ""; model = ""; draft = ""; chatAppendTaskID = nil; selectedTab = 0
         draftConversationKey = nil
         conversationDrafts.removeAll()
         pendingChatAttachments = []
@@ -10238,6 +13335,11 @@ private struct MordeRoot: View {
 
     private func selectDraftConversation(_ key: String?) {
         guard key != draftConversationKey else { return }
+        chatAppendTaskID = nil
+        if draftConversationKey == nil, let key {
+            if conversationDrafts[key] == nil { conversationDrafts[key] = draft }
+            if chatAttachmentDrafts[key] == nil { chatAttachmentDrafts[key] = pendingChatAttachments }
+        }
         if let draftConversationKey {
             conversationDrafts[draftConversationKey] = draft
             chatAttachmentDrafts[draftConversationKey] = pendingChatAttachments
@@ -10371,53 +13473,96 @@ private struct MordeRoot: View {
             selectedTab = 0
         }
     }
-    private func submitChatDraft(queueingTask: MordeTask? = nil) {
-        guard queueingTask == nil ? canSendChatDraft : canEnqueueChatDraft else { return }
-        let attachmentIDs = pendingChatAttachments.flatMap(\.allAttachmentIDs).sorted()
-        let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        let text = trimmed.isEmpty && !attachmentIDs.isEmpty ? "请读取并处理我附加的文件。" : draft
-        let conversationID = client.currentConversation
-        let draftKey = draftConversationKey
-        guard conversationID != nil, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        Task { @MainActor in
-            guard client.currentConversation == conversationID, draftConversationKey == draftKey else { return }
-            if await client.send(text, host: host, workspace: workspace, model: model,
-                                 attachmentIDs: attachmentIDs, queueingTask: queueingTask),
-               client.currentConversation == conversationID, draftConversationKey == draftKey {
-                draft = ""
-                pendingChatAttachments = []
-                saveConversationDraft()
-            }
+    private func submitChatDraft() {
+        if commitMarkedChatText() {
+            DispatchQueue.main.async { submitChatDraft() }
+            return
         }
+        guard canSendChatDraft else { return }
+        let attachmentIDs = pendingChatAttachments.filter { $0.stagedFiles.isEmpty }.flatMap(\.allAttachmentIDs).sorted()
+        var stagedAttachments = pendingChatAttachments.flatMap(\.stagedFiles)
+        let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let awaitingUpload = hasUnclaimedChatUpload
+        if awaitingUpload { stagedAttachments.append(contentsOf: chatUploadPlannedAttachments) }
+        let text = trimmed.isEmpty && (!attachmentIDs.isEmpty || !stagedAttachments.isEmpty || awaitingUpload)
+            ? "请读取并处理我附加的文件。" : draft
+        if let messageID = client.enqueueMessage(text, host: host, workspace: workspace, model: model,
+                attachmentIDs: attachmentIDs, referenceTaskID: chatAppendTaskID,
+                stagedAttachments: stagedAttachments,
+                pendingUploadPaths: pendingChatAttachments.flatMap(\.sourcePaths) + (awaitingUpload ? chatUploadSourcePaths : [])) {
+            followsLatestMessage = true
+            if awaitingUpload { chatUploadMessageID = messageID }
+            draft = ""
+            chatAppendTaskID = nil
+            pendingChatAttachments = []
+            saveConversationDraft()
+        }
+    }
+
+    private func restoreUnconfirmedMessage(_ message: MordeUnconfirmedMessage) {
+        let available = client.visibleUnconfirmedMessages + client.otherInstanceUnconfirmedMessages.filter {
+            revealedUnconfirmedIDs.contains($0.id)
+        }
+        guard available.contains(where: { $0.id == message.id }), client.canRecoverUnconfirmedMessage else {
+            client.error = "请先确认当前账号和服务后再恢复。"
+            return
+        }
+        guard draft.isEmpty, pendingChatAttachments.isEmpty, !isUploadingChatAttachments else {
+            client.error = "请先发送或清空当前输入，再恢复本机消息。"
+            return
+        }
+        guard client.isSameUnconfirmedInstance(message) ||
+                (message.attachmentIDs.isEmpty && message.stagedAttachments.isEmpty) else {
+            client.error = "此消息的附件属于旧服务，请连接原服务后恢复；原记录仍保存在本机。"
+            return
+        }
+        guard message.projectID == nil || message.attachmentIDs.isEmpty else {
+            client.error = "项目附件引用不能用于个人对话，请在原项目会话中恢复；原记录仍保存在本机。"
+            return
+        }
+        draft = message.content
+        pendingChatAttachments = message.attachmentIDs.map { id in
+            MordeChatAttachment(attachmentID: id, additionalAttachmentIDs: [], name: "附件 · \(id.suffix(8))",
+                                mediaType: "", sizeBytes: 0)
+        } + message.stagedAttachments.map { original in
+            var item = original
+            if message.projectID != nil { item.attachmentID = nil; item.linked = false }
+            let name = item.originalFilename ?? item.localPath.map { URL(fileURLWithPath: $0).lastPathComponent } ??
+                item.sourcePath.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "待处理附件"
+            return MordeChatAttachment(attachmentID: item.id, additionalAttachmentIDs: [], name: name,
+                                       mediaType: "", sizeBytes: 0, stagedFiles: [item],
+                                       sourcePaths: item.localPath.map { [$0] } ?? [])
+        }
+        if client.isSameUnconfirmedInstance(message) {
+            host = message.hostID ?? ""
+            workspace = message.workspaceID ?? ""
+            model = message.modelID ?? ""
+            if message.conversationID == client.currentConversation { chatAppendTaskID = message.referenceTaskID }
+        }
+        saveConversationDraft()
+        taskDraftFocused = true
+    }
+
+    private func commitMarkedChatText() -> Bool {
+        func responder(in view: UIView) -> UIView? {
+            if view.isFirstResponder { return view }
+            for child in view.subviews {
+                if let found = responder(in: child) { return found }
+            }
+            return nil
+        }
+        let windows = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+        guard let view = windows.lazy.compactMap({ responder(in: $0) }).first,
+              let input = view as? UITextInput, input.markedTextRange != nil else { return false }
+        input.unmarkText()
+        return true
     }
     private func submitOrQueueChatDraft() {
-        if canEnqueueChatDraft, let task = currentConversationTask {
-            submitChatDraft(queueingTask: task)
-        } else {
-            submitChatDraft()
-        }
-    }
-    private func stopCurrentChatTask() {
-        guard let task = currentConversationTask, ["queued", "running"].contains(task.status) else { return }
-        Task { @MainActor in
-            guard client.currentConversation == task.conversation_id, client.currentTask?.id == task.id else { return }
-            _ = await client.act(["action": "cancel", "expected_status": task.status])
-        }
+        submitChatDraft()
     }
     private var currentConversationTask: MordeTask? {
-        guard let task = client.currentTask,
-              MordeConversationTaskState.belongs(taskConversationID: task.conversation_id,
-                                                 toSelectedConversationID: client.currentConversation) else { return nil }
-        return task
-    }
-    private var hasActiveConversationTask: Bool {
-        guard let task = currentConversationTask else { return false }
-        return ["queued", "running", "waiting_user", "pausing", "paused", "cancelling"].contains(task.status)
-    }
-    private var isGeneratingConversationTask: Bool {
-        guard !client.busy else { return false }
-        guard let task = currentConversationTask else { return false }
-        return ["queued", "running"].contains(task.status)
+        client.conversationTasks.first { $0.id == chatAppendTaskID && $0.conversation_id == client.currentConversation }
     }
     private func handleTaskOptionsRequest() {
         guard layout != .computers else { return }
@@ -10434,150 +13579,63 @@ private struct MordeRoot: View {
             if !(error is CancellationError) { client.error = error.localizedDescription }
         case .success(let urls):
             guard !urls.isEmpty else { return }
-            guard let conversationID = client.currentConversation else {
-                client.error = "请先选择或新建一个云端会话，再添加附件。"
+            guard let conversationID = client.ensureConversationForDraft(), let scopeKey = client.taskPageScopeKey else {
+                client.error = "无法确认附件所属账号，文件未被发送。"
                 return
             }
             let existingIDs = pendingChatAttachments.reduce(0) { $0 + $1.allAttachmentIDs.count }
             guard existingIDs + urls.count <= 16 else {
-                client.error = "一条消息最多附加 16 项；PDF 会额外生成文本和最多 10 页预览。"
+                client.error = "一条消息最多可添加 16 个原始文件。"
                 return
             }
+            let originalDraftKey = draftConversationKey ?? activeConversationDraftKey
             isUploadingChatAttachments = true
-            defer { isUploadingChatAttachments = false }
-            let prepared: [MordePreparedChatAttachment]
+            chatUploadConversationID = conversationID
+            chatUploadScopeKey = scopeKey
+            defer {
+                chatUploadMessageID = nil
+                chatUploadConversationID = nil
+                chatUploadScopeKey = nil
+                chatUploadSourcePaths = []
+                chatUploadPlannedAttachments = []
+                isUploadingChatAttachments = false
+            }
             do {
-                prepared = try await Task.detached(priority: .userInitiated) {
-                    var items: [MordePreparedChatAttachment] = []
-                    do {
-                        for url in urls {
-                            let item = try MordeChatAttachmentPreparation.prepare(url)
-                            items.append(item)
-                            guard existingIDs + items.reduce(0, { $0 + $1.files.count }) <= 16 else {
-                                throw NSError(domain: "Morde", code: 413,
-                                    userInfo: [NSLocalizedDescriptionKey: "图片与 PDF 处理结果合计最多附加 16 项；PDF 会额外生成文本和最多 10 页预览。"])
-                            }
-                        }
-                        return items
-                    } catch {
-                        items.forEach { $0.discardTemporaryFiles() }
-                        throw error
-                    }
+                let planned = try MordeChatAttachmentPreparation.planSources(urls)
+                chatUploadPlannedAttachments = planned
+                chatUploadSourcePaths = planned.compactMap(\.localPath)
+                try await Task.detached(priority: .userInitiated) {
+                    for item in planned { _ = try MordeChatAttachmentPreparation.ensureStagedSource(item) }
                 }.value
-            } catch {
-                client.error = error.localizedDescription
-                return
-            }
-            defer { prepared.forEach { $0.discardTemporaryFiles() } }
-            for item in prepared where !Task.isCancelled {
-                do {
-                    var uploaded: [MordeChatAttachment] = []
-                    for file in item.files {
-                        uploaded.append(try await uploadChatAttachment(from: file.url, conversationID: conversationID))
-                    }
-                    guard let primary = uploaded.first else { continue }
-                    let attachment = MordeChatAttachment(attachmentID: primary.attachmentID,
-                        additionalAttachmentIDs: uploaded.dropFirst().map(\.attachmentID), name: item.name,
-                        mediaType: primary.mediaType, sizeBytes: primary.sizeBytes)
-                    guard client.currentConversation == conversationID else { return }
-                    if !pendingChatAttachments.contains(where: { $0.attachmentID == attachment.attachmentID }) {
-                        pendingChatAttachments.append(attachment)
-                        saveConversationDraft()
-                    }
-                } catch {
-                    client.error = error.localizedDescription
-                    return
+                guard !Task.isCancelled else { throw CancellationError() }
+                let staged = zip(urls, planned).map { url, item in
+                    MordeChatAttachment(attachmentID: item.id, additionalAttachmentIDs: [], name: url.lastPathComponent,
+                        mediaType: "", sizeBytes: 0, stagedFiles: [item], sourcePaths: item.localPath.map { [$0] } ?? [])
                 }
+                if let messageID = chatUploadMessageID {
+                    client.resumePendingAttachmentCopy(messageID: messageID)
+                } else if client.currentConversation.map(client.draftConversationID) == client.draftConversationID(conversationID) &&
+                            client.taskPageScopeKey == scopeKey {
+                    pendingChatAttachments.append(contentsOf: staged)
+                    saveConversationDraft()
+                } else if client.taskPageScopeKey == scopeKey, let originalDraftKey {
+                    chatAttachmentDrafts[originalDraftKey, default: []].append(contentsOf: staged)
+                } else {
+                    throw URLError(.userAuthenticationRequired)
+                }
+            } catch {
+                if chatUploadMessageID == nil { client.error = error.localizedDescription }
             }
         }
-    }
-    @MainActor
-    private func uploadChatAttachment(from sourceURL: URL, conversationID: String) async throws -> MordeChatAttachment {
-        let authorization = MordeShellAuthorization.shared
-        guard authorization.signedIn, let scope = authorization.personalDataScopeKey,
-              client.currentConversation == conversationID else { throw URLError(.userAuthenticationRequired) }
-        let personal = NanoMuseMordePersonalContentStore.shared
-        await personal.refresh(root: MordePersonalStorage.root)
-        guard authorization.personalDataScopeKey == scope, personal.syncEnabled else {
-            throw NSError(domain: "Morde", code: 403,
-                          userInfo: [NSLocalizedDescriptionKey: "请登录并启用个人同步后再添加聊天附件。"])
-        }
-        let name = sourceURL.lastPathComponent
-        guard !name.isEmpty, name.unicodeScalars.count <= 255,
-              !name.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains) else {
-            throw NSError(domain: "Morde", code: 400,
-                          userInfo: [NSLocalizedDescriptionKey: "附件文件名无效或过长。"])
-        }
-        let mediaType = UTType(filenameExtension: sourceURL.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
-        guard ["image/jpeg", "application/pdf", "text/plain"].contains(mediaType) else {
-            throw NSError(domain: "Morde", code: 415,
-                          userInfo: [NSLocalizedDescriptionKey: "聊天附件处理后仅支持 JPEG、PDF 与 PDF 提取文本。"])
-        }
-        let digest = try await Task.detached(priority: .utility) {
-            try withMordeSecurityScope(sourceURL) { try MordePersonalAttachmentHash.measure(fileURL: sourceURL) }
-        }.value
-        let quota = try await authorization.personalDataQuota()
-        guard authorization.personalDataScopeKey == scope, digest.sizeBytes <= quota.max_attachment_bytes else {
-            throw NSError(domain: "Morde", code: 413,
-                          userInfo: [NSLocalizedDescriptionKey: "附件超过当前账号允许的上传大小。"])
-        }
-        let identity = SHA256.hash(data: Data((scope + "\u{0}" + name + "\u{0}" + digest.sha256).utf8))
-            .map { String(format: "%02x", $0) }.joined()
-        let objectID = "li_" + String(identity.prefix(40))
-        let existing = personal.object("library_item", objectID)
-        let baseRevision: Int64
-        if let existing {
-            guard let body = try? existing.decodeBody(NanoMuseMordeLibraryItemBody.self), body.isValid,
-                  body.name == name, body.mime == mediaType, body.size_bytes == digest.sizeBytes else {
-                throw NSError(domain: "Morde", code: 409,
-                              userInfo: [NSLocalizedDescriptionKey: "此附件的文件信息与已有文件库记录冲突。"])
-            }
-            if let attachmentID = body.attachment_id {
-                return MordeChatAttachment(attachmentID: attachmentID, additionalAttachmentIDs: [], name: name,
-                                           mediaType: mediaType, sizeBytes: digest.sizeBytes)
-            }
-            baseRevision = existing.revision
-        } else {
-            let body = NanoMuseMordeLibraryItemBody(name: name,
-                kind: UTType(mimeType: mediaType)?.conforms(to: .image) == true ? "media" : "artifact",
-                mime: mediaType, size_bytes: digest.sizeBytes, attachment_id: nil)
-            guard let revision = try await personal.replace("library_item", id: objectID, revision: 0,
-                                                            body: body, root: MordePersonalStorage.root) else {
-                throw NSError(domain: "Morde", code: 409,
-                              userInfo: [NSLocalizedDescriptionKey: "文件库记录正在等待同步，请完成同步后重试。"])
-            }
-            baseRevision = revision
-        }
-        guard authorization.personalDataScopeKey == scope else { throw URLError(.userAuthenticationRequired) }
-        let personalDataRoot = MordePersonalStorage.root
-        let staged = try await Task.detached(priority: .utility) {
-            try withMordeSecurityScope(sourceURL) {
-                try NanoMuseMordePersonalAttachmentStaging.stage(sourceURL: sourceURL,
-                    expectedSizeBytes: digest.sizeBytes, expectedSHA256: digest.sha256,
-                    maxBytes: quota.max_attachment_bytes, root: personalDataRoot)
-            }
-        }.value
-        defer { NanoMuseMordePersonalAttachmentStaging.discard(staged) }
-        guard authorization.personalDataScopeKey == scope, client.currentConversation == conversationID else {
-            throw URLError(.userAuthenticationRequired)
-        }
-        let receipt = try await authorization.uploadPersonalAttachment(objectID: objectID,
-            baseRevision: baseRevision, fileURL: staged.fileURL, sizeBytes: staged.sizeBytes,
-            sha256: staged.sha256, mediaType: mediaType, idempotencyKey: "chat-library-upload-\(objectID)")
-        guard authorization.personalDataScopeKey == scope, client.currentConversation == conversationID,
-              MordePersonalDataContract.isValidAttachmentID(receipt.attachment_id) else {
-            throw URLError(.cannotParseResponse)
-        }
-        await personal.refresh(root: MordePersonalStorage.root)
-        return MordeChatAttachment(attachmentID: receipt.attachment_id, additionalAttachmentIDs: [], name: name,
-                                   mediaType: mediaType, sizeBytes: digest.sizeBytes)
     }
     private func conversationChanged(_ _: String?) {
         clearChatAttachmentPreview()
+        if activeConversationDraftKey != draftConversationKey { followsLatestMessage = true }
         selectDraftConversation(activeConversationDraftKey)
         startLocalChatAttachmentFixtureIfNeeded()
     }
     private func conversationScopeChanged(_ _: String?) {
+        revealedUnconfirmedIDs.removeAll()
         selectDraftConversation(activeConversationDraftKey)
     }
     private func announceTaskStatus(_ status: String?) {
@@ -10605,16 +13663,21 @@ private struct MordeRoot: View {
     }
     private func signedInChanged(_ signedIn: Bool) {
         if !signedIn {
-            clearComposer()
             clearChatAttachmentPreview()
+            if client.expiredConversationAvailable { return }
+            clearComposer()
             selectedDesignTab = .chat
             selectedDesignRoute = .chat
             designNavigationPath = []
         }
-        else { startLocalChatAttachmentFixtureIfNeeded() }
+        else {
+            showExpiredSessionLogin = false
+            startLocalChatAttachmentFixtureIfNeeded()
+        }
     }
 #if DEBUG
     private func startLocalChatAttachmentFixtureIfNeeded() {
+        startLocalAttachmentCleanupRetryFixtureIfNeeded()
         let conversationID = ProcessInfo.processInfo.arguments.contains(MordeAuthURLProtocol.accountIsolationFixtureLaunchArgument)
             ? "c0000001" : "c1234567"
         guard ProcessInfo.processInfo.arguments.contains(MordeAuthURLProtocol.chatAttachmentFixtureLaunchArgument),
@@ -10626,12 +13689,12 @@ private struct MordeRoot: View {
             let directory = FileManager.default.temporaryDirectory
                 .appendingPathComponent("morde-chat-fixture-\(UUID().uuidString)", isDirectory: true)
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            let imageURL = directory.appendingPathComponent("fixture-image.png")
+            let imageURL = directory.appendingPathComponent("fixture-image.jpg")
             let image = UIGraphicsImageRenderer(size: CGSize(width: 64, height: 64)).image { context in
                 UIColor.systemOrange.setFill()
                 context.fill(CGRect(x: 0, y: 0, width: 64, height: 64))
             }
-            guard let imageData = image.pngData() else {
+            guard let imageData = image.jpegData(compressionQuality: 0.9) else {
                 throw NSError(domain: "Morde", code: 500,
                               userInfo: [NSLocalizedDescriptionKey: "Unable to generate the local image fixture."])
             }
@@ -10673,21 +13736,60 @@ private struct MordeRoot: View {
             client.error = error.localizedDescription
         }
     }
+
+    private func startLocalAttachmentCleanupRetryFixtureIfNeeded() {
+        guard ProcessInfo.processInfo.arguments.contains(
+                MordeAuthURLProtocol.attachmentCleanupFailureFixtureLaunchArgument),
+              MordeShellAuthorization.shared.signedIn,
+              !localAttachmentCleanupRetryFixtureStarted else { return }
+        localAttachmentCleanupRetryFixtureStarted = true
+
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            guard MordeShellAuthorization.shared.signedIn else { return }
+            runLocalAttachmentCleanupRetryFixture()
+        }
+    }
+
+    private func runLocalAttachmentCleanupRetryFixture() {
+        let fileManager = FileManager.default
+        let directory = fileManager.temporaryDirectory
+            .appendingPathComponent("morde-cleanup-\(UUID().uuidString)", isDirectory: true)
+        let file = directory.appendingPathComponent("preview.pdf")
+        defer {
+            try? fileManager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
+            try? fileManager.removeItem(at: directory)
+        }
+
+        do {
+            try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+            try Data("synthetic cleanup fixture".utf8).write(to: file)
+            try fileManager.setAttributes([.posixPermissions: 0o500], ofItemAtPath: directory.path)
+            MIFLibraryTemporaryFileCleanup.discard(file)
+            let failedRemovalWasRetained = fileManager.fileExists(atPath: file.path) &&
+                MIFLibraryTemporaryFileCleanup.pendingFiles.contains(file)
+
+            try fileManager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
+            MIFLibraryTemporaryFileCleanup.retryPending()
+            let retryRemovedFile = !fileManager.fileExists(atPath: file.path) &&
+                !MIFLibraryTemporaryFileCleanup.pendingFiles.contains(file)
+            client.error = failedRemovalWasRetained && retryRemovedFile
+                ? "Synthetic attachment cleanup retry succeeded."
+                : "Synthetic attachment cleanup retry failed."
+        } catch {
+            client.error = "Synthetic attachment cleanup retry fixture failed: \(error.localizedDescription)"
+        }
+    }
 #else
     private func startLocalChatAttachmentFixtureIfNeeded() {}
 #endif
-    private func userIDChanged(_ _: String?) { clearComposer() }
-    private func hostsChanged(_ state: MordeResourceLoadState?) {
-        if state?.isLoaded != true { host = ""; workspace = "" }
-    }
-    private func workspacesChanged(_ state: MordeResourceLoadState?) {
-        if state?.isLoaded != true { workspace = "" }
+    private func userIDChanged(_ userID: String?) {
+        revealedUnconfirmedIDs.removeAll()
+        if !client.expiredConversationAvailable && !client.isRetainedOfflineAccount(userID) { clearComposer() }
     }
     private func modelsChanged(_ state: MordeResourceLoadState?) {
-        guard let state, state != .loading else { return }
-        guard !MordeTaskModelSelection.canSubmit(modelID: model, resourceState: state,
-                                                 allowedModelIDs: allowedTextModelIDs) else { return }
-        model = client.defaultModelID ?? client.models.first?.id ?? ""
+        guard state?.isLoaded == true, model.isEmpty else { return }
+        model = client.defaultModelID ?? (client.models.count == 1 ? client.models.first?.id : nil) ?? ""
     }
     @ViewBuilder
     private func emptyResourceState(_ resource: MordeResource, itemCount: Int, emptyMessage: String) -> some View {
@@ -10715,7 +13817,7 @@ private struct MordeRoot: View {
                         VStack(spacing: 10) {
                             Image(systemName: "bubble.left.and.bubble.right")
                                 .font(.system(size: 24)).foregroundStyle(NanoMuseTones.secondaryText)
-                            Text("请从聊天抽屉选择或新建云端会话。")
+                            Text("发送消息即可开始新对话。")
                                 .font(.subheadline).foregroundStyle(NanoMuseTones.secondaryText)
                         }
                         .frame(maxWidth: .infinity, minHeight: 150)
@@ -10727,7 +13829,7 @@ private struct MordeRoot: View {
                             Button("重试读取") { Task { await client.retryCurrentConversationMessages() } }
                                 .accessibilityIdentifier("morde.chat.messages.retry")
                         } else if let emptyMessage = MordeResourcePresentation.emptyListMessage(
-                            resource: .messages, state: messageState, itemCount: client.messages.count,
+                            resource: .messages, state: messageState, itemCount: client.displayedConversationMessages.count,
                             emptyMessage: "此对话暂无消息。") {
                             Text(emptyMessage).font(.subheadline)
                                 .foregroundStyle(NanoMuseTones.secondaryText)
@@ -10748,43 +13850,148 @@ private struct MordeRoot: View {
                             .disabled(client.loadingEarlierMessages)
                             .accessibilityIdentifier("morde.chat.messages.loadEarlier")
                         }
-                        ForEach(client.messages) { message in
-                            MIFMordeMessageBubble(message: message, onAttachmentPreview: previewChatAttachment)
+                        ForEach(client.displayedConversationMessages) { message in
+                            let pending = client.pendingMessages.first { $0.id == message.client_message_id }
+                            MIFMordeMessageBubble(message: message,
+                                pending: pending,
+                                waitingForEarlier: pending.flatMap {
+                                    MordeOutboxScheduling.waitingForEarlierMessage($0, in: client.pendingMessages)
+                                },
+                                serviceNeedsUpdate: client.autoRoutingAvailable == false,
+                                processingRetryInFlight: client.routingRetryInFlight.contains(message.id),
+                                processingRetryError: client.routingRetryErrors[message.id],
+                                onRetry: { if let id = message.client_message_id { client.retryPendingMessage(id) } },
+                                onSendIndependently: pending.flatMap(client.independentSendTarget).map { target in
+                                    { independentSendTarget = target }
+                                },
+                                onRetryProcessing: {
+                                    if let conversationID = message.conversation_id {
+                                        Task { await client.retryMessageProcessing(messageID: message.id, conversationID: conversationID) }
+                                    }
+                                },
+                                onAttachmentPreview: previewChatAttachment)
                                 .id(message.id)
                         }
-                        if let task = client.currentTask,
-                           MordeConversationTaskState.belongs(
-                            taskConversationID: task.conversation_id,
-                            toSelectedConversationID: client.currentConversation) {
+                        ForEach(client.conversationTasks.filter { $0.conversation_id == client.currentConversation }) { task in
                             conversationTaskCard(task)
                         }
                     }
+                    if !client.offlineProjectMessages.isEmpty {
+                        DisclosureGroup("项目待发送/待处理消息（\(client.offlineProjectMessages.count)）",
+                                        isExpanded: $showOfflineProjectMessages) {
+                            ForEach(client.offlineProjectMessages) { message in
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text(message.content).textSelection(.enabled)
+                                    Text("项目 \(message.projectID ?? "") · 会话 \(message.conversationID)")
+                                        .font(.caption).foregroundStyle(.secondary)
+                                    ForEach(message.attachments) { attachment in
+                                        if let path = attachment.localPath {
+                                            Label(attachment.originalFilename ?? URL(fileURLWithPath: path).lastPathComponent, systemImage: "paperclip")
+                                                .font(.caption)
+                                        }
+                                    }
+                                    Text(verbatim: NSLocalizedString(message.statusLocalizationKey, comment: "Message send status"))
+                                        .font(.caption).foregroundStyle(.secondary)
+                                    if let failure = message.error { Text(verbatim: failure).font(.caption).foregroundStyle(.orange) }
+                                    if let waiting = MordeOutboxScheduling.waitingForEarlierMessage(message, in: client.pendingMessages) {
+                                        Text(verbatim: NSLocalizedString(waiting, comment: "Message send status"))
+                                            .font(.caption).foregroundStyle(.secondary)
+                                    }
+                                    Button("重试发送") { client.retryPendingMessage(message.id) }
+                                        .font(.caption).frame(minHeight: 44)
+                                    if let target = client.independentSendTarget(for: message) {
+                                        Button("Send this message independently") { independentSendTarget = target }
+                                            .font(.caption).frame(minHeight: 44)
+                                            .accessibilityIdentifier("morde.outbox.detach.\(message.id)")
+                                    }
+                                }
+                                .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+                                .background(NanoMuseTones.surface, in: RoundedRectangle(cornerRadius: 14))
+                                .accessibilityIdentifier("morde.projectOutbox.message.\(message.id)")
+                            }
+                        }
+                        .accessibilityIdentifier("morde.projectOutbox.disclosure")
+                    }
+                    ForEach(client.visibleUnconfirmedMessages +
+                            client.otherInstanceUnconfirmedMessages.filter {
+                                revealedUnconfirmedIDs.contains($0.id)
+                            }) { message in
+                        MordeUnconfirmedMessageCard(message: message,
+                            onRestore: { unconfirmedToRestore = message },
+                            onDelete: { unconfirmedToDelete = message })
+                    }
+                    ForEach(client.otherInstanceUnconfirmedMessages.filter {
+                        !revealedUnconfirmedIDs.contains($0.id)
+                    }) { message in
+                        Button("本机有一条归属待确认消息 · 查看") { unconfirmedToReveal = message }
+                            .font(.footnote).frame(minHeight: 44)
+                    }
+                    Color.clear.frame(height: composerColumnHeight + bottomOverlay + 96)
+                        .accessibilityHidden(true)
                     Color.clear.frame(height: 1).id("morde.chat.latest")
+                        .onAppear { latestMessageVisible = true; followsLatestMessage = true }
+                        .onDisappear { latestMessageVisible = false }
                 }
                 .frame(maxWidth: 680)
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, 16)
                 .padding(.top, 12)
-                .padding(.bottom, composerColumnHeight + bottomOverlay + 12)
             }
             .accessibilityIdentifier("morde.chat.transcript")
             .scrollDismissesKeyboard(.interactively)
+            .contentShape(Rectangle())
+            .simultaneousGesture(TapGesture().onEnded { taskDraftFocused = false })
+            .simultaneousGesture(DragGesture(minimumDistance: 12).onChanged { value in
+                if value.translation.height > 12 { followsLatestMessage = false }
+            }.onEnded { _ in
+                if latestMessageVisible { followsLatestMessage = true }
+            })
             .background(ChatColors.background)
+            .overlay(alignment: .bottom) {
+                if !latestMessageVisible {
+                    Button {
+                        followsLatestMessage = true
+                        withAnimation { proxy.scrollTo("morde.chat.latest", anchor: .bottom) }
+                    } label: {
+                        Image(systemName: "arrow.down")
+                            .font(.body.weight(.semibold))
+                            .frame(width: 44, height: 44)
+                            .background(NanoMuseTones.userMessage, in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(Text("回到最新消息"))
+                    .accessibilityIdentifier("morde.chat.latestButton")
+                    .padding(.bottom, composerColumnHeight + bottomOverlay + 12)
+                }
+            }
+            .nmOnChange(of: client.displayedConversationMessages) { _ in
+                if followsLatestMessage {
+                    DispatchQueue.main.async { proxy.scrollTo("morde.chat.latest", anchor: .bottom) }
+                }
+            }
+            .nmOnChange(of: composerColumnHeight) { _ in
+                if followsLatestMessage {
+                    DispatchQueue.main.async { proxy.scrollTo("morde.chat.latest", anchor: .bottom) }
+                }
+            }
+            .nmOnChange(of: bottomOverlay) { _ in
+                if followsLatestMessage {
+                    DispatchQueue.main.async { proxy.scrollTo("morde.chat.latest", anchor: .bottom) }
+                }
+            }
+            .nmOnChange(of: taskDraftFocused) { _ in
+                if followsLatestMessage {
+                    DispatchQueue.main.async { proxy.scrollTo("morde.chat.latest", anchor: .bottom) }
+                }
+            }
+            .nmOnChange(of: followsLatestMessage) { following in
+                if following { DispatchQueue.main.async { proxy.scrollTo("morde.chat.latest", anchor: .bottom) } }
+            }
             .modifier(NanoMuseComposerHost(
                 stack: AnyView(conversationComposerStack), popup: AnyView(EmptyView()),
                 overlay: bottomOverlay, columnHeight: $composerColumnHeight, fade: false))
-            .onChange(of: client.messages.last?.id) { _ in
-                withAnimation(.easeOut(duration: 0.18)) { proxy.scrollTo("morde.chat.latest", anchor: .bottom) }
-            }
         }
         .background(ChatColors.background.ignoresSafeArea())
-        .toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
-                Button(AppLocalized("Done")) { taskDraftFocused = false }
-                    .accessibilityIdentifier("morde.chat.keyboardDone")
-            }
-        }
         .nmOnChange(of: taskSpeech.state) { state in
             if state == .idle { appendTaskSpeechTranscript() }
         }
@@ -10823,7 +14030,7 @@ private struct MordeRoot: View {
                                 .background(NanoMuseTones.surface, in: Capsule())
                                 .contextMenu {
                                     Button(role: .destructive) {
-                                        pendingChatAttachments.removeAll { $0.attachmentID == attachment.attachmentID }
+                                        pendingChatAttachments.removeAll { $0.id == attachment.id }
                                         saveConversationDraft()
                                     } label: {
                                         Label(AppLocalized("Remove attachment"), systemImage: "xmark")
@@ -10838,24 +14045,39 @@ private struct MordeRoot: View {
             }
             NanoMuseComposerPill(
                 hasContent: !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                    !pendingChatAttachments.isEmpty,
-                isProcessing: isGeneratingConversationTask,
+                    !pendingChatAttachments.isEmpty || hasUnclaimedChatUpload,
+                isProcessing: false,
                 canSend: canSendChatDraft,
-                canEnqueue: canEnqueueChatDraft,
+                canEnqueue: false,
                 showsAttachments: false,
-                showsMicrophone: false,
+                showsMicrophone: true,
                 sendAccessibilityIdentifier: "morde.task.send",
                 onCamera: {}, onPhotos: {}, onFile: {}, onPasteImage: { _ in },
                 onCommands: {}, onMic: { toggleTaskSpeechInput() }, onSend: submitOrQueueChatDraft,
-                onEnqueue: { if let task = currentConversationTask { submitChatDraft(queueingTask: task) } },
-                onStop: stopCurrentChatTask
+                onIdleSend: { taskDraftFocused = true },
+                onEnqueue: submitOrQueueChatDraft,
+                onStop: {
+                    if let task = currentConversationTask { Task { await client.stopConversationTask(task) } }
+                }
             ) {
-                TextField(AppLocalized("Message"), text: $draft)
-                    .focused($taskDraftFocused)
-                    .textFieldStyle(.plain)
-                    .submitLabel(.send)
-                    .onSubmit { submitOrQueueChatDraft() }
-                    .accessibilityIdentifier("morde.chat.composer")
+                HStack(spacing: 6) {
+                    Button(action: handleChatAttachmentRequest) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 20, weight: .medium))
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(Text("Add attachment"))
+                    .accessibilityIdentifier("morde.chat.addAttachment")
+                    TextField(AppLocalized("Message"), text: $draft, axis: .vertical)
+                        .lineLimit(1...5)
+                        .focused($taskDraftFocused)
+                        .textFieldStyle(.plain)
+                        .submitLabel(.send)
+                        .onSubmit { submitOrQueueChatDraft() }
+                        .accessibilityIdentifier("morde.chat.composer")
+                }
             }
             .padding(4)
             .background(NanoMuseTones.bubble, in: Capsule())
@@ -10864,57 +14086,45 @@ private struct MordeRoot: View {
             .padding(.horizontal, 16)
             .frame(maxWidth: 680)
 
-            if !selectedTextModelReady {
-                Text(client.resourceState(.models).isLoaded && !client.defaultModelConfigured
-                     ? "An administrator must configure a usable default model before cloud tasks can be sent."
-                     : "发送前请在聊天菜单中选择任务模型。")
-                    .font(.caption)
-                    .foregroundStyle(NanoMuseTones.secondaryText)
-            } else if taskSpeech.state == .recording, !taskSpeech.recognizedText.isEmpty {
-                Text(taskSpeech.recognizedText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .accessibilityIdentifier("morde.task.voiceTranscript")
-            }
         }
         .frame(maxWidth: .infinity)
         .padding(.bottom, 8)
     }
 
     private var canSendChatDraft: Bool {
-        !client.busy && !isUploadingChatAttachments && !hasActiveConversationTask &&
-            !taskSpeechStarting && taskSpeech.state != .recording &&
-            (!draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !pendingChatAttachments.isEmpty) &&
-            selectedTextModelReady && !targetUnavailable && client.taskAPIAvailable == true
+        !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+            !pendingChatAttachments.isEmpty || hasUnclaimedChatUpload
     }
 
-    private var canEnqueueChatDraft: Bool {
-        guard let task = currentConversationTask,
-              !client.busy, isGeneratingConversationTask,
-              !isUploadingChatAttachments, pendingChatAttachments.isEmpty,
-              !taskSpeechStarting, taskSpeech.state != .recording,
-              !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              selectedTextModelReady, !targetUnavailable, client.taskAPIAvailable == true,
-              task.model_id == model,
-              task.host_id == (host.isEmpty ? nil : host),
-              task.workspace_id == (workspace.isEmpty ? nil : workspace),
-              task.workspace_id == nil || task.input_revision != nil else { return false }
-        return true
+    private var hasUnclaimedChatUpload: Bool {
+        isUploadingChatAttachments && chatUploadMessageID == nil &&
+            chatUploadConversationID.map(client.draftConversationID) == client.currentConversation.map(client.draftConversationID) &&
+            chatUploadScopeKey == client.taskPageScopeKey && !chatUploadPlannedAttachments.isEmpty
     }
 
     private func conversationTaskCard(_ task: MordeTask) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let showDetailedReason = task.status == "waiting_user" &&
+            ["model_context_limit", "computer_target_changed", "workspace_target_changed", "project_recovery_unavailable"].contains(task.waiting_reason ?? "")
+        return VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Label(AppLocalized("Task"), systemImage: "checklist")
                     .font(.subheadline.weight(.semibold))
                 Spacer()
-                Text(task.statusLabel)
+                Text(showDetailedReason ? AppLocalized("Waiting for you") : task.statusLabel)
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
             }
-            Text(task.current_step ?? task.result ?? task.objective)
+            if showDetailedReason {
+                Text(task.statusLabel).font(.footnote).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Text((task.isWaitingForRevisionStart ? task.objective : task.displayedCurrentStep) ??
+                 (conversationResultAlreadyDisplayed(task) ? nil : task.result) ?? task.objective)
                 .font(.subheadline)
                 .fixedSize(horizontal: false, vertical: true)
+            ForEach(MIFTaskPresentation.visibleSteps(task.steps, waitingForRevisionStart: task.isWaitingForRevisionStart)) { step in
+                Text(MIFTaskPresentation.stepDescription(step)).font(.caption).foregroundStyle(.secondary)
+            }
             NavigationLink {
                 MIFTaskDetailView(taskID: task.id)
             } label: {
@@ -10930,8 +14140,45 @@ private struct MordeRoot: View {
         .accessibilityIdentifier("morde.chat.taskSummary")
     }
 
+    private func conversationResultAlreadyDisplayed(_ task: MordeTask) -> Bool {
+        if !MordeTaskSnapshotMessageMerge.shouldShowTaskResult(resultMessagePending: task.result_message_pending,
+                                                               resultMessagePublished: task.result_message_published) { return true }
+        guard let snapshot = task.assistant_message else { return false }
+        return client.messages.contains { message in
+            message.sources?.contains {
+                MordeTaskSnapshotMessageMerge.sourceCoversSnapshot($0, snapshot: snapshot, taskID: task.id)
+            } == true
+        }
+    }
+
     private var taskOptionsContent: some View {
         Form {
+            Section("关联任务（可选）") {
+                Menu {
+                    Button(AppLocalized("Automatic")) { chatAppendTaskID = nil }
+                        .accessibilityIdentifier("morde.chat.taskTarget.option.new")
+                    ForEach(client.conversationTasks.filter { ["queued", "running"].contains($0.status) }) { task in
+                        Button("\(task.objective) · \(task.id)") {
+                            chatAppendTaskID = task.id
+                        }
+                        .accessibilityIdentifier("morde.chat.taskTarget.option.\(task.id)")
+                    }
+                } label: {
+                    HStack {
+                        Label(chatTaskTargetLabel,
+                              systemImage: chatAppendTaskID == nil ? "sparkles" : "text.badge.plus")
+                            .lineLimit(1)
+                        Spacer(minLength: 12)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .accessibilityLabel(Text("选择关联任务"))
+                .accessibilityIdentifier("morde.chat.taskTarget")
+                Text(chatAppendTaskID == nil
+                     ? "助手会判断消息与活动任务的关系。"
+                     : "助手会结合所选任务判断消息意图。")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
             Section("目标电脑") {
                 emptyResourceState(.hosts, itemCount: client.hosts.count,
                                    emptyMessage: "当前没有可访问的电脑。可以不选电脑提交文本任务。")
@@ -10939,8 +14186,7 @@ private struct MordeRoot: View {
                                    emptyMessage: "当前没有可访问的 Workspace。")
                 Picker("目标电脑", selection: Binding(get: { host }, set: { value in
                     host = value
-                    let bindings = client.workspaceBindings(for: value)
-                    workspace = bindings.count == 1 ? bindings[0].workspace.id : ""
+                    workspace = ""
                 })) {
                     Text("无电脑目标").tag("")
                     if !host.isEmpty && selectedHost == nil { Text("所选 Host 状态待核验").tag(host) }
@@ -10953,48 +14199,42 @@ private struct MordeRoot: View {
                     Text("电脑状态：\(MordeTaskTargetPresentation.hostState(selectedHost.state)) · \(MordeTaskTargetPresentation.hostControlState(selectedHost.control_state))")
                         .font(.footnote).foregroundStyle(selectedHostReady ? Color.secondary : Color.orange)
                     if !selectedHostReady {
-                        Text("所选电脑尚未运行并交由 AI 控制。本条消息不会提交到该电脑。")
+                        Text("任务需要使用这台电脑时，助手会检查其状态。")
                             .font(.footnote).foregroundStyle(.orange)
                     }
-                    if workspaceBindings.count == 1 {
-                        Picker("唯一 Workspace", selection: $workspace) {
-                            Text("选择唯一 Workspace").tag("")
-                            if !workspace.isEmpty && selectedBinding == nil { Text("所选 Workspace 状态待核验").tag(workspace) }
-                            ForEach(workspaceBindings, id: \.workspace.id) { binding in
-                                Text("\(binding.workspace.name.isEmpty ? binding.workspace.id : binding.workspace.name) · v\(binding.workspace.revision) · \(client.isReady(binding) ? "已就绪" : "未就绪")")
-                                    .tag(binding.workspace.id)
-                                    .disabled(!client.isReady(binding))
-                            }
-                        }.disabled(!selectedHostReady || client.busy)
-                    } else {
-                        Text("电脑必须恰好绑定一个 Workspace。当前读取到 \(workspaceBindings.count) 个，不能提交任务。")
-                            .font(.footnote).foregroundStyle(.orange)
+                    Picker("Workspace（可选）", selection: $workspace) {
+                        Text("不指定 Workspace").tag("")
+                        if !workspace.isEmpty && selectedBinding == nil { Text("所选 Workspace 状态待核验").tag(workspace) }
+                        ForEach(workspaceBindings, id: \.workspace.id) { binding in
+                            Text("\(binding.workspace.name.isEmpty ? binding.workspace.id : binding.workspace.name) · \(client.isReady(binding) ? "已就绪" : "未就绪")")
+                                .tag(binding.workspace.id)
+                        }
                     }
                     if !workspace.isEmpty && selectedBinding == nil {
                         Text(client.resourceState(.workspaces).failureMessage.map {
-                            "Workspace 列表未成功读取：\($0)，本条消息不会提交。"
-                        } ?? "所选 Workspace 已不在当前电脑的可访问列表中，本条消息不会提交。")
+                            "Workspace 列表未成功读取：\($0)。使用时将核验状态。"
+                        } ?? "所选 Workspace 当前状态未知，使用时将核验。")
                             .font(.footnote).foregroundStyle(.orange)
                     } else if let selectedBinding, !client.isReady(selectedBinding) {
-                        Text("所选 Workspace 尚未完成应用或同步，本条消息不会提交。")
+                        Text("任务需要使用此 Workspace 时，助手会检查其状态。")
                             .font(.footnote).foregroundStyle(.orange)
                     } else if let selectedBinding {
-                        Text("本条消息固定使用 Workspace v\(selectedBinding.workspace.revision)。")
+                        Text("任务需要使用 \(selectedBinding.workspace.name) 时，会检查其当前状态。")
                             .font(.footnote).foregroundStyle(.secondary)
                     }
                 } else if !host.isEmpty {
                     Text(client.resourceState(.hosts).failureMessage.map {
-                        "电脑列表未成功读取：\($0)，本条消息不会提交。"
+                        "电脑列表未成功读取：\($0)。使用时将核验状态。"
                     } ?? (client.resourceState(.hosts).isLoaded
-                          ? "所选 Host 已不在当前可访问列表中，本条消息不会提交。"
-                          : "正在核验所选 Host，本条消息暂不可提交。"))
+                          ? "所选电脑当前状态未知，使用时将核验。"
+                          : "电脑状态尚未确认，使用时将核验。"))
                         .font(.footnote).foregroundStyle(.orange)
                 }
             }
             Section("模型") {
                 Picker("模型", selection: $model) {
                     Text("选择模型").tag("")
-                    ForEach(client.models.filter { $0.capabilities.text && $0.capabilities.tools }) { item in
+                    ForEach(client.models.filter { $0.capabilities.text }) { item in
                         Text("\(item.name) · \(String(localized: item.id == client.defaultModelID ? "Administrator default" : "Personal model"))")
                             .tag(item.id)
                     }
@@ -11002,14 +14242,16 @@ private struct MordeRoot: View {
                 .accessibilityIdentifier("morde.task.model")
                 emptyResourceState(.models, itemCount: client.models.count,
                                    emptyMessage: "当前没有可用的文本工具模型。")
-                if client.resourceState(.models).isLoaded && !client.defaultModelConfigured {
-                    Text("An administrator must configure a usable default model before cloud tasks can be sent.")
-                        .font(.footnote).foregroundStyle(.orange)
-                }
                 Text("目标和模型只影响后续提交；已受理 Task 的目标及输入版本保持固定。")
                     .font(.footnote).foregroundStyle(.secondary)
             }
         }
+    }
+
+    private var chatTaskTargetLabel: String {
+        guard chatAppendTaskID != nil else { return AppLocalized("Automatic") }
+        guard let task = currentConversationTask else { return "所选 Task 已不可用" }
+        return "\(task.objective) · \(task.id)"
     }
     // nanoMuse: keep Host access as a nested destination; it is not a new root tab.
     private var computerContent: some View {
@@ -11257,7 +14499,7 @@ private struct MordeRoot: View {
             MordeDesignDrawerSection(id: "conversations", title: "旁聊",
                                      items: conversations.map {
                 MordeDesignDrawerItem(id: "conversation-\($0.id)", title: $0.title,
-                                      systemImage: "bubble.left", route: .chatConversation($0.id),
+                                      systemImage: nil, route: .chatConversation($0.id),
                                       isSelected: conversationDrawer.currentID == $0.id)
             }, emptyMessage: conversationMessage),
             MordeDesignDrawerSection(id: "toolChats", items: [
@@ -11378,7 +14620,14 @@ private struct MordeRoot: View {
                 selectDesignRoute(.computer(host.id, shared: host.scope == .sharedReadOnly))
             })
         case .library:
-            MIFLibraryRoot(onMenu: onMenu, personalDataRoot: MordePersonalStorage.root)
+            MIFLibraryRoot(onMenu: onMenu, personalDataRoot: MordePersonalStorage.root,
+                           previewNavigation: MordeFilePreviewNavigation(
+                            selectedTab: selectedDesignTab, approvalCount: approvalCount,
+                            onSelectTab: { tab in
+                                designNavigationPath = []
+                                selectedDesignTab = tab
+                                selectedDesignRoute = tab.route
+                            }))
         case .workItems:
             MIFWorkItemRoom(onMenu: onMenu)
         case .friends:
@@ -11416,6 +14665,14 @@ private struct MordeRoot: View {
         .background(NanoMuseTones.canvas.ignoresSafeArea())
     }
 
+    private var chatHeaderStatus: String {
+        guard let conversationID = client.currentConversation,
+              client.conversationTasks.contains(where: {
+                  $0.conversation_id == conversationID && ["queued", "running"].contains($0.status)
+              }) else { return "Morde" }
+        return AppLocalized("Working…")
+    }
+
     private func chatDesignHeader(onMenu: @escaping () -> Void) -> some View {
         HStack {
             NanoMuseRoundButton(symbol: "line.3.horizontal", label: "菜单", size: 38,
@@ -11427,10 +14684,11 @@ private struct MordeRoot: View {
                     .foregroundStyle(NanoMuseTones.ink)
                     .frame(width: 42, height: 42)
                     .background(NanoMuseTones.fill, in: Circle())
-                Text(client.currentTask?.statusLabel ?? "就绪")
+                Text(chatHeaderStatus)
                     .font(.caption2)
                     .foregroundStyle(NanoMuseTones.secondaryText)
                     .lineLimit(1)
+                    .accessibilityIdentifier("morde.chat.header.status")
             }
             Spacer()
             Color.clear.frame(width: 40, height: 40)
@@ -11448,6 +14706,26 @@ private struct MordeRoot: View {
                         Label(AppLocalized("Add attachment"), systemImage: "paperclip")
                     }
                     .accessibilityIdentifier("morde.chat.action.attachments")
+                    if client.conversationTasks.contains(where: {
+                        $0.conversation_id == client.currentConversation &&
+                            ["queued", "running", "paused", "waiting_user"].contains($0.status)
+                    }) {
+                        Menu {
+                            ForEach(client.conversationTasks.filter {
+                                $0.conversation_id == client.currentConversation &&
+                                    ["queued", "running", "paused", "waiting_user"].contains($0.status)
+                            }) { task in
+                                Button(String(format: AppLocalized("Stop %@ · %@"), task.objective, task.id), role: .destructive) {
+                                    Task { await client.stopConversationTask(task) }
+                                }
+                                .accessibilityIdentifier("morde.chat.action.stopTask.\(task.id)")
+                            }
+                        } label: {
+                            Label(AppLocalized("Choose a task to stop"), systemImage: "stop.fill")
+                        }
+                        .disabled(client.busy)
+                        .accessibilityIdentifier("morde.chat.action.stopTask")
+                    }
                 }
                 .accessibilityElement()
                 .accessibilityLabel(AppLocalized("Chat actions"))
@@ -11461,8 +14739,15 @@ private struct MordeRoot: View {
     }
     private var rootContent: some View {
         Group {
-            if !client.signedIn {
+            if !client.signedIn && (!client.expiredConversationAvailable || showExpiredSessionLogin ||
+                                    client.offlineRequiresLoginScreen) {
                 Form {
+                    if client.expiredConversationAvailable {
+                        Button("继续离线输入") {
+                            client.openOfflineConversation()
+                            showExpiredSessionLogin = false
+                        }
+                    }
                     if let message = client.registrationMessage {
                         Section(String(localized: "Registration submitted")) {
                             Text(message).accessibilityIdentifier("morde.registration.pending")
@@ -11518,6 +14803,16 @@ private struct MordeRoot: View {
                         .disabled(client.busy)
                     }
                 }
+            } else if !client.signedIn && client.expiredConversationAvailable {
+                VStack(spacing: 0) {
+                    HStack {
+                        Text("离线或登录状态待确认，消息将保存在本机。")
+                        Spacer()
+                        Button(AppLocalized("Sign in")) { showExpiredSessionLogin = true }
+                    }
+                    .font(.footnote).padding(12).background(Color.orange.opacity(0.15))
+                    conversationContent
+                }
             } else if layout == .conversation {
                 conversationContent
                     .safeAreaInset(edge: .top) {
@@ -11540,6 +14835,12 @@ private struct MordeRoot: View {
         rootContent
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("morde.shellNewConversation")),
                    perform: handleNewConversationRequest)
+#if DEBUG
+        .onReceive(NotificationCenter.default.publisher(
+            for: Notification.Name("morde.localAttachmentPreviewChangeAccount"))) { _ in
+            Task { await client.signOut() }
+        }
+#endif
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("morde.shellPrompt")), perform: handleShellPrompt)
         .onReceive(NotificationCenter.default.publisher(for: .mordeShellTaskOptions)) { _ in handleTaskOptionsRequest() }
         .onReceive(NotificationCenter.default.publisher(for: .mordeShellVoiceInput)) { _ in toggleTaskSpeechInput() }
@@ -11550,7 +14851,7 @@ private struct MordeRoot: View {
                   resolved.scopeKey == authorization.personalDataScopeKey else { return }
             Task { await personal.refresh(root: MordePersonalStorage.root) }
         }
-        .fileImporter(isPresented: $showChatAttachmentImporter, allowedContentTypes: [.image, .pdf], allowsMultipleSelection: true) { result in
+        .fileImporter(isPresented: $showChatAttachmentImporter, allowedContentTypes: MordeChatAttachmentPreparation.importContentTypes, allowsMultipleSelection: true) { result in
             Task { await importChatAttachments(result) }
         }
     }
@@ -11571,10 +14872,8 @@ private struct MordeRoot: View {
         .nmOnChange(of: client.currentTask?.statusLabel, perform: announceTaskStatus)
         .nmOnChange(of: client.user?.id, perform: userIDChanged)
         .nmOnChange(of: client.currentConversation, perform: conversationChanged)
-        .nmOnChange(of: client.taskPageScopeKey, perform: conversationScopeChanged)
+        .nmOnChange(of: client.chatDraftScopeKey, perform: conversationScopeChanged)
         .nmOnChange(of: draft) { _ in saveConversationDraft() }
-        .nmOnChange(of: client.resourceStates[.hosts], perform: hostsChanged)
-        .nmOnChange(of: client.resourceStates[.workspaces], perform: workspacesChanged)
         .nmOnChange(of: client.resourceStates[.models], perform: modelsChanged)
         .onAppear(perform: startLocalChatAttachmentFixtureIfNeeded)
     }
@@ -11603,19 +14902,106 @@ private struct MordeRoot: View {
         .sheet(item: hostSheetItem) { item in
             MordeHostView(url: item.url)
         }
-        .sheet(item: $chatAttachmentPreviewItem, onDismiss: chatAttachmentPreviewDismissed) { item in
-            MIFPersonalAttachmentPreview(item: item, onClose: { chatAttachmentPreviewItem = nil })
+        .fullScreenCover(item: $chatAttachmentPreviewItem, onDismiss: chatAttachmentPreviewDismissed) { item in
+            MIFPersonalAttachmentPreview(item: item,
+                navigation: MordeFilePreviewNavigation(
+                    selectedTab: selectedDesignTab, approvalCount: approvalCount,
+                    onSelectTab: { tab in
+                        designNavigationPath = []
+                        selectedDesignTab = tab
+                        selectedDesignRoute = tab.route
+                    }),
+                onClose: { chatAttachmentPreviewItem = nil })
         }
     }
 
     var body: some View {
 #if DEBUG && !MORDE_STANDALONE
-        rootWithHostSheet.task {
+        rootWithUnconfirmedDialogs.task {
             await seedLocalHistoryFixtureIfRequested()
         }
 #else
-        rootWithHostSheet
+        rootWithUnconfirmedDialogs
 #endif
+    }
+
+    private var rootWithUnconfirmedDialogs: some View {
+        rootWithHostSheet
+            .confirmationDialog("确认恢复本机消息？", isPresented: Binding(
+                get: { unconfirmedToRestore != nil }, set: { if !$0 { unconfirmedToRestore = nil } }),
+                titleVisibility: .visible) {
+                if let message = unconfirmedToRestore {
+                    Button("确认归属并恢复到输入框") { restoreUnconfirmedMessage(message) }
+                }
+                Button("取消", role: .cancel) {}
+            } message: {
+                Text("请核对当前账号和个人对话。恢复不会自动发送，本机原记录会保留，确认新消息已发送后可手动删除。")
+            }
+            .confirmationDialog("查看归属待确认的本机消息？", isPresented: Binding(
+                get: { unconfirmedToReveal != nil }, set: { if !$0 { unconfirmedToReveal = nil } }),
+                titleVisibility: .visible) {
+                if let message = unconfirmedToReveal {
+                    Button("确认属于我，查看") { revealedUnconfirmedIDs.insert(message.id) }
+                }
+                Button("取消", role: .cancel) {}
+            } message: { Text("账号或服务身份已变化，系统无法自动确认消息归属，请先核对账号。") }
+            .confirmationDialog("删除本机待确认消息？", isPresented: Binding(
+                get: { unconfirmedToDelete != nil }, set: { if !$0 { unconfirmedToDelete = nil } }),
+                titleVisibility: .visible) {
+                if let message = unconfirmedToDelete {
+                    Button("删除本机记录", role: .destructive) { client.deleteUnconfirmedMessage(message.id) }
+                        .accessibilityIdentifier("morde.unconfirmed.delete.confirm")
+                }
+                Button("取消", role: .cancel) {}
+            } message: { Text("请先确认已恢复需要的文字和附件。") }
+            .confirmationDialog("Send this message independently?", isPresented: Binding(
+                get: { independentSendTarget != nil }, set: { if !$0 { independentSendTarget = nil } }),
+                titleVisibility: .visible) {
+                if let target = independentSendTarget {
+                    Button("Confirm independent send") { client.sendIndependently(target) }
+                        .accessibilityIdentifier("morde.outbox.detach.confirm")
+                }
+                Button("取消", role: .cancel) {}
+            } message: {
+                Text("The failed message remains on this device. It will not be included in the AI task for this message.")
+            }
+    }
+}
+
+private struct MordeUnconfirmedMessageCard: View {
+    let message: MordeUnconfirmedMessage
+    let onRestore: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        HStack {
+            Spacer(minLength: 40)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(message.content).textSelection(.enabled)
+                if message.projectID != nil { Text("来自项目会话").font(.caption) }
+                ForEach(Array(message.stagedAttachments.enumerated()), id: \.offset) { _, attachment in
+                    Label(attachment.originalFilename ?? attachment.localPath.map { URL(fileURLWithPath: $0).lastPathComponent } ??
+                          attachment.sourcePath.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "待处理附件",
+                          systemImage: "paperclip").font(.caption)
+                }
+                if !message.attachmentIDs.isEmpty {
+                    Text("\(message.attachmentIDs.count) 个附件引用待处理").font(.caption)
+                }
+                Text(message.reason).font(.caption).foregroundStyle(.orange)
+                if let status = message.localAttachmentStatus {
+                    Text(status).font(.caption).foregroundStyle(.secondary)
+                } else if !message.stagedAttachments.isEmpty {
+                    Text("正在将附件原件保存到本机…").font(.caption).foregroundStyle(.secondary)
+                }
+                HStack {
+                    Button("确认并恢复", action: onRestore)
+                    Button("删除本机记录", role: .destructive, action: onDelete)
+                }.font(.caption).frame(minHeight: 44)
+            }
+            .padding(14)
+            .background(NanoMuseTones.userMessage, in: RoundedRectangle(cornerRadius: 20))
+        }
+        .accessibilityIdentifier("morde.chat.unconfirmed.\(message.id)")
     }
 }
 
@@ -11785,6 +15171,14 @@ private struct MordeDesignSettingsDetail: View {
 private struct MIFMordeMessageBubble: View {
     @ObservedObject private var personal = NanoMuseMordePersonalContentStore.shared
     let message: MordeClientMessage
+    let pending: MordeOutboxMessage?
+    let waitingForEarlier: String?
+    let serviceNeedsUpdate: Bool
+    let processingRetryInFlight: Bool
+    let processingRetryError: String?
+    let onRetry: () -> Void
+    let onSendIndependently: (() -> Void)?
+    let onRetryProcessing: () -> Void
     let onAttachmentPreview: (String) -> Void
 
     private var isUser: Bool { message.role == "user" }
@@ -11793,53 +15187,106 @@ private struct MIFMordeMessageBubble: View {
         HStack(alignment: .bottom) {
             if isUser { Spacer(minLength: 52) }
             VStack(alignment: .leading, spacing: 6) {
-                if !isUser {
-                    Text("morde")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                }
                 Text(message.content)
                     .font(.body)
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
-                ForEach(message.attachment_ids ?? [], id: \.self) { attachmentID in
+                ForEach(displayedAttachmentIDs, id: \.self) { attachmentID in
                     let body = attachmentBody(attachmentID)
                     let name = body?.name ?? String(attachmentID.suffix(8))
                     if !name.hasPrefix("morde-解析-") {
                         if canPreviewAttachment(attachmentID, body: body) {
                             Button { onAttachmentPreview(attachmentID) } label: {
-                                attachmentLabel(name, attachmentID: attachmentID)
+                                attachmentLabel(name, body: body, attachmentID: attachmentID)
                             }
                             .buttonStyle(.plain)
                             .accessibilityIdentifier("morde.chat.message.attachment.\(attachmentID)")
                         } else {
-                            attachmentLabel(name, attachmentID: attachmentID)
+                            attachmentLabel(name, body: body, attachmentID: attachmentID)
                         }
                     }
                 }
-                if isUser, message.task_id != nil {
-                    Text(MordeMessageDeliveryPresentation.label(message.delivery_status))
-                        .font(.caption)
-                        .foregroundStyle(message.delivery_status == "applied" ? Color.secondary : Color.orange)
+                ForEach(pending?.attachments.filter { $0.attachmentID == nil } ?? []) { attachment in
+                    if let path = attachment.localPath {
+                        let name = attachment.originalFilename ?? URL(fileURLWithPath: path).lastPathComponent
+                        if !name.hasPrefix("morde-解析-") {
+                            Label(name, systemImage: "doc")
+                                .font(.caption.weight(.semibold))
+                                .lineLimit(1)
+                        }
+                    }
                 }
-                if message.status == "streaming" {
+                if isUser, let pending {
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 8) {
+                            Text(verbatim: NSLocalizedString(serviceNeedsUpdate && pending.state == .pending
+                                ? "Update the service to send this message" : pending.statusLocalizationKey,
+                                comment: "Message send status"))
+                                .font(.caption)
+                                .foregroundStyle(pending.state == .failed || pending.state == .unknown ? Color.orange : Color.secondary)
+                            if pending.state == .failed || pending.state == .unknown || pending.error != nil {
+                                Button(AppLocalized("Retry"), action: onRetry)
+                                    .font(.caption.weight(.medium))
+                            }
+                        }
+                        if let error = pending.error { Text(verbatim: error).font(.caption).foregroundStyle(.secondary) }
+                        if let waitingForEarlier {
+                            Text(verbatim: NSLocalizedString(waitingForEarlier, comment: "Message send status"))
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        if let onSendIndependently {
+                            Button("Send this message independently", action: onSendIndependently)
+                                .font(.caption.weight(.medium)).frame(minHeight: 44)
+                                .accessibilityIdentifier("morde.outbox.detach.\(pending.id)")
+                        }
+                    }
+                } else if isUser, message.client_message_id != nil {
+                    Text(AppLocalized("Sent"))
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                if isUser, (pending == nil || pending?.state == .accepted),
+                   let key = MordeRoutingPresentation.localizationKey(message.routing_status) {
+                    Text(verbatim: NSLocalizedString(key, comment: "Message routing status"))
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                if isUser, (pending == nil || pending?.state == .accepted), message.routing_status == "failed" {
+                    Text(verbatim: NSLocalizedString(MordeRoutingPresentation.failureLocalizationKey(message.routing_failure_reason),
+                                                     comment: "Message processing failure"))
+                        .font(.caption).foregroundStyle(.orange)
+                    if MordeRoutingPresentation.canRetryProcessing(message.routing_failure_reason) {
+                        Button(AppLocalized("Retry processing"), action: onRetryProcessing)
+                            .font(.caption.weight(.medium)).frame(minHeight: 44)
+                            .disabled(processingRetryInFlight)
+                    }
+                    if let processingRetryError {
+                        Text(verbatim: processingRetryError).font(.caption).foregroundStyle(.orange)
+                    }
+                }
+                if message.displayStatus == "streaming" {
                     Text("正在生成…")
                         .font(.footnote).foregroundStyle(.secondary)
-                } else if message.status == "interrupted" {
-                    Text("回复中断，以下为已恢复内容")
+                } else if message.displayStatus == "interrupted" {
+                    Text("回复已中断")
                         .font(.footnote).foregroundStyle(.orange)
                 }
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
             .frame(maxWidth: 340, alignment: .leading)
-            .background(isUser ? NanoMuseTones.bubble : NanoMuseTones.agentPill,
+            .background(isUser ? NanoMuseTones.userMessage : NanoMuseTones.bubble,
                         in: RoundedRectangle(cornerRadius: 20, style: .continuous))
             if !isUser { Spacer(minLength: 52) }
         }
         .frame(maxWidth: .infinity)
         .accessibilityIdentifier("morde.chat.message.\(message.id)")
     }
+
+    private var displayedAttachmentIDs: [String] {
+        var seen = Set<String>()
+        return ((message.attachment_ids ?? []) + (pending?.attachments.compactMap(\.attachmentID) ?? []))
+            .filter { MordePersonalDataContract.isValidAttachmentID($0) && seen.insert($0).inserted }
+    }
+
 
     private func attachmentBody(_ attachmentID: String) -> NanoMuseMordeLibraryItemBody? {
         for object in personal.values("library_item") {
@@ -11859,16 +15306,32 @@ private struct MIFMordeMessageBubble: View {
             MIFLibraryPreviewPolicy.normalizedPersonalAttachmentMediaType(body?.mime) != nil
     }
 
-    private func attachmentLabel(_ name: String, attachmentID: String) -> some View {
-        Label(name, systemImage: "paperclip")
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
-            .accessibilityIdentifier("morde.chat.message.attachment.\(attachmentID)")
+    private func attachmentLabel(_ name: String, body: NanoMuseMordeLibraryItemBody?,
+                                 attachmentID: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: !isUser && body?.kind == "artifact" ? "doc.text" : "doc")
+            Text(name).lineLimit(1)
+            if body != nil {
+                Text(AppLocalized(isUser ? "Saved" : "AI outputs"))
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(NanoMuseTones.secondaryText)
+            }
+        }
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(Color.primary)
+        .padding(.horizontal, 11)
+        .padding(.vertical, 8)
+        .background(NanoMuseTones.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(NanoMuseTones.hairline))
+        .accessibilityIdentifier("morde.chat.message.attachment.\(attachmentID)")
     }
 }
 
 private struct MordeProjectsRoom: View {
+    private struct DerivativeSkipTarget {
+        let messageID: String
+        let attachmentID: String
+    }
     @ObservedObject var client: MordeClient
     @State private var projectName = ""
     @State private var projectDescription = ""
@@ -11892,6 +15355,21 @@ private struct MordeProjectsRoom: View {
     @State private var projectConversationModelID = ""
     @State private var projectConversationHostID = ""
     @State private var projectConversationWorkspaceID = ""
+    @State private var projectAppendTaskID = ""
+    @State private var projectAttachmentDrafts: [String: [MordeOutboxAttachment]] = [:]
+    @State private var projectAttachmentImportKey: String?
+    @State private var showProjectAttachmentImporter = false
+    @State private var projectAttachmentNames: [String: String] = [:]
+    @State private var projectAttachmentPreview: MordeTaskMediaPreviewFile?
+    @State private var projectAttachmentPreviewFile: URL?
+    @State private var projectAttachmentPreviewRequestID: UUID?
+    @State private var projectAttachmentPreviewTask: Task<Void, Never>?
+    @State private var unconfirmedProjectRestore: MordeUnconfirmedMessage?
+    @State private var unconfirmedProjectDelete: MordeUnconfirmedMessage?
+    @State private var unconfirmedProjectReveal: MordeUnconfirmedMessage?
+    @State private var revealedProjectUnconfirmedIDs = Set<String>()
+    @State private var derivativeSkipTarget: DerivativeSkipTarget?
+    @State private var independentSendTarget: MordeIndependentSendTarget?
     @State private var workItemDeliveryConfirmation: MordeProjectWorkItem?
 
     private var selectedProject: MordeProject? {
@@ -11900,6 +15378,109 @@ private struct MordeProjectsRoom: View {
     private var selectedProjectConversation: MordeProjectConversation? {
         guard let projectID = selectedProject?.id, let conversationID = client.selectedProjectConversationID else { return nil }
         return client.projectConversations.first { $0.id == conversationID && $0.project_id == projectID }
+    }
+    private var projectAttachmentDraftKey: String? {
+        guard let scope = client.chatDraftScopeKey, let project = client.selectedProjectID,
+              let conversation = client.selectedProjectConversationID else { return nil }
+        return "\(scope):\(project):\(conversation)"
+    }
+
+    private func restoreUnconfirmedProjectMessage(_ message: MordeUnconfirmedMessage) {
+        let eligible = client.visibleUnconfirmedMessages + client.otherInstanceUnconfirmedMessages.filter {
+            revealedProjectUnconfirmedIDs.contains($0.id)
+        }
+        guard eligible.contains(where: { $0.id == message.id }), client.canRecoverUnconfirmedMessage,
+              message.projectID == client.selectedProjectID, message.conversationID == client.selectedProjectConversationID,
+              let key = projectAttachmentDraftKey else {
+            client.projectConversationError = "请先确认当前账号并打开原项目会话。"
+            return
+        }
+        guard projectConversationDraft.isEmpty, (projectAttachmentDrafts[key] ?? []).isEmpty else {
+            client.projectConversationError = "请先发送或清空当前项目输入，再恢复本机消息。"
+            return
+        }
+        guard message.attachmentIDs.isEmpty,
+              client.isSameUnconfirmedInstance(message) || message.stagedAttachments.isEmpty else {
+            client.projectConversationError = "附件属于旧服务或需要重新选择，请连接原服务处理；原记录仍保存在本机。"
+            return
+        }
+        projectConversationDraft = message.content
+        projectAttachmentDrafts[key] = message.stagedAttachments
+        if client.isSameUnconfirmedInstance(message) {
+            projectConversationModelID = message.modelID ?? ""
+            projectConversationHostID = message.hostID ?? ""
+            projectConversationWorkspaceID = message.workspaceID ?? ""
+            projectAppendTaskID = message.referenceTaskID ?? ""
+        }
+    }
+
+    private func receiveProjectAttachments(_ result: Result<[URL], Error>) {
+        guard let key = projectAttachmentImportKey, key == projectAttachmentDraftKey else { return }
+        projectAttachmentImportKey = nil
+        do {
+            let urls = try result.get()
+            let existing = projectAttachmentDrafts[key] ?? []
+            guard existing.count + urls.count <= 16 else {
+                client.projectConversationError = "每条消息最多选择 16 个附件。"
+                return
+            }
+            var planned: [MordeOutboxAttachment] = []
+            do {
+                for url in urls { planned.append(contentsOf: try MordeChatAttachmentPreparation.planSources([url])) }
+            } catch {
+                MordeChatAttachmentPreparation.discardStagedFiles(planned.compactMap(\.localPath))
+                throw error
+            }
+            projectAttachmentDrafts[key] = existing + planned
+        } catch {
+            client.projectConversationError = error.localizedDescription
+        }
+    }
+
+    private func projectAttachmentNameKey(projectID: String, conversationID: String,
+                                          messageID: String, attachmentID: String) -> String? {
+        client.chatDraftScopeKey.map { "\($0):\(projectID):\(conversationID):\(messageID):\(attachmentID)" }
+    }
+
+    private func clearProjectAttachmentPreview() {
+        projectAttachmentPreviewTask?.cancel()
+        projectAttachmentPreviewTask = nil
+        projectAttachmentPreviewRequestID = nil
+        projectAttachmentPreview = nil
+        if let file = projectAttachmentPreviewFile { MIFLibraryTemporaryFileCleanup.discard(file) }
+        projectAttachmentPreviewFile = nil
+    }
+
+    private func previewProjectAttachment(projectID: String, conversationID: String,
+                                          messageID: String, attachmentID: String) {
+        clearProjectAttachmentPreview()
+        guard let scope = client.chatDraftScopeKey,
+              let nameKey = projectAttachmentNameKey(projectID: projectID, conversationID: conversationID,
+                                                     messageID: messageID, attachmentID: attachmentID) else { return }
+        let requestID = UUID()
+        projectAttachmentPreviewRequestID = requestID
+        projectAttachmentPreviewTask = Task { @MainActor in
+            do {
+                let (metadata, file) = try await client.downloadProjectAttachment(projectID: projectID,
+                    conversationID: conversationID, messageID: messageID, attachmentID: attachmentID)
+                guard !Task.isCancelled, projectAttachmentPreviewRequestID == requestID,
+                      client.chatDraftScopeKey == scope, client.selectedProjectID == projectID,
+                      client.selectedProjectConversationID == conversationID else {
+                    MIFLibraryTemporaryFileCleanup.discard(file)
+                    return
+                }
+                projectAttachmentNames[nameKey] = metadata.name
+                projectAttachmentPreviewFile = file
+                projectAttachmentPreview = MordeTaskMediaPreviewFile(fileURL: file, mediaType: metadata.media_type)
+                projectAttachmentPreviewRequestID = nil
+                projectAttachmentPreviewTask = nil
+            } catch {
+                guard projectAttachmentPreviewRequestID == requestID else { return }
+                projectAttachmentPreviewRequestID = nil
+                projectAttachmentPreviewTask = nil
+                client.projectConversationError = error.localizedDescription
+            }
+        }
     }
     private var selectedProjectConversationTask: MordeTask? {
         guard let conversation = selectedProjectConversation,
@@ -11927,10 +15508,7 @@ private struct MordeProjectsRoom: View {
             .map { MordeProjectPolicy.canManageWorkItems(role: $0.role) } == true
     }
     private var projectConversationModels: [MordeModel] {
-        client.models.filter { $0.capabilities.text && $0.capabilities.tools }
-    }
-    private var projectConversationTargetUnavailable: Bool {
-        client.targetIsUnavailable(hostID: projectConversationHostID, workspaceID: projectConversationWorkspaceID)
+        client.models.filter { $0.capabilities.text }
     }
 
     var body: some View {
@@ -11988,7 +15566,7 @@ private struct MordeProjectsRoom: View {
                     if let error = client.projectConversationError {
                         Text(error).font(.footnote).foregroundStyle(.orange)
                     }
-                    if client.projectBudgetExecutionAvailable != true {
+                    if client.projectBudgetExecutionAvailable != true && client.projectConversations.isEmpty {
                         Text("当前服务未声明项目会话执行能力；不会提交项目任务。")
                             .font(.footnote).foregroundStyle(.secondary)
                     } else {
@@ -12014,7 +15592,7 @@ private struct MordeProjectsRoom: View {
                             }
                             .disabled(client.projectActionInFlight || projectConversationTitle.unicodeScalars.count > 120)
                         } else {
-                            Text("只读成员可以查看共享会话，不能创建或发送消息。")
+                            Text("项目权限由服务端在处理消息时核对。")
                                 .font(.footnote).foregroundStyle(.secondary)
                         }
 
@@ -12235,9 +15813,76 @@ private struct MordeProjectsRoom: View {
             }
         }
         .navigationTitle("项目")
+        .onChange(of: client.user?.id) { _ in revealedProjectUnconfirmedIDs.removeAll() }
+        .onChange(of: client.chatDraftScopeKey) { _ in revealedProjectUnconfirmedIDs.removeAll() }
+        .confirmationDialog("确认恢复本机项目消息？", isPresented: Binding(
+            get: { unconfirmedProjectRestore != nil }, set: { if !$0 { unconfirmedProjectRestore = nil } }),
+            titleVisibility: .visible) {
+            if let message = unconfirmedProjectRestore {
+                Button("确认归属并恢复到输入框") { restoreUnconfirmedProjectMessage(message) }
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("请核对当前账号和项目会话。恢复不会自动发送，原记录会保留，确认新消息已发送后可手动删除。")
+        }
+        .confirmationDialog("查看归属待确认的本机消息？", isPresented: Binding(
+            get: { unconfirmedProjectReveal != nil }, set: { if !$0 { unconfirmedProjectReveal = nil } }),
+            titleVisibility: .visible) {
+            if let message = unconfirmedProjectReveal {
+                Button("确认属于我，查看") { revealedProjectUnconfirmedIDs.insert(message.id) }
+            }
+            Button("取消", role: .cancel) {}
+        } message: { Text("账号或服务身份已变化，系统无法自动确认消息归属，请先核对账号。") }
+        .confirmationDialog("删除本机待确认消息？", isPresented: Binding(
+            get: { unconfirmedProjectDelete != nil }, set: { if !$0 { unconfirmedProjectDelete = nil } }),
+            titleVisibility: .visible) {
+            if let message = unconfirmedProjectDelete {
+                Button("删除本机记录", role: .destructive) { client.deleteUnconfirmedMessage(message.id) }
+            }
+            Button("取消", role: .cancel) {}
+        } message: { Text("请先确认已恢复需要的文字和附件。") }
+        .confirmationDialog("跳过附件解析？", isPresented: Binding(
+            get: { derivativeSkipTarget != nil }, set: { if !$0 { derivativeSkipTarget = nil } }),
+            titleVisibility: .visible) {
+            if let target = derivativeSkipTarget {
+                Button("跳过解析并继续") {
+                    client.skipProjectDerivative(messageID: target.messageID, attachmentID: target.attachmentID)
+                }
+            }
+            Button("取消", role: .cancel) {}
+        } message: { Text("原文件会保留，任务将不会获得该文件的提取文字或预览图。") }
+        .confirmationDialog("Send this message independently?", isPresented: Binding(
+            get: { independentSendTarget != nil }, set: { if !$0 { independentSendTarget = nil } }),
+            titleVisibility: .visible) {
+            if let target = independentSendTarget {
+                Button("Confirm independent send") { client.sendIndependently(target) }
+                    .accessibilityIdentifier("morde.outbox.detach.confirm")
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("The failed message remains on this device. It will not be included in the AI task for this message.")
+        }
+        .fileImporter(isPresented: $showProjectAttachmentImporter,
+                      allowedContentTypes: MordeChatAttachmentPreparation.importContentTypes,
+                      allowsMultipleSelection: true, onCompletion: receiveProjectAttachments)
+        .sheet(item: $projectAttachmentPreview, onDismiss: {
+            if let file = projectAttachmentPreviewFile { MIFLibraryTemporaryFileCleanup.discard(file) }
+            projectAttachmentPreviewFile = nil
+        }) { item in
+            NavigationStack {
+                MordeWorkspaceQuickLook(url: item.fileURL)
+                    .toolbar { ToolbarItem(placement: .cancellationAction) {
+                        Button(AppLocalized("Close")) { projectAttachmentPreview = nil }
+                    } }
+            }
+        }
         .refreshable { await client.loadProjects() }
         .task(id: client.signedIn) { if client.signedIn { await client.loadProjects() } }
+        .task(id: "\(client.selectedProjectID ?? ""):\(client.selectedProjectConversationID ?? "")") {
+            await client.watchProjectConversation()
+        }
         .onChange(of: client.selectedProjectID) { _ in
+            clearProjectAttachmentPreview()
             ownerTransferUserID = ""; resourceID = ""; memberToRemove = nil
             workItemDeliveryConfirmation = nil
             workItemTitle = ""; workItemDescription = ""; blockingWorkItemID = nil; blockedReason = ""
@@ -12249,7 +15894,28 @@ private struct MordeProjectsRoom: View {
             client.projectConversationError = nil
         }
         .onChange(of: client.selectedProjectConversationID) { _ in
-            projectConversationDraft = ""; projectConversationAnswer = ""
+            clearProjectAttachmentPreview()
+            projectConversationDraft = ""; projectConversationAnswer = ""; projectAppendTaskID = ""
+        }
+        .onChange(of: client.chatDraftScopeKey) { _ in
+            clearProjectAttachmentPreview()
+            projectAttachmentNames.removeAll()
+        }
+        .onDisappear { clearProjectAttachmentPreview() }
+        .onChange(of: projectAppendTaskID) { id in
+            guard let task = client.projectConversationTasks.first(where: { $0.id == id }) else { return }
+            projectConversationModelID = task.model_id ?? ""
+            projectConversationHostID = task.host_id ?? ""
+            projectConversationWorkspaceID = task.workspace_id ?? ""
+        }
+        .onChange(of: client.projectConversationTasks.map { "\($0.id):\($0.status):\($0.waiting_reason ?? "")" }) { _ in
+            guard !projectAppendTaskID.isEmpty else { return }
+            if !client.projectConversationTasks.contains(where: {
+                $0.id == projectAppendTaskID && MordeProjectExecutionCapability.canContinueTask(
+                    status: $0.status, waitingReason: $0.waiting_reason)
+            }) {
+                projectAppendTaskID = ""
+            }
         }
         .onChange(of: client.projectBudgetExecutionAvailable) { available in
             guard available == true, let projectID = client.selectedProjectID else { return }
@@ -12421,11 +16087,27 @@ private struct MordeProjectsRoom: View {
                 Text("消息读取失败：\(failure)").font(.footnote).foregroundStyle(.orange)
             } else if !client.projectConversationMessagesState.isLoaded {
                 ProgressView("正在读取消息…")
-            } else if client.projectConversationMessages.isEmpty {
+            } else if client.displayedProjectConversationMessages.isEmpty {
                 Text("这条共享会话还没有消息。").font(.footnote).foregroundStyle(.secondary)
             }
-            ForEach(client.projectConversationMessages) { projectConversationMessageRow($0) }
-            if let task = client.projectConversationTask, task.conversation_id == conversation.id {
+            ForEach(client.displayedProjectConversationMessages) { projectConversationMessageRow($0) }
+            ForEach(client.visibleUnconfirmedMessages.filter {
+                $0.projectID == project.id && $0.conversationID == conversation.id
+            } + client.otherInstanceUnconfirmedMessages.filter {
+                $0.projectID == project.id && $0.conversationID == conversation.id &&
+                    revealedProjectUnconfirmedIDs.contains($0.id)
+            }) { message in
+                MordeUnconfirmedMessageCard(message: message,
+                    onRestore: { unconfirmedProjectRestore = message },
+                    onDelete: { unconfirmedProjectDelete = message })
+            }
+            ForEach(client.otherInstanceUnconfirmedMessages.filter {
+                $0.projectID == project.id && $0.conversationID == conversation.id &&
+                    !revealedProjectUnconfirmedIDs.contains($0.id)
+            }) { message in
+                Button("本机有一条归属待确认消息 · 查看") { unconfirmedProjectReveal = message }
+            }
+            ForEach(client.projectConversationTasks.filter { $0.conversation_id == conversation.id }) { task in
                 projectConversationTaskStatus(task)
             }
             projectConversationComposer(projectID: project.id, conversationID: conversation.id)
@@ -12433,13 +16115,107 @@ private struct MordeProjectsRoom: View {
     }
 
     private func projectConversationMessageRow(_ message: MordeProjectConversationMessage) -> some View {
-        VStack(alignment: message.role == "user" ? .trailing : .leading, spacing: 4) {
+        let pending = client.pendingMessages.first {
+            $0.id == message.client_message_id && $0.projectID == client.selectedProjectID &&
+                $0.conversationID == message.conversation_id
+        }
+        let linked = pending?.attachments.filter(\.linked).compactMap(\.attachmentID) ?? []
+        var seen = Set<String>()
+        let attachmentIDs = ((message.attachment_ids ?? []) + linked).filter {
+            MordeProjectAttachmentContract.isValidAttachmentID($0) && seen.insert($0).inserted
+        }
+        return VStack(alignment: message.role == "user" ? .trailing : .leading, spacing: 4) {
             Text(message.role == "user" ? message.actor_id : "AI 回复")
                 .font(.caption).foregroundStyle(.secondary)
             Text(message.content).textSelection(.enabled)
-            if message.role == "user" {
-                Text(MordeMessageDeliveryPresentation.label(message.delivery_status))
-                    .font(.caption).foregroundStyle(message.delivery_status == "applied" ? Color.secondary : Color.orange)
+            if message.role == "assistant", message.output_status == "streaming" {
+                Text("正在生成…").font(.footnote).foregroundStyle(.secondary)
+            } else if message.role == "assistant", message.output_status == "interrupted" {
+                Text("回复已中断").font(.footnote).foregroundStyle(.orange)
+            }
+            ForEach(attachmentIDs, id: \.self) { attachmentID in
+                let serverMessageID = pending?.serverMessageID ?? message.id
+                let nameKey = client.selectedProjectID.flatMap { projectID in
+                    projectAttachmentNameKey(projectID: projectID, conversationID: message.conversation_id,
+                                             messageID: serverMessageID, attachmentID: attachmentID)
+                }
+                let fileName = pending?.attachments.first(where: { $0.attachmentID == attachmentID })?.localPath
+                    .map { URL(fileURLWithPath: $0).lastPathComponent }
+                    ?? nameKey.flatMap { projectAttachmentNames[$0] }
+                    ?? "\(AppLocalized("Attachment")) · \(attachmentID.suffix(8))"
+                Button {
+                    guard let projectID = client.selectedProjectID else { return }
+                    previewProjectAttachment(projectID: projectID, conversationID: message.conversation_id,
+                                             messageID: serverMessageID, attachmentID: attachmentID)
+                } label: {
+                    Label(fileName, systemImage: "paperclip").font(.caption).frame(minHeight: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("morde.projectConversation.attachment.\(attachmentID)")
+            }
+            ForEach(pending?.attachments.filter { !$0.linked } ?? []) { attachment in
+                if let path = attachment.localPath {
+                    Label(attachment.originalFilename ?? URL(fileURLWithPath: path).lastPathComponent, systemImage: "paperclip")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            if message.role == "user", let pending {
+                HStack {
+                    Text(verbatim: NSLocalizedString(client.autoRoutingAvailable == false && pending.state == .pending
+                        ? "Update the service to send this message" : pending.statusLocalizationKey,
+                        comment: "Message send status"))
+                        .font(.caption).foregroundStyle(.secondary)
+                    if pending.state == .failed || pending.state == .unknown || pending.error != nil {
+                        Button(AppLocalized("Retry")) { client.retryPendingMessage(pending.id) }.font(.caption)
+                    }
+                }
+                if let error = pending.error { Text(verbatim: error).font(.caption).foregroundStyle(.secondary) }
+                if let waiting = MordeOutboxScheduling.waitingForEarlierMessage(pending, in: client.pendingMessages) {
+                    Text(verbatim: NSLocalizedString(waiting, comment: "Message send status"))
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                if let target = client.independentSendTarget(for: pending) {
+                    Button("Send this message independently") { independentSendTarget = target }
+                        .font(.caption.weight(.medium)).frame(minHeight: 44)
+                        .accessibilityIdentifier("morde.outbox.detach.\(pending.id)")
+                }
+                if pending.error != nil {
+                    ForEach(pending.attachments.filter {
+                        $0.linked && $0.derivedAssociationPending == true && $0.projectDerivativePayloadPath == nil &&
+                            ["pdf", "image"].contains($0.projectDerivativeMode ?? "")
+                    }) { attachment in
+                        Button("跳过附件解析") {
+                            derivativeSkipTarget = DerivativeSkipTarget(messageID: pending.id, attachmentID: attachment.id)
+                        }
+                        .font(.caption).frame(minHeight: 44)
+                    }
+                }
+            } else if message.role == "user", message.client_message_id != nil {
+                Text(AppLocalized("Sent")).font(.caption).foregroundStyle(.secondary)
+            }
+            if message.role == "user",
+               !client.pendingMessages.contains(where: { $0.id == message.client_message_id && $0.state != .accepted }),
+               let key = MordeRoutingPresentation.localizationKey(message.routing_status) {
+                Text(verbatim: NSLocalizedString(key, comment: "Message routing status"))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            if message.role == "user", message.routing_status == "failed",
+               !client.pendingMessages.contains(where: { $0.id == message.client_message_id && $0.state != .accepted }) {
+                Text(verbatim: NSLocalizedString(MordeRoutingPresentation.failureLocalizationKey(message.routing_failure_reason),
+                                                 comment: "Message processing failure"))
+                    .font(.caption).foregroundStyle(.orange)
+                if message.actor_id == client.user?.id && MordeRoutingPresentation.canRetryProcessing(message.routing_failure_reason) {
+                    Button(AppLocalized("Retry processing")) {
+                        guard let projectID = client.selectedProjectID else { return }
+                        Task { await client.retryMessageProcessing(messageID: message.id,
+                            conversationID: message.conversation_id, projectID: projectID) }
+                    }
+                    .font(.caption.weight(.medium)).frame(minHeight: 44)
+                    .disabled(client.routingRetryInFlight.contains(message.id))
+                }
+                if let error = client.routingRetryErrors[message.id] {
+                    Text(verbatim: error).font(.caption).foregroundStyle(.orange)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: message.role == "user" ? .trailing : .leading)
@@ -12447,19 +16223,41 @@ private struct MordeProjectsRoom: View {
 
     private func projectConversationTaskStatus(_ task: MordeTask) -> some View {
         VStack(alignment: .leading, spacing: 4) {
+            Text(task.objective).font(.footnote.weight(.semibold))
             Text("Task：\(task.statusLabel)").font(.footnote)
-            if let step = task.current_step, !step.isEmpty { Text(step).font(.caption).foregroundStyle(.secondary) }
-            if let result = task.result, !result.isEmpty { Text(result).font(.footnote) }
+            if let step = task.displayedCurrentStep, !step.isEmpty, step != task.statusLabel {
+                Text(step).font(.caption).foregroundStyle(.secondary)
+            }
+            if let result = task.result, !result.isEmpty, !projectResultAlreadyDisplayed(task) {
+                Text(result).font(.footnote)
+            }
+            ForEach(MIFTaskPresentation.visibleSteps(task.steps, waitingForRevisionStart: task.isWaitingForRevisionStart)) { step in
+                Text(MIFTaskPresentation.stepDescription(step)).font(.caption).foregroundStyle(.secondary)
+            }
             if let pending = task.pending_request { projectConversationApprovalControls(task, pending: pending) }
             if let clarification = task.clarification_request {
                 projectConversationClarificationControls(task, clarification: clarification)
             }
             if canManageProjectConversationTask {
-                Button("刷新 Task 状态") { Task { await client.refreshProjectConversationTask() } }
+                Button("刷新 Task 状态") {
+                    client.projectConversationTask = task
+                    Task { await client.refreshProjectConversationTask() }
+                }
             } else {
                 Text("仅共享会话创建者可以刷新 Task 状态和处理审批。")
                     .font(.caption).foregroundStyle(.secondary)
             }
+        }
+    }
+
+    private func projectResultAlreadyDisplayed(_ task: MordeTask) -> Bool {
+        if !MordeTaskSnapshotMessageMerge.shouldShowTaskResult(resultMessagePending: task.result_message_pending,
+                                                               resultMessagePublished: task.result_message_published) { return true }
+        guard let snapshot = task.assistant_message else { return false }
+        return client.projectConversationMessages.contains { message in
+            message.sources?.contains {
+                MordeTaskSnapshotMessageMerge.sourceCoversSnapshot($0, snapshot: snapshot, taskID: task.id)
+            } == true
         }
     }
 
@@ -12473,25 +16271,28 @@ private struct MordeProjectsRoom: View {
                     client: client, task: task, pending: pending,
                     canRespond: canManageProjectConversationTask, busy: client.projectActionInFlight,
                     isPendingCurrent: {
-                        client.projectConversationTask?.id == task.id &&
-                            client.projectConversationTask?.pending_request?.id == pending.id &&
-                            client.projectConversationTask?.pending_request?.version == pending.version &&
-                            client.projectConversationTask?.pending_request?.media_preview_operation_id == pending.media_preview_operation_id
+                        guard let current = client.projectConversationTasks.first(where: { $0.id == task.id }) else { return false }
+                        return current.pending_request?.id == pending.id &&
+                            current.pending_request?.version == pending.version &&
+                            current.pending_request?.media_preview_operation_id == pending.media_preview_operation_id
                     },
                     onDecision: { decision in
-                        await client.respondToProjectConversationApproval(
+                        client.projectConversationTask = task
+                        return await client.respondToProjectConversationApproval(
                             taskID: task.id, approvalID: pending.id, version: pending.version, decision: decision)
                     })
             } else if canManageProjectConversationTask {
                 HStack {
                     Button("批准") {
                         Task {
+                            client.projectConversationTask = task
                             await client.respondToProjectConversationApproval(
                                 taskID: task.id, approvalID: pending.id, version: pending.version, decision: "approve")
                         }
                     }
                     Button("拒绝", role: .destructive) {
                         Task {
+                            client.projectConversationTask = task
                             await client.respondToProjectConversationApproval(
                                 taskID: task.id, approvalID: pending.id, version: pending.version, decision: "reject")
                         }
@@ -12511,6 +16312,7 @@ private struct MordeProjectsRoom: View {
                 TextField("补充信息", text: $projectConversationAnswer, axis: .vertical)
                 Button("提交补充信息") {
                     Task {
+                        client.projectConversationTask = task
                         if await client.answerProjectConversationClarification(
                             taskID: task.id, clarificationID: clarification.id,
                             version: clarification.version, answer: projectConversationAnswer) {
@@ -12526,40 +16328,88 @@ private struct MordeProjectsRoom: View {
 
     @ViewBuilder
     private func projectConversationComposer(projectID: String, conversationID: String) -> some View {
-        if canManageWorkItems {
+        let attachmentKey = projectAttachmentDraftKey
+        let attachments = attachmentKey.flatMap { projectAttachmentDrafts[$0] } ?? []
+        Group {
+            Picker(AppLocalized("Task"), selection: $projectAppendTaskID) {
+                Text(AppLocalized("Automatic")).tag("")
+                ForEach(client.projectConversationTasks.filter {
+                    MordeProjectExecutionCapability.canContinueTask(status: $0.status, waitingReason: $0.waiting_reason)
+                }) { task in
+                    Text("\(task.objective) · \(task.id)").tag(task.id)
+                }
+            }
             Picker("模型", selection: $projectConversationModelID) {
                 Text("选择模型").tag("")
                 ForEach(projectConversationModels) { model in Text(model.name).tag(model.id) }
             }
             Picker("电脑（可选）", selection: $projectConversationHostID) {
                 Text("云端运行").tag("")
-                ForEach(client.hosts.filter { $0.owner_id == client.user?.id && client.canOpenHost($0) }) { host in
+                ForEach(client.hosts.filter { $0.owner_id == client.user?.id }) { host in
                     Text(host.name.isEmpty ? host.id : host.name).tag(host.id)
                 }
             }
             if !projectConversationHostID.isEmpty {
                 Picker("Workspace", selection: $projectConversationWorkspaceID) {
                     Text("选择 Workspace").tag("")
-                    ForEach(client.workspaceBindings(for: projectConversationHostID).filter { client.isReady($0) }, id: \.workspace.id) { binding in
+                    ForEach(client.workspaceBindings(for: projectConversationHostID), id: \.workspace.id) { binding in
                         Text(projectWorkspaceOptionLabel(binding)).tag(binding.workspace.id)
                     }
                 }
             }
-            TextField("发送项目消息", text: $projectConversationDraft, axis: .vertical)
-            Button("发送并创建/继续 Task") {
-                Task {
-                    if await client.appendProjectConversationMessage(
-                        projectID: projectID, conversationID: conversationID,
-                        content: projectConversationDraft, modelID: projectConversationModelID,
-                        hostID: projectConversationHostID, workspaceID: projectConversationWorkspaceID) {
-                        projectConversationDraft = ""
+            ForEach(Array(attachments.enumerated()), id: \.offset) { index, attachment in
+                HStack {
+                    Label(attachment.originalFilename ?? attachment.localPath.map { URL(fileURLWithPath: $0).lastPathComponent } ?? AppLocalized("Attachment"),
+                          systemImage: "paperclip")
+                        .font(.footnote).lineLimit(1)
+                    Spacer()
+                    Button {
+                        guard let key = attachmentKey else { return }
+                        guard projectAttachmentDrafts[key]?.indices.contains(index) == true else { return }
+                        projectAttachmentDrafts[key]?.remove(at: index)
+                        if let path = attachment.localPath, !client.isUnconfirmedAttachmentPath(path) {
+                            MordeChatAttachmentPreparation.discardStagedFiles([path])
+                        }
+                    } label: {
+                        Image(systemName: "xmark.circle.fill").frame(width: 44, height: 44)
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(AppLocalized("Remove attachment"))
                 }
             }
-            .disabled(client.projectActionInFlight || projectConversationDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                      projectConversationModelID.isEmpty || projectConversationTargetUnavailable ||
-                      !projectConversationModels.contains(where: { $0.id == projectConversationModelID }))
-            Text("项目消息由当前账号提交；电脑和 Workspace 必须属于当前账号并已就绪。没有附加或传送文件。")
+            TextField("发送项目消息", text: $projectConversationDraft, axis: .vertical)
+            HStack {
+                Button {
+                    guard let key = attachmentKey else { return }
+                    projectAttachmentImportKey = key
+                    showProjectAttachmentImporter = true
+                } label: {
+                    Label(AppLocalized("Add attachment"), systemImage: "paperclip")
+                }
+                .frame(minHeight: 44)
+                .accessibilityIdentifier("morde.projectConversation.attachments")
+                Menu(AppLocalized("Stop task")) {
+                    ForEach(client.projectConversationTasks.filter { ["queued", "running", "paused", "waiting_user"].contains($0.status) }) { task in
+                        Button("\(task.objective) · \(task.id)", role: .destructive) {
+                            Task { await client.stopProjectConversationTask(task) }
+                        }
+                    }
+                }
+                .disabled(client.projectActionInFlight || !client.projectConversationTasks.contains { ["queued", "running", "paused", "waiting_user"].contains($0.status) })
+                Button(AppLocalized("Send")) {
+                    if client.appendProjectConversationMessage(
+                        projectID: projectID, conversationID: conversationID,
+                        content: projectConversationDraft, modelID: projectConversationModelID,
+                        hostID: projectConversationHostID, workspaceID: projectConversationWorkspaceID,
+                        targetTaskID: projectAppendTaskID.isEmpty ? nil : projectAppendTaskID,
+                        stagedAttachments: attachments) {
+                        projectConversationDraft = ""; projectAppendTaskID = ""
+                        if let key = attachmentKey { projectAttachmentDrafts.removeValue(forKey: key) }
+                    }
+                }
+                .disabled(projectConversationDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && attachments.isEmpty)
+            }
+            Text("项目消息由当前账号提交，电脑和 Workspace 在实际使用时检查。")
                 .font(.caption).foregroundStyle(.secondary)
         }
     }
@@ -12613,6 +16463,9 @@ private struct MordeComputerDesignRoom: View {
     let shared: Bool
     let onClose: () -> Void
     @State private var pageLoadState: MordeHostPageLoadState = .loading
+    @State private var hostWebView: WKWebView?
+    @State private var screenshotPreview: UIImage?
+    @State private var showsScreenshotPreview = false
 
     private var hostName: String {
         let name = shared
@@ -12621,61 +16474,306 @@ private struct MordeComputerDesignRoom: View {
         return name ?? hostID
     }
 
+    private var workspaceName: String? {
+        guard !shared else { return nil }
+        return client.hosts.first(where: { $0.id == hostID })?.workspaces?.first?.workspace.name
+    }
+
+    private var computerTitle: String {
+        if client.hostControlErrors[hostID] != nil { return "控制状态不可用" }
+        guard let status = client.hostControlStatuses[hostID] else { return "正在连接" }
+        if let action = status.active_transition?.action {
+            return action == "release" ? "正在交还" : "正在接管"
+        }
+        switch status.control_state {
+        case "ai": return "Codex 正在控制"
+        case "user": return status.control_actor_user_id == client.user?.id ? "你正在控制" : "用户正在控制"
+        case "taking_over": return "正在接管"
+        case "returning": return "正在交还"
+        default: return "云端电脑"
+        }
+    }
+
+    private var computerSubtitle: String {
+        let hostAndWorkspace = workspaceName.map { "\(hostName) · \($0)" } ?? hostName
+        return "云电脑 \(hostAndWorkspace)"
+    }
+
+    private var hostControl: MordeHostControlStatus? {
+        client.hostControlStatuses[hostID]
+    }
+
+    private var activeHostTasks: [MordeTask] {
+        guard client.conversationTasksLoaded, let conversationID = client.currentConversation else { return [] }
+        return client.conversationTasks.filter {
+            $0.conversation_id == conversationID && $0.host_id == hostID &&
+                ["queued", "running", "paused", "waiting_user"].contains($0.status)
+        }
+    }
+
+    private var canTakeOverControl: Bool {
+        guard let status = hostControl else { return false }
+        return MordeHostControlPolicy.canTakeOver(
+            state: status.control_state, actorID: status.control_actor_user_id,
+            leaseActive: status.control_lease_active, transitioning: status.active_transition != nil)
+    }
+
+    private var canReleaseControl: Bool {
+        guard let status = hostControl, let userID = client.user?.id else { return false }
+        return MordeHostControlPolicy.canRelease(
+            state: status.control_state, actorID: status.control_actor_user_id, currentUserID: userID,
+            leaseActive: status.control_lease_active, transitioning: status.active_transition != nil)
+    }
+
+    private var controlActionInFlight: Bool {
+        client.hostControlActionInFlightFor == hostID
+    }
+
+    private var controlActionTitle: String? {
+        if controlActionInFlight {
+            return hostControl?.active_transition?.action == "release" ? "正在交还" : "正在接管"
+        }
+        if canTakeOverControl { return "接管控制权" }
+        if canReleaseControl { return "交还给 AI" }
+        if client.hostControlErrors[hostID] != nil { return "重试状态" }
+        return nil
+    }
+
+    private var controlBadgeTitle: String {
+        if client.hostControlErrors[hostID] != nil { return "控制不可用" }
+        guard let status = hostControl else { return "正在连接" }
+        if status.active_transition != nil {
+            return status.active_transition?.action == "release" ? "正在交还" : "正在接管"
+        }
+        if status.control_state == "ai" { return "Codex 正在操作" }
+        if status.control_state == "user" {
+            return status.control_actor_user_id == client.user?.id ? "你正在操作" : "他人正在操作"
+        }
+        return status.control_state == "taking_over" ? "正在接管" : status.control_state == "returning" ? "正在交还" : "云电脑已连接"
+    }
+
+    private func performControlAction() {
+        if client.hostControlErrors[hostID] != nil {
+            Task { await client.loadHostControl(hostID) }
+        } else if canTakeOverControl {
+            Task { await client.takeOverHostControl(hostID) }
+        } else if canReleaseControl {
+            Task { await client.releaseHostControl(hostID) }
+        }
+    }
+
+    private func captureScreenshot() {
+        guard let hostWebView else { return }
+        hostWebView.takeSnapshot(with: nil) { image, _ in
+            guard let image else { return }
+            screenshotPreview = image
+            showsScreenshotPreview = true
+        }
+    }
+
+    @ViewBuilder
+    private var stopTaskButton: some View {
+        if activeHostTasks.count == 1, let task = activeHostTasks.first {
+            Button(role: .destructive) {
+                Task { await client.stopConversationTask(task) }
+            } label: {
+                Text("停止任务")
+                    .font(.system(size: 15.5, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(minWidth: 102, minHeight: 46)
+                    .background(Color(red: 0.173, green: 0.173, blue: 0.188), in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("morde.computer.stopTask")
+        } else if activeHostTasks.isEmpty {
+            Button {} label: {
+                Text("停止任务")
+                    .font(.system(size: 15.5, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(minWidth: 102, minHeight: 46)
+                    .background(Color(red: 0.173, green: 0.173, blue: 0.188), in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .disabled(true)
+            .accessibilityLabel("停止任务")
+            .accessibilityHint("当前没有可停止的任务")
+            .accessibilityIdentifier("morde.computer.stopTask")
+        } else if activeHostTasks.count > 1 {
+            Menu {
+                ForEach(activeHostTasks) { task in
+                    Button(task.objective, role: .destructive) {
+                        Task { await client.stopConversationTask(task) }
+                    }
+                }
+            } label: {
+                Text("停止任务")
+                    .font(.system(size: 15.5, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(minWidth: 102, minHeight: 46)
+                    .background(Color(red: 0.173, green: 0.173, blue: 0.188), in: Capsule())
+            }
+            .accessibilityIdentifier("morde.computer.stopTask")
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 10) {
-                NanoMuseRoundButton(symbol: "xmark", label: "关闭云电脑", size: 40,
-                                    accessibilityIdentifier: "morde.computer.close", action: onClose)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(hostName).font(.headline).lineLimit(1)
-                    Text("云电脑").font(.caption).foregroundStyle(NanoMuseTones.secondaryText)
+            ZStack {
+                VStack(spacing: 2) {
+                    Text(computerTitle)
+                        .font(.system(size: 19, weight: .semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .foregroundStyle(.white)
+                        .accessibilityIdentifier("morde.computer.title")
+                    Text(computerSubtitle)
+                        .font(.system(size: 13))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .foregroundStyle(.white.opacity(0.65))
+                        .accessibilityIdentifier("morde.computer.subtitle")
                 }
-                Spacer(minLength: 0)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 64)
+                HStack(spacing: 0) {
+                    Button(action: captureScreenshot) {
+                        Image(systemName: "camera")
+                            .font(.system(size: 19, weight: .medium))
+                            .foregroundStyle(.white)
+                            .frame(width: 38, height: 38)
+                            .background(Color(red: 0.173, green: 0.173, blue: 0.188), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(hostWebView == nil || pageLoadState != .loaded)
+                    .accessibilityLabel("截图")
+                    .accessibilityIdentifier("morde.computer.capture")
+                    Spacer(minLength: 0)
+                    Button(action: onClose) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 17, weight: .medium))
+                            .foregroundStyle(.white)
+                            .frame(width: 38, height: 38)
+                            .background(Color(red: 0.173, green: 0.173, blue: 0.188), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("关闭云电脑")
+                    .accessibilityIdentifier("morde.computer.close")
+                }
+                .frame(maxWidth: .infinity)
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 8)
+            .padding(.vertical, 12)
 
             Group {
                 if let url = client.hostURL {
                     ZStack {
-                        MordeHostView(url: url) { pageLoadState = $0 }
+                        LinearGradient(
+                            colors: [Color(red: 0.686, green: 0.835, blue: 0.973), Color(red: 0.596, green: 0.776, blue: 0.945)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .accessibilityHidden(true)
+                        MordeHostView(url: url, mordeIOSShell: true,
+                                      onWebViewReady: { hostWebView = $0 },
+                                      onPageLoadStateChange: { pageLoadState = $0 })
                             .accessibilityIdentifier("morde.computer.webview")
                         if pageLoadState == .loading {
-                            ProgressView("正在加载云电脑…")
+                            ProgressView("连接中…")
+                                .tint(.white)
+                                .foregroundStyle(.white)
                                 .padding(16)
-                                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                                .background(Color.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 12))
                                 .accessibilityIdentifier("morde.computer.pageLoading")
                         } else if pageLoadState == .failed {
                             VStack(spacing: 8) {
                                 Image(systemName: "exclamationmark.triangle")
-                                Text("云电脑页面加载失败，请关闭后重试。")
+                                    .foregroundStyle(.white.opacity(0.88))
+                                Text("连接失败")
+                                    .foregroundStyle(.white)
                                     .multilineTextAlignment(.center)
                                     .accessibilityIdentifier("morde.computer.pageLoadFailure")
                             }
                             .padding(16)
-                            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                            .background(Color.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 12))
                         }
                     }
                 } else if let error = client.hostOpenErrors[hostID] {
                     VStack(spacing: 8) {
                         Image(systemName: "exclamationmark.triangle")
-                        Text(error).multilineTextAlignment(.center)
+                            .foregroundStyle(.white.opacity(0.88))
+                        Text(error).foregroundStyle(.white).multilineTextAlignment(.center)
                     }
-                    .padding()
+                    .padding(16)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
                 } else {
-                    ProgressView("正在连接云电脑…")
+                    ProgressView("连接中…")
+                        .tint(.white)
+                        .foregroundStyle(.white)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .overlay(alignment: .bottomLeading) {
+                if pageLoadState == .loaded {
+                    Text(controlBadgeTitle)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 6)
+                        .background(Color.black.opacity(0.78), in: Capsule())
+                        .padding(.leading, 15)
+                        .padding(.bottom, 10)
+                        .accessibilityIdentifier("morde.computer.controlStatus")
+                }
+            }
+
+            HStack(spacing: 10) {
+                stopTaskButton
+                if let title = controlActionTitle, !controlActionInFlight {
+                    Button(action: performControlAction) {
+                        Text(title)
+                            .font(.system(size: 15.5, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity, minHeight: 46)
+                            .background(title == "交还给 AI" ? Color(red: 0.173, green: 0.173, blue: 0.188) : Color(red: 0.039, green: 0.518, blue: 1.0), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("morde.computer.controlAction")
+                } else if controlActionInFlight {
+                    ProgressView()
+                        .tint(.white)
+                        .frame(maxWidth: .infinity, minHeight: 46)
+                        .accessibilityLabel(controlActionTitle ?? "控制权更新中")
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 4)
+            .padding(.bottom, 20)
         }
-        .background(Color.black.ignoresSafeArea())
+        .background(Color(red: 0.055, green: 0.055, blue: 0.063).ignoresSafeArea())
         .task(id: "\(hostID):\(shared)") {
             pageLoadState = .loading
+            hostWebView = nil
             client.hostURL = nil
             await client.openHost(hostID, shared: shared)
             if Task.isCancelled { client.hostURL = nil }
         }
-        .onDisappear { client.hostURL = nil }
+        .onDisappear {
+            client.hostURL = nil
+            hostWebView = nil
+            screenshotPreview = nil
+        }
+        .sheet(isPresented: $showsScreenshotPreview) {
+            ZStack {
+                Color.black.ignoresSafeArea()
+                if let screenshotPreview {
+                    Image(uiImage: screenshotPreview)
+                        .resizable()
+                        .scaledToFit()
+                        .padding(12)
+                }
+            }
+            .presentationDragIndicator(.visible)
+        }
     }
 }
 
@@ -12688,12 +16786,30 @@ private enum MordeHostPageLoadState: Equatable {
 
 private struct MordeHostView: UIViewRepresentable {
     let url: URL
+    var mordeIOSShell = false
+    var onWebViewReady: ((WKWebView?) -> Void)? = nil
     var onPageLoadStateChange: ((MordeHostPageLoadState) -> Void)? = nil
 
     func makeUIView(context: Context) -> WKWebView {
-        let web = WKWebView(frame: .zero)
+        let configuration = WKWebViewConfiguration()
+        if mordeIOSShell {
+            configuration.userContentController.addUserScript(WKUserScript(
+                source: "document.documentElement?.setAttribute('data-morde-ios-shell', 'true');",
+                injectionTime: .atDocumentStart, forMainFrameOnly: true))
+            configuration.userContentController.addUserScript(WKUserScript(
+                source: "document.documentElement?.setAttribute('data-morde-ios-shell', 'true');",
+                injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+        }
+        let web = WKWebView(frame: .zero, configuration: configuration)
+        if mordeIOSShell {
+            web.isOpaque = false
+            web.backgroundColor = .clear
+            web.scrollView.backgroundColor = .clear
+        }
         web.navigationDelegate = context.coordinator
+        web.uiDelegate = context.coordinator
         web.load(URLRequest(url: url))
+        DispatchQueue.main.async { onWebViewReady?(web) }
         return web
     }
     func updateUIView(_ uiView: WKWebView, context: Context) {
@@ -12703,11 +16819,12 @@ private struct MordeHostView: UIViewRepresentable {
         uiView.stopLoading()
         coordinator.cancelDownloads()
         uiView.navigationDelegate = nil
+        uiView.uiDelegate = nil
     }
     func makeCoordinator() -> Coordinator {
         Coordinator(origin: url, onPageLoadStateChange: onPageLoadStateChange)
     }
-    final class Coordinator: NSObject, WKNavigationDelegate, WKDownloadDelegate {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownloadDelegate {
         let origin: URL
         var onPageLoadStateChange: ((MordeHostPageLoadState) -> Void)?
         private var activeDownloads: [ObjectIdentifier: WKDownload] = [:]
@@ -12734,6 +16851,42 @@ private struct MordeHostView: UIViewRepresentable {
 
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
             onPageLoadStateChange?(.failed)
+        }
+
+        func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String,
+                     initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping () -> Void) {
+            let alert = UIAlertController(title: nil, message: message, preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "确定", style: .default) { _ in completionHandler() })
+            guard let presenter = topPresenter(for: webView) else { completionHandler(); return }
+            presenter.present(alert, animated: true)
+        }
+
+        func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String,
+                     initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping (Bool) -> Void) {
+            let alert = UIAlertController(title: nil, message: message, preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "取消", style: .cancel) { _ in completionHandler(false) })
+            alert.addAction(UIAlertAction(title: "确定", style: .default) { _ in completionHandler(true) })
+            guard let presenter = topPresenter(for: webView) else { completionHandler(false); return }
+            presenter.present(alert, animated: true)
+        }
+
+        func webView(_ webView: WKWebView, runJavaScriptTextInputPanelWithPrompt prompt: String,
+                     defaultText: String?, initiatedByFrame frame: WKFrameInfo,
+                     completionHandler: @escaping (String?) -> Void) {
+            let alert = UIAlertController(title: nil, message: prompt, preferredStyle: .alert)
+            alert.addTextField { $0.text = defaultText }
+            alert.addAction(UIAlertAction(title: "取消", style: .cancel) { _ in completionHandler(nil) })
+            alert.addAction(UIAlertAction(title: "确定", style: .default) { _ in
+                completionHandler(alert.textFields?.first?.text)
+            })
+            guard let presenter = topPresenter(for: webView) else { completionHandler(nil); return }
+            presenter.present(alert, animated: true)
+        }
+
+        private func topPresenter(for webView: WKWebView) -> UIViewController? {
+            var presenter = webView.window?.rootViewController
+            while let presented = presenter?.presentedViewController { presenter = presented }
+            return presenter
         }
 
         func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction,

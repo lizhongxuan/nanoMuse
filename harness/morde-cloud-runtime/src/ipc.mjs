@@ -164,6 +164,15 @@ export class WorkerIPC {
     if (frame.type === 'start' && !this.started) {
       this.started = true
       this.startFrame = frame
+      if (frame.initial_message) {
+        this.messageDeliveries.set(frame.initial_message.message_id,
+          JSON.stringify([frame.initial_message.content, frame.initial_message.attachment_ids]))
+      }
+      if (Array.isArray(frame.revision_messages)) {
+        for (const message of frame.revision_messages) {
+          this.messageDeliveries.set(message.message_id, JSON.stringify([message.content, message.attachment_ids]))
+        }
+      }
       this.start.resolve(frame)
       return
     }
@@ -176,13 +185,15 @@ export class WorkerIPC {
       if (this.cancelled || this.messageDeliveryClosed || !validMessageDelivery(frame, this.startFrame)) {
         throw new Error('invalid message delivery')
       }
+      const attachmentIDs = frame.attachment_ids ?? []
+      const signature = JSON.stringify([frame.content, attachmentIDs])
       const previous = this.messageDeliveries.get(frame.message_id)
       if (previous !== undefined) {
-        if (previous !== frame.content) throw new Error('message delivery id conflicts with prior content')
+        if (previous !== signature) throw new Error('message delivery id conflicts with prior content')
         return
       }
-      this.messageDeliveries.set(frame.message_id, frame.content)
-      const delivery = { message_id: frame.message_id, content: frame.content }
+      this.messageDeliveries.set(frame.message_id, signature)
+      const delivery = { message_id: frame.message_id, content: frame.content, attachment_ids: [...attachmentIDs] }
       if (this.messageDeliveryHandler) this.messageDeliveryHandler(delivery)
       else this.pendingMessageDeliveries.push(delivery)
       return
@@ -269,7 +280,7 @@ export class WorkerIPC {
       if (!pending || pending.kind !== 'child_settle_ack') throw new Error('unknown child settlement response')
       this.childPending.delete(frame.call_id)
       clearTimeout(pending.timer)
-      if (frame.ok !== true || frame.session_id !== pending.sessionID) {
+      if (frame.ok !== true || !Object.entries(pending.identity).every(([key, value]) => frame[key] === value)) {
         pending.reject(new Error('child settlement was not confirmed'))
         throw new Error('invalid child settlement response')
       }
@@ -444,7 +455,7 @@ export class WorkerIPC {
       clearTimeout(timer)
       result.reject(abortError())
     }
-    this.childPending.set(callID, { ...result, timer, kind: 'child_settle_ack', sessionID: identity.session_id })
+    this.childPending.set(callID, { ...result, timer, kind: 'child_settle_ack', identity: { ...identity } })
     signal?.addEventListener('abort', abort, { once: true })
     try {
       await this.send({

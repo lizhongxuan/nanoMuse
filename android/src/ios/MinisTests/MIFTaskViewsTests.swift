@@ -2,6 +2,39 @@ import XCTest
 @testable import Minis
 
 final class MIFTaskViewsTests: XCTestCase {
+    func testTaskDecodesAggregationFlagsAndLegacySnapshots() throws {
+        let legacy = #"{"id":"q1234567","conversation_id":"c1234567","objective":"demo","status":"completed","updated_at":"2026-11-04T00:00:00Z"}"#
+        let pending = #"{"id":"q1234567","conversation_id":"c1234567","objective":"demo","status":"completed","updated_at":"2026-11-04T00:00:00Z","result_message_pending":true,"result_message_published":false}"#
+        let oldTask = try JSONDecoder().decode(MordeTask.self, from: Data(legacy.utf8))
+        let newTask = try JSONDecoder().decode(MordeTask.self, from: Data(pending.utf8))
+        XCTAssertNil(oldTask.result_message_pending)
+        XCTAssertNil(oldTask.result_message_published)
+        XCTAssertEqual(newTask.result_message_pending, true)
+        XCTAssertEqual(newTask.result_message_published, false)
+    }
+
+    func testNewRevisionWaitsForItsOwnPersistedStart() throws {
+        func task(started: Bool?, current: Int64, desired: Int64, status: String = "running") throws -> MordeTask {
+            var payload: [String: Any] = ["id": "q1234567", "conversation_id": "c1234567", "objective": "demo",
+                "status": status, "updated_at": "2026-11-04T00:00:00Z", "current_revision": current,
+                "desired_revision": desired, "current_step": "开始处理"]
+            if let started { payload["current_revision_started"] = started }
+            return try JSONDecoder().decode(MordeTask.self, from: JSONSerialization.data(withJSONObject: payload))
+        }
+        let pending = try task(started: false, current: 1, desired: 1)
+        XCTAssertTrue(pending.isWaitingForRevisionStart)
+        XCTAssertEqual(pending.displayedCurrentStep, AppLocalized("Waiting to start"))
+        XCTAssertEqual(pending.statusLabel, AppLocalized("Waiting to start"))
+        XCTAssertTrue(try task(started: true, current: 1, desired: 2).isWaitingForRevisionStart)
+        XCTAssertFalse(try task(started: true, current: 2, desired: 2).isWaitingForRevisionStart)
+        XCTAssertFalse(try task(started: nil, current: 1, desired: 2).isWaitingForRevisionStart)
+        XCTAssertFalse(try task(started: false, current: 1, desired: 1, status: "failed").isWaitingForRevisionStart)
+        let oldStep = MordeTask.Step(id: "s1234567", sequence: 1, kind: "progress", status: "succeeded",
+            title: "开始处理", summary: "正在处理你的请求。", created_at: "2026-11-04T00:00:01Z")
+        XCTAssertTrue(MIFTaskPresentation.visibleSteps([oldStep], waitingForRevisionStart: true).isEmpty)
+        XCTAssertEqual(MIFTaskPresentation.visibleSteps([oldStep], waitingForRevisionStart: false).count, 1)
+    }
+
     func testPageMergePreservesOrderAndDropsDuplicateTaskIDs() {
         let first = makeTask(id: "q1234567", status: "running")
         let second = makeTask(id: "q2345678", status: "queued")
@@ -77,6 +110,52 @@ final class MIFTaskViewsTests: XCTestCase {
         XCTAssertEqual(MIFTaskPresentation.stepStatusLabel("future_status"), AppLocalized("Status unknown"))
     }
 
+    func testToolStepsUseReadableNamesAndKeepTheirRealStatuses() throws {
+        let tool = MordeTask.Step(id: "s1234567", sequence: 1, kind: "tool", status: "failed",
+            title: "Run cloud dsh tool: morde_web_search",
+            summary: "Checking current authorization, budget, and Host control.", created_at: "2026-11-04T00:00:01Z")
+        XCTAssertEqual(MIFTaskPresentation.stepDescription(tool), "\(AppLocalized("Search the web")) · \(AppLocalized("Failed"))")
+        XCTAssertEqual(tool.status, "failed")
+        let event = try makeEvent(sequence: 1, type: "task.step",
+            payload: #"{"kind":"tool","title":"Run cloud dsh tool: morde_web_search","status":"failed","summary":"Checking current authorization, budget, and Host control."}"#)
+        XCTAssertEqual(event.display?.title, AppLocalized("Search the web"))
+        XCTAssertEqual(event.display?.summary, AppLocalized("Failed"))
+        XCTAssertEqual(event.status, "failed")
+    }
+
+    func testStartedProgressIsVisibleWithoutClaimingTheTaskFinished() throws {
+        let step = MordeTask.Step(id: "s1234567", sequence: 1, kind: "progress", status: "succeeded",
+            title: "开始处理", summary: "正在处理你的请求。", created_at: "2026-11-04T00:00:01Z")
+        XCTAssertEqual(MIFTaskPresentation.visibleSteps([step]).map(\.id), [step.id])
+        XCTAssertEqual(MIFTaskPresentation.stepStatusLabel(step.status, kind: step.kind, title: step.title),
+                       AppLocalized("Task started"))
+        XCTAssertEqual(step.status, "succeeded")
+        let event = try makeEvent(sequence: 1, type: "task.step",
+            payload: #"{"kind":"progress","title":"开始处理","status":"succeeded","summary":"正在处理你的请求。"}"#)
+        XCTAssertEqual(event.display?.title, AppLocalized("Starting the task"))
+        XCTAssertEqual(event.display?.summary, "\(AppLocalized("Task started")) · \(AppLocalized("Processing your request."))")
+        XCTAssertEqual(event.status, "succeeded")
+    }
+
+    func testProjectRecoveryWaitExplainsTheFailureInTaskAndEvent() throws {
+        let json = #"{"id":"q1234567","conversation_id":"c1234567","objective":"demo","status":"waiting_user","waiting_reason":"project_recovery_unavailable","updated_at":"2026-11-04T00:00:00Z"}"#
+        let task = try JSONDecoder().decode(MordeTask.self, from: Data(json.utf8))
+        let explanation = "原项目权限/上下文变化，未安全恢复，请重新发送。"
+        XCTAssertEqual(task.statusLabel, explanation)
+        XCTAssertEqual(MIFTaskPresentation.headerMood(for: task), .waiting)
+
+        let event = try makeEvent(sequence: 1, type: "task.waiting_user",
+            payload: #"{"status":"waiting_user","reason":"project_recovery_unavailable"}"#)
+        XCTAssertEqual(event.display?.summary, explanation)
+        XCTAssertEqual(event.status, "waiting_user")
+        XCTAssertEqual(MIFTaskPresentation.eventChainMarker(eventStatus: event.status, taskStatus: task.status,
+                                                             index: 0, rowCount: 1), .current)
+
+        let statusEvent = try makeEvent(sequence: 2, type: "task.status",
+            payload: #"{"status":"waiting_user","reason":"project_recovery_unavailable"}"#)
+        XCTAssertEqual(statusEvent.display?.summary, explanation)
+    }
+
     func testTaskListDetailCountsVisibleSucceededStepsAndKeepsCurrentDetail() {
         let running = MordeTask.Step(id: "s2345678", sequence: 2, kind: "agent", status: "running",
                                     title: "Second", summary: "Deploying", created_at: "2026-11-04T00:00:02Z")
@@ -140,10 +219,15 @@ final class MIFTaskViewsTests: XCTestCase {
     private func makeTask(id: String, status: String, batchItems: [MordeBatchItem]? = nil,
                           currentStep: String? = nil, result: String? = nil,
                           steps: [MordeTask.Step]? = nil) -> MordeTask {
+        // nanoMuse: model_id has no memberwise default, so fixture tasks provide nil explicitly.
         MordeTask(owner_id: nil, initiator_id: nil, id: id, conversation_id: "c1234567", host_id: nil,
-                  execution_location: "server", workspace_id: nil, input_revision: nil,
-                  objective: "Synthetic task", status: status, event_sequence: 1, result: result,
-                  current_step: currentStep, waiting_reason: nil, stop_request: nil, pending_request: nil,
+                  execution_location: "server", model_id: nil, workspace_id: nil, input_revision: nil,
+                  objective: "Synthetic task", status: status, event_sequence: 1,
+                  current_revision: nil, desired_revision: nil, current_revision_started: nil,
+                  result: result, result_message_pending: nil,
+                  result_message_published: nil,
+                  current_step: currentStep, waiting_reason: nil, stop_request: nil,
+                  step_count: nil, completed_step_count: nil, pending_request: nil,
                   clarification_request: nil, batch_items: batchItems, steps: steps, artifacts: nil,
                   updated_at: "2026-11-04T00:00:00Z", assistant_message: nil)
     }

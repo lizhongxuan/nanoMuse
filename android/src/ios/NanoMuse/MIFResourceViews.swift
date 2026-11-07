@@ -21,8 +21,11 @@ struct MIFResourcePageState: Equatable {
         enum Status: Equatable {
             case running
             case starting
-            case offline
+            case stopping
             case stopped
+            case failed
+            case deleting
+            case deleted
             case unknown
         }
 
@@ -156,17 +159,19 @@ enum MIFResourcePageRules {
         guard host.scope == .owned, host.status == .running, let control = host.control,
               !control.isLoading, !control.isActionInFlight,
               control.transitionSummary == nil, control.state == .user,
-              control.lease == .active, control.canReturnToAI else { return [] }
+              control.canReturnToAI,
+              control.lease == .active || control.lease == .expired else { return [] }
 
         return [.returnToAI]
     }
 }
 
 struct MIFResourcePageActions {
-    let refresh: () -> Void
+    let refresh: () async -> Void
     let openLibrary: () -> Void
     let addResource: (() -> Void)? = nil
     let openHost: (MIFResourcePageState.Host) -> Void
+    let shareHost: (String) -> Void
     let refreshControl: (String) -> Void
     let control: (String, MIFResourceControlAction) -> Void
     let openWorkspaceFiles: (String) -> Void
@@ -185,9 +190,7 @@ struct MIFResourceRoom: View {
     var body: some View {
         VStack(spacing: 0) {
             if let onMenu {
-                MordeDesignPageHeader(title: AppLocalized("Resources"), onMenu: onMenu) {
-                    addResourceButton
-                }
+                designHeader(onMenu: onMenu)
             } else if let chrome {
                 NanoMuseRoomHeader(chrome: chrome) {
                     addResourceButton
@@ -209,9 +212,11 @@ struct MIFResourceRoom: View {
                     }
                     ForEach(MIFResourcePageSection.allCases, id: \.self) { section in
                         VStack(alignment: .leading, spacing: 0) {
-                            sectionTitle(section.title)
-                                .padding(.top, section == .cloudComputers ? 8 : 24)
-                                .padding(.bottom, 2)
+                            if section != .cloudPhones {
+                                sectionTitle(section.title)
+                                    .padding(.top, section == .cloudComputers ? 8 : 24)
+                                    .padding(.bottom, 2)
+                            }
                             sectionContent(section)
                         }
                     }
@@ -219,8 +224,15 @@ struct MIFResourceRoom: View {
                 .padding(.horizontal, 22)
                 .padding(.top, 2)
                 .padding(.bottom, 24)
+                .mordeVerticalScrollBounceProbe()
             }
-            .refreshable { actions.refresh() }
+            .refreshable {
+                // Keep the list fetch alive if SwiftUI cancels the pull gesture task.
+                let refreshTask = Task { await actions.refresh() }
+                await refreshTask.value
+            }
+            .mordeAlwaysBounceVertically()
+            .accessibilityIdentifier("morde.resources.scroll")
         }
         .background(NanoMuseTones.canvas.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
@@ -239,6 +251,37 @@ struct MIFResourceRoom: View {
         }
     }
 
+    private func designHeader(onMenu: @escaping () -> Void) -> some View {
+        HStack(spacing: 10) {
+            Button(action: onMenu) {
+                VStack(spacing: 3.1) {
+                    Capsule().frame(width: 12.7, height: 1.66)
+                    Capsule().frame(width: 12.7, height: 1.66)
+                }
+                .foregroundStyle(NanoMuseTones.ink)
+                .frame(width: 38, height: 38)
+                .background(NanoMuseTones.surface, in: Circle())
+                .overlay(Circle().strokeBorder(Color.primary.opacity(0.09), lineWidth: 1))
+                .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text(AppLocalized("Chats and settings")))
+            .accessibilityIdentifier("morde.nav.menu")
+
+            Text(AppLocalized("Resources"))
+                .font(.system(size: 17, weight: .semibold))
+                .tracking(-0.17)
+                .lineLimit(1)
+
+            Spacer(minLength: 8)
+            addResourceButton
+        }
+        .padding(.horizontal, 22)
+        .padding(.top, 10)
+        .padding(.bottom, 4)
+        .frame(minHeight: 52)
+    }
+
     private var addResourceButton: some View {
         Button {
             if let addResource = actions.addResource {
@@ -246,7 +289,7 @@ struct MIFResourceRoom: View {
             } else {
                 let id = UUID()
                 resourceToastID = id
-                withAnimation { resourceToast = "添加资源暂未接入" }
+                withAnimation { resourceToast = AppLocalized("Not implemented yet") }
                 Task { @MainActor in
                     try? await Task.sleep(nanoseconds: 1_600_000_000)
                     guard resourceToastID == id else { return }
@@ -258,8 +301,8 @@ struct MIFResourceRoom: View {
                 .font(.system(size: 19, weight: .regular))
                 .foregroundStyle(NanoMuseTones.ink)
                 .frame(width: 38, height: 38)
-                .background(ChatColors.background, in: Circle())
-                .overlay(Circle().strokeBorder(NanoMuseTones.hairline.opacity(0.55), lineWidth: 0.5))
+                .background(NanoMuseTones.surface, in: Circle())
+                .overlay(Circle().strokeBorder(Color.primary.opacity(0.09), lineWidth: 1))
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
@@ -322,6 +365,7 @@ struct MIFResourceRoom: View {
                         }
                         HStack(spacing: 6) {
                             Text(host.status.localizedTitle)
+                                .accessibilityIdentifier("morde.resources.host.status.\(host.id)")
                             if host.scope == .sharedReadOnly {
                                 Text("·")
                                 Text(AppLocalized("Shared read-only"))
@@ -349,11 +393,7 @@ struct MIFResourceRoom: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     if host.canOpen {
-                        Image(systemName: "chevron.right")
-                            .font(.footnote.weight(.semibold))
-                            .foregroundStyle(NanoMuseTones.secondaryText)
-                            .padding(.top, 3)
-                            .accessibilityHidden(true)
+                        resourceDisclosureChevron
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -384,6 +424,16 @@ struct MIFResourceRoom: View {
         .padding(.vertical, 13)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("morde.resources.host.\(host.id)")
+        .contextMenu {
+            if host.scope == .owned && host.status != .deleting && host.status != .deleted {
+                Button {
+                    actions.shareHost(host.id)
+                } label: {
+                    Label(AppLocalized("Share control"), systemImage: "person.crop.circle.badge.plus")
+                }
+                .accessibilityIdentifier("morde.resources.host.share.\(host.id)")
+            }
+        }
     }
 
     @ViewBuilder
@@ -422,7 +472,9 @@ struct MIFResourceRoom: View {
     }
 
     private func workspaceRow(_ workspace: MIFResourcePageState.Workspace) -> some View {
-        Button {
+        let hostName = workspace.hostName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isMounted = workspace.status == .ready && hostName?.isEmpty == false
+        return Button {
             actions.openWorkspaceFiles(workspace.id)
         } label: {
             HStack(alignment: .top, spacing: 13) {
@@ -437,8 +489,8 @@ struct MIFResourceRoom: View {
                         .font(.system(size: 16, weight: .semibold))
                         .fixedSize(horizontal: false, vertical: true)
                     HStack(spacing: 6) {
-                        Text(workspace.status.localizedTitle)
-                        if let hostName = workspace.hostName {
+                        Text(isMounted ? AppLocalized("Mounted") : workspace.status.localizedTitle)
+                        if let hostName, !hostName.isEmpty {
                             Text("·")
                             Text(hostName)
                         }
@@ -452,11 +504,7 @@ struct MIFResourceRoom: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 if workspace.canOpenFiles {
-                    Image(systemName: "chevron.right")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(NanoMuseTones.secondaryText)
-                        .padding(.top, 3)
-                        .accessibilityHidden(true)
+                    resourceDisclosureChevron
                 }
             }
             .contentShape(Rectangle())
@@ -465,6 +513,14 @@ struct MIFResourceRoom: View {
         .disabled(!workspace.canOpenFiles)
         .accessibilityIdentifier("morde.resources.workspace.open.\(workspace.id)")
         .padding(.vertical, 13)
+    }
+
+    private var resourceDisclosureChevron: some View {
+        Text("›")
+            .font(.system(size: 20, weight: .light))
+            .foregroundStyle(Color(red: 198.0 / 255.0, green: 198.0 / 255.0, blue: 203.0 / 255.0))
+            .padding(.top, 9)
+            .accessibilityHidden(true)
     }
 
     private func sectionTitle(_ title: String) -> some View {
@@ -486,6 +542,7 @@ struct MIFResourceRoom: View {
         }
         .padding(.vertical, 12)
         .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("morde.resources.loadError")
     }
 }
 
@@ -494,8 +551,11 @@ private extension MIFResourcePageState.Host.Status {
         switch self {
         case .running: return AppLocalized("Running")
         case .starting: return AppLocalized("Starting")
-        case .offline: return AppLocalized("Offline")
+        case .stopping: return AppLocalized("Stopping")
         case .stopped: return AppLocalized("Stopped")
+        case .failed: return AppLocalized("Failed")
+        case .deleting: return AppLocalized("Deleting")
+        case .deleted: return AppLocalized("Deleted")
         case .unknown: return AppLocalized("Status unknown")
         }
     }

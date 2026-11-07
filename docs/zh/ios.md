@@ -4,6 +4,10 @@ iPhone 上的 nanoMuse 是 OpenMinis 1.13 的 iOS 那一半，顶着 nanoMuse �
 Mac runner 上构建后交给 TestFlight。这一页说的是：源码树里有什么、怎么构建、TestFlight
 流水线需要什么、还有哪些要从 Android App 移植过来。
 
+**Morde 聊天附件。** 文件选择器支持图片、PDF、DOCX 和 XLSX。Office 文件以原格式保存为
+个人附件；助手读取文件内容需要服务端支持 Office 解析。处理后每条消息最多包含 16 项附件，
+PDF 还会添加提取的文本和最多 10 页预览。
+
 **现状。** 源码树、品牌、nanoMuse Cloud 登录、hub 客户端和流水线都是在一台 Linux 机器上
 写的。这个 App **能构建、能签名、已经上了 TestFlight**：第一个构建 0.1.31 (2) 于 2026-10-03 走完
 *iOS · TestFlight* 工作流；1.0.0 是构建 16，已通过 Apple 的 beta 审核，公开链接

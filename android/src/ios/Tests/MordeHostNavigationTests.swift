@@ -51,6 +51,19 @@ enum MordeHostNavigationTests {
         precondition(!isValidMordeHostTicketURL(URL(string: "https://host.example/__ch/auth")!, for: origin))
         precondition(!isValidMordeHostTicketURL(URL(string: "https://host.example/__ch/auth?t=one&t=two")!, for: origin))
         precondition(!isValidMordeHostTicketURL(URL(string: "https://host.example/__ch/auth?t=%20%20")!, for: origin))
+        let localHostOrigin = URL(string: "http://hngkra2j.hosts.localhost")!
+#if DEBUG
+        precondition(isAllowedMordeHostOrigin(localHostOrigin))
+        precondition(isAllowedMordeHostNavigation(URL(string: "http://hngkra2j.hosts.localhost:80/__ch/auth"), relativeTo: localHostOrigin))
+        precondition(isValidMordeHostTicketURL(URL(string: "http://hngkra2j.hosts.localhost/__ch/auth?t=single-use")!, for: localHostOrigin))
+        precondition(!isValidMordeHostTicketURL(URL(string: "http://other.hosts.localhost/__ch/auth?t=single-use")!, for: localHostOrigin))
+        precondition(!isAllowedMordeHostNavigation(URL(string: "http://public.example/__ch/auth"), relativeTo: localHostOrigin))
+#else
+        precondition(!isAllowedMordeHostOrigin(localHostOrigin))
+        precondition(!isAllowedMordeHostNavigation(URL(string: "http://hngkra2j.hosts.localhost/__ch/auth"), relativeTo: localHostOrigin))
+        precondition(!isValidMordeHostTicketURL(URL(string: "http://hngkra2j.hosts.localhost/__ch/auth?t=single-use")!, for: localHostOrigin))
+#endif
+        precondition(!isAllowedMordeHostOrigin(URL(string: "http://public.example")!))
         precondition(canStartMordeAction(busy: false))
         precondition(!canStartMordeAction(busy: true))
         precondition(canRetryMordeBatchItem(taskStatus: "failed", itemStatus: "failed"))

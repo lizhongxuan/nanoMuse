@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 enum MIFTaskPageRules {
     static func merge(current: [MordeTask], incoming: [MordeTask]) -> [MordeTask] {
@@ -92,32 +93,51 @@ enum MIFTaskPresentation {
         }
     }
 
-    static func visibleSteps(_ steps: [MordeTask.Step]?) -> [MordeTask.Step] {
-        (steps ?? []).filter { $0.kind != "budget" }.sorted { $0.sequence < $1.sequence }
+    static func visibleSteps(_ steps: [MordeTask.Step]?, waitingForRevisionStart: Bool = false) -> [MordeTask.Step] {
+        (steps ?? []).filter {
+            $0.kind != "budget" && !(waitingForRevisionStart && $0.kind == "progress" && $0.title == "开始处理")
+        }.sorted { $0.sequence < $1.sequence }
     }
 
     static func taskListDetail(_ task: MordeTask) -> String? {
-        let steps = visibleSteps(task.steps)
-        let stepSummary = steps.isEmpty ? nil :
-            "\(steps.count) \(AppLocalized("Steps")) · \(steps.filter { $0.status == "succeeded" }.count) \(AppLocalized("Completed"))"
+        let steps = visibleSteps(task.steps, waitingForRevisionStart: task.isWaitingForRevisionStart)
+        let stepCount = task.step_count ?? Int64(steps.count)
+        let completedStepCount = task.completed_step_count ?? Int64(steps.filter { $0.status == "succeeded" }.count)
+        let stepSummary = stepCount == 0 ? nil :
+            "\(stepCount) \(AppLocalized("Steps")) · \(completedStepCount) \(AppLocalized("Completed"))"
+        let currentStep = task.displayedCurrentStep
         let candidates = task.status == "completed"
-            ? [task.result, task.current_step]
-            : [task.current_step, task.result]
+            ? [task.result, currentStep]
+            : [currentStep, task.result]
         let currentDetail = candidates.compactMap { $0 }.first { !$0.isEmpty }
         let visibleDetails = [stepSummary, currentDetail].compactMap { $0 }
         return visibleDetails.isEmpty ? nil : visibleDetails.joined(separator: " · ")
     }
 
-    static func stepStatusLabel(_ status: String) -> String {
+    static func stepStatusLabel(_ status: String, kind: String? = nil, title: String = "") -> String {
+        if MordeTaskStepPresentation.isStartedProgress(kind: kind, title: title, status: status) {
+            return AppLocalized("Task started")
+        }
         switch status {
         case "queued": return AppLocalized("Queued")
         case "running": return AppLocalized("Running")
         case "waiting_user": return AppLocalized("Waiting for you")
-        case "succeeded": return AppLocalized("Completed")
+        case "succeeded", "completed": return AppLocalized("Completed")
+        case "cancelled": return AppLocalized("Cancelled")
         case "failed": return AppLocalized("Failed")
         case "unknown": return AppLocalized("Status unknown")
         default: return AppLocalized("Status unknown")
         }
+    }
+
+    static func stepSummary(_ step: MordeTask.Step) -> String {
+        let status = stepStatusLabel(step.status, kind: step.kind, title: step.title)
+        return [status, MordeTaskStepPresentation.summary(step.summary, title: step.title)]
+            .compactMap { $0 }.joined(separator: " · ")
+    }
+
+    static func stepDescription(_ step: MordeTask.Step) -> String {
+        "\(MordeTaskStepPresentation.title(step.title)) · \(stepSummary(step))"
     }
 
     static func timelineEmptyState(isLoading: Bool, noHistory: Bool) -> MIFTaskTimelineEmptyState {
@@ -130,7 +150,19 @@ enum MIFTaskPresentation {
         return events.sorted { $0.sequence < $1.sequence }.compactMap { event in
             guard seen.insert(event.sequence).inserted, let display = event.display else { return nil }
             return MIFTaskTimelineRow(id: "event:\(event.sequence)", sequence: event.sequence,
-                                      title: display.title, summary: display.summary)
+                                      title: display.title, summary: display.summary, status: event.status)
+        }
+    }
+
+    static func eventChainMarker(eventStatus: String?, taskStatus: String,
+                                 index: Int, rowCount: Int) -> MIFTaskTimelineMarker {
+        switch eventStatus {
+        case "succeeded", "completed": return .completed
+        case "failed": return .failed
+        case "running", "waiting_user", "pausing", "cancelling": return .current
+        case "queued", "pending": return .upcoming
+        case "unknown": return .unconfirmed
+        default: return timelineMarker(taskStatus: taskStatus, index: index, rowCount: rowCount)
         }
     }
 
@@ -141,6 +173,16 @@ enum MIFTaskPresentation {
         case "failed": .failed
         case "completed", "cancelled": .completed
         default: .unconfirmed
+        }
+    }
+
+    static func timelineMarkerLabel(_ marker: MIFTaskTimelineMarker) -> String {
+        switch marker {
+        case .completed: return AppLocalized("Completed")
+        case .current: return AppLocalized("Current")
+        case .failed: return AppLocalized("Failed")
+        case .upcoming: return AppLocalized("Queued")
+        case .unconfirmed: return AppLocalized("Status unknown")
         }
     }
 }
@@ -155,6 +197,7 @@ enum MIFTaskTimelineMarker: Equatable {
     case completed
     case current
     case failed
+    case upcoming
     case unconfirmed
 }
 
@@ -163,6 +206,7 @@ struct MIFTaskTimelineRow: Identifiable {
     let sequence: Int64
     let title: String
     let summary: String?
+    let status: String?
 }
 
 private struct MIFTaskTimelineMarkerView: View {
@@ -180,7 +224,14 @@ private struct MIFTaskTimelineMarkerView: View {
                 }
                 .frame(width: 24, height: 24)
         case .current:
-            Circle().fill(Color.primary).frame(width: 24, height: 24)
+            Circle()
+                .fill(Color.primary)
+                .frame(width: 24, height: 24)
+                .overlay {
+                    Circle()
+                        .fill(NanoMuseTones.canvas)
+                        .frame(width: 4, height: 4)
+                }
         case .failed:
             Circle()
                 .stroke(Color.red, lineWidth: 2)
@@ -189,6 +240,11 @@ private struct MIFTaskTimelineMarkerView: View {
                         .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(Color.red)
                 }
+                .frame(width: 24, height: 24)
+        case .upcoming:
+            Circle()
+                .strokeBorder(NanoMuseTones.hairline, lineWidth: 1.5)
+                .background(Circle().fill(NanoMuseTones.canvas))
                 .frame(width: 24, height: 24)
         case .unconfirmed:
             Circle()
@@ -248,9 +304,9 @@ struct MIFTaskEventChainRoom: View {
                         ProgressView(AppLocalized("Loading task details…"))
                             .frame(maxWidth: .infinity, minHeight: 150)
                     } else if let loadError {
-                        MIFTaskErrorState(message: loadError, retry: nil)
+                        MIFTaskErrorState(message: loadError)
                     } else if let taskError = selectedTaskID.flatMap({ store.timelineErrors[$0] }) {
-                        MIFTaskErrorState(message: taskError, retry: nil)
+                        MIFTaskErrorState(message: taskError)
                     } else {
                         MIFTaskNotice(text: AppLocalized("No current task is available"), symbol: "clock.arrow.circlepath")
                             .accessibilityIdentifier("morde.eventChain.empty")
@@ -259,10 +315,11 @@ struct MIFTaskEventChainRoom: View {
                 .padding(.horizontal, 22)
                 .padding(.top, 2)
                 .padding(.bottom, onMenu == nil && chrome != nil ? NanoMuseBottomBar.height : 0)
+                .mordeVerticalScrollBounceProbe()
             }
             .background(NanoMuseTones.canvas)
             .refreshable { await reloadCurrentTask() }
-            .mordeTaskListAlwaysBounce()
+            .mordeAlwaysBounceVertically()
         }
         .background(NanoMuseTones.canvas.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
@@ -275,10 +332,11 @@ struct MIFTaskEventChainRoom: View {
     private func timeline(taskID: String, taskStatus: String) -> some View {
         let rows = MIFTaskPresentation.timelineRows(store.timelineEvents[taskID] ?? [])
         if let loadError {
-            MIFTaskInlineError(message: loadError, retry: nil)
+            MIFTaskInlineError(message: loadError)
         }
         if let timelineError = store.timelineErrors[taskID] {
-            MIFTaskInlineError(message: timelineError, retry: nil)
+            MIFTaskInlineError(message: timelineError)
+                .accessibilityIdentifier("morde.eventChain.timelineError")
         }
         if store.expiredTimelines.contains(taskID) {
             Text(AppLocalized("Older events expired; showing the current snapshot and available events"))
@@ -295,19 +353,26 @@ struct MIFTaskEventChainRoom: View {
                 case .loading:
                     ProgressView(AppLocalized("Connecting to task events…"))
                         .frame(maxWidth: .infinity, minHeight: 72)
+                        .accessibilityIdentifier("morde.eventChain.timelineLoading")
                 case .noHistory:
                     Text(AppLocalized("No event history available"))
                         .foregroundStyle(NanoMuseTones.secondaryText)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityIdentifier("morde.eventChain.noHistory")
                 case .unconfirmed:
-                    MIFTaskInlineError(message: AppLocalized("Task event history has not been confirmed"), retry: nil)
+                    MIFTaskInlineError(message: AppLocalized("Task event history has not been confirmed"))
                 }
             }
         } else {
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(rows.enumerated()), id: \.element.id) { index, event in
                     HStack(alignment: .top, spacing: 16) {
-                        timelineMarker(taskStatus: taskStatus, index: index, rowCount: rows.count)
+                        let marker = MIFTaskPresentation.eventChainMarker(
+                            eventStatus: event.status, taskStatus: taskStatus,
+                            index: index, rowCount: rows.count)
+                        MIFTaskTimelineMarkerView(marker: marker)
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel(MIFTaskPresentation.timelineMarkerLabel(marker))
                         VStack(alignment: .leading, spacing: 4) {
                             Text(event.title)
                                 .font(.system(size: 15.5, weight: .semibold))
@@ -341,12 +406,6 @@ struct MIFTaskEventChainRoom: View {
                 }
             }
         }
-    }
-
-    @ViewBuilder
-    private func timelineMarker(taskStatus: String, index: Int, rowCount: Int) -> some View {
-        MIFTaskTimelineMarkerView(marker: MIFTaskPresentation.timelineMarker(
-            taskStatus: taskStatus, index: index, rowCount: rowCount))
     }
 
     private func reloadCurrentTask() async {
@@ -453,6 +512,7 @@ struct MIFTaskListRoom: View {
                 .padding(.horizontal, 22)
                 .padding(.top, 2)
                 .padding(.bottom, onMenu == nil && chrome != nil ? NanoMuseBottomBar.height : 0)
+                .mordeVerticalScrollBounceProbe()
             }
             .background(NanoMuseTones.canvas)
             .refreshable { await refreshCurrentScope() }
@@ -463,7 +523,7 @@ struct MIFTaskListRoom: View {
                           value.startLocation.y < 80, value.translation.height > 100 else { return }
                     Task { await refreshCurrentScope() }
                 })
-            .mordeTaskListAlwaysBounce()
+            .mordeAlwaysBounceVertically()
             .accessibilityIdentifier("morde.tasks.list")
         }
         .background(NanoMuseTones.canvas.ignoresSafeArea())
@@ -484,7 +544,7 @@ struct MIFTaskListRoom: View {
             ProgressView(AppLocalized("Loading tasks…"))
                 .frame(maxWidth: .infinity, minHeight: 150)
         } else if tasks.isEmpty, let pageError, !isLoadingMore {
-            MIFTaskInlineError(message: pageError, retry: nil)
+            MIFTaskInlineError(message: pageError)
                 .accessibilityIdentifier("morde.tasks.loadError")
         } else if MIFTaskPageRules.isFinalEmptyPage(
             itemCount: tasks.count, didLoadInitial: didLoadInitial, nextCursor: nextCursor) {
@@ -496,7 +556,7 @@ struct MIFTaskListRoom: View {
             MIFTaskNotice(text: AppLocalized("Task list has not loaded"), symbol: "checklist")
         } else {
             if let pageError {
-                MIFTaskInlineError(message: pageError, retry: nil)
+                MIFTaskInlineError(message: pageError)
                     .accessibilityIdentifier("morde.tasks.loadError")
             }
             ForEach(tasks) { task in
@@ -581,6 +641,12 @@ struct MIFTaskListRoom: View {
             didLoadInitial = true
         } catch {
             guard !Task.isCancelled, generation == requestGeneration, scope == store.scopeKey else { return }
+            let requestError = error as NSError
+            if requestError.domain == "Morde" && requestError.code == 403 {
+                tasks = []
+                nextCursor = nil
+                didLoadInitial = false
+            }
             pageError = error.localizedDescription
         }
     }
@@ -588,13 +654,58 @@ struct MIFTaskListRoom: View {
 
 typealias MIFTaskRoom = MIFTaskListRoom
 
-private extension View {
+extension View {
     @ViewBuilder
-    func mordeTaskListAlwaysBounce() -> some View {
+    func mordeAlwaysBounceVertically() -> some View {
         if #available(iOS 16.4, *) {
             scrollBounceBehavior(.always, axes: .vertical)
         } else {
             self
+        }
+    }
+
+    @ViewBuilder
+    func mordeVerticalScrollBounceProbe() -> some View {
+        if #available(iOS 16.4, *) {
+            self
+        } else {
+            background(MordeVerticalScrollBounceProbe())
+        }
+    }
+}
+
+private struct MordeVerticalScrollBounceProbe: UIViewRepresentable {
+    func makeUIView(context: Context) -> MordeVerticalScrollBounceView { MordeVerticalScrollBounceView() }
+
+    func updateUIView(_ view: MordeVerticalScrollBounceView, context: Context) {
+        view.enableVerticalBounce()
+    }
+}
+
+private final class MordeVerticalScrollBounceView: UIView {
+    override func didMoveToSuperview() {
+        super.didMoveToSuperview()
+        enableVerticalBounce()
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        DispatchQueue.main.async { [weak self] in self?.enableVerticalBounce() }
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        enableVerticalBounce()
+    }
+
+    func enableVerticalBounce() {
+        var ancestor = superview
+        while let view = ancestor {
+            if let scrollView = view as? UIScrollView {
+                scrollView.alwaysBounceVertical = true
+                return
+            }
+            ancestor = view.superview
         }
     }
 }
@@ -614,7 +725,6 @@ struct MIFTaskDetailView: View {
     @State private var confirmsCancel = false
     @State private var detailGeneration = UUID()
     @State private var actionGeneration = UUID()
-    @State private var timelineRetryID = UUID()
     @State private var clarificationAnswer = ""
     @FocusState private var isClarificationFocused: Bool
 
@@ -629,6 +739,7 @@ struct MIFTaskDetailView: View {
                 NanoMuseRoundButton(symbol: "chevron.left", label: AppLocalized("Back"), size: 38) {
                     dismiss()
                 }
+                .accessibilityIdentifier("morde.task.back")
                 Text(task?.objective ?? AppLocalized("Task"))
                     .font(.headline.weight(.semibold))
                     .lineLimit(1)
@@ -643,7 +754,8 @@ struct MIFTaskDetailView: View {
                     VStack(spacing: 16) {
                         detailContent
                     }
-                    .padding(.vertical, 14)
+                    .padding(.top, 2)
+                    .padding(.bottom, hasActionFooter ? 170 : 14)
                     .nmOnChange(of: task?.id) { _ in
                         guard scrollToActivity, task != nil else { return }
                         DispatchQueue.main.async {
@@ -654,6 +766,12 @@ struct MIFTaskDetailView: View {
                     }
                 }
                 .background(NanoMuseTones.canvas)
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if hasActionFooter, let task {
+                taskActions(task)
+                    .padding(.bottom, 104)
             }
         }
         .background(NanoMuseTones.canvas.ignoresSafeArea())
@@ -674,7 +792,7 @@ struct MIFTaskDetailView: View {
             .disabled(isLoadingDetail || detailError != nil || store.actionInFlight)
             Button(AppLocalized("Back"), role: .cancel) {}
         }
-        .task(id: "\(store.scopeKey ?? "")-\(taskID)-\(timelineRetryID.uuidString)") {
+        .task(id: "\(store.scopeKey ?? "")-\(taskID)") {
             await loadDetail(scope: store.scopeKey, taskID: taskID)
         }
     }
@@ -689,24 +807,19 @@ struct MIFTaskDetailView: View {
                     .frame(maxWidth: .infinity, minHeight: 40)
             }
             if let detailError {
-                MIFTaskInlineError(message: detailError) {
-                    Task { await loadDetail(scope: store.scopeKey, taskID: taskID) }
-                }
+                MIFTaskInlineError(message: detailError)
             }
             taskSummary(task)
             taskSteps(task)
             taskPendingRequest(task)
             taskClarification(task)
-            taskActions(task)
             taskActivity(task)
             taskArtifacts(task)
         } else if isLoadingDetail {
             ProgressView(AppLocalized("Loading tasks…"))
                 .frame(maxWidth: .infinity, minHeight: 150)
         } else if let detailError {
-            MIFTaskErrorState(message: detailError) {
-                Task { await loadDetail(scope: store.scopeKey, taskID: taskID) }
-            }
+            MIFTaskErrorState(message: detailError)
         } else {
             MIFTaskNotice(text: AppLocalized("Task details unavailable"), symbol: "exclamationmark.circle")
         }
@@ -717,8 +830,14 @@ struct MIFTaskDetailView: View {
         return MIFTaskActionRules.options(for: task)
     }
 
+    private var hasActionFooter: Bool {
+        guard let task else { return false }
+        return !actionOptions.isEmpty || store.actionErrors[task.id] != nil
+    }
+
     private func taskSummary(_ task: MordeTask) -> some View {
-        let details = [task.statusLabel, task.current_step, task.result]
+        let step = task.displayedCurrentStep == task.statusLabel ? nil : task.displayedCurrentStep
+        let details = [task.statusLabel, step, task.result]
             .compactMap { $0 }
             .filter { !$0.isEmpty }
         return Text(details.joined(separator: " · "))
@@ -771,7 +890,7 @@ struct MIFTaskDetailView: View {
                     }
 
                     if let error = store.actionErrors[task.id] {
-                        MIFTaskInlineError(message: error, retry: nil)
+                        MIFTaskInlineError(message: error)
                     }
                 }
                 .padding(16)
@@ -823,7 +942,7 @@ struct MIFTaskDetailView: View {
                     .accessibilityIdentifier("morde.task.clarification.submit")
 
                     if let error = store.actionErrors[task.id] {
-                        MIFTaskInlineError(message: error, retry: nil)
+                        MIFTaskInlineError(message: error)
                     }
                 }
                 .padding(16)
@@ -841,45 +960,70 @@ struct MIFTaskDetailView: View {
     @ViewBuilder
     private func taskActions(_ task: MordeTask) -> some View {
         let options = MIFTaskActionRules.options(for: task)
-        if !options.isEmpty {
-            MIFTaskSection(title: AppLocalized("Task actions")) {
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(options.enumerated()), id: \.element.id) { index, option in
-                        if index > 0 { NanoMuseRowDivider() }
-                        Button {
-                            if option.kind == .cancel {
-                                confirmsCancel = true
-                            } else {
-                                Task { await perform(option, taskID: task.id) }
-                            }
-                        } label: {
-                            HStack(spacing: 12) {
-                                Image(systemName: option.systemImage)
-                                    .frame(width: 22)
-                                Text(option.title)
-                                Spacer()
-                                if isPerformingAction { ProgressView().controlSize(.small) }
-                            }
-                            .foregroundStyle(option.kind == .cancel ? Color.red : Color.primary)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 13)
-                            .contentShape(Rectangle())
+        if !options.isEmpty || store.actionErrors[task.id] != nil {
+            VStack(spacing: 8) {
+                if let actionError = store.actionErrors[task.id] {
+                    MIFTaskInlineError(message: actionError)
+                }
+                if options.contains(where: { $0.kind == .retryBatchItem }) {
+                    VStack(spacing: 8) {
+                        ForEach(options) { option in
+                            taskActionButton(option, taskID: task.id)
                         }
-                        .buttonStyle(.plain)
-                        .disabled(isPerformingAction || store.actionInFlight || isLoadingDetail || detailError != nil)
-                        .accessibilityIdentifier("morde.task.action.\(option.id)")
+                    }
+                } else if !options.isEmpty {
+                    HStack(spacing: 10) {
+                        ForEach(options) { option in
+                            taskActionButton(option, taskID: task.id)
+                        }
                     }
                 }
             }
+            .padding(.horizontal, 22)
+            .padding(.top, 10)
+            .padding(.bottom, 10)
+            .background(NanoMuseTones.canvas)
+            .overlay(alignment: .top) {
+                Rectangle()
+                    .fill(NanoMuseTones.hairline)
+                    .frame(height: 1)
+                    .accessibilityHidden(true)
+            }
         }
-        if let actionError = store.actionErrors[task.id] {
-            MIFTaskInlineError(message: actionError, retry: nil)
+    }
+
+    private func taskActionButton(_ option: MIFTaskActionOption, taskID: String) -> some View {
+        Button {
+            if option.kind == .cancel {
+                confirmsCancel = true
+            } else {
+                Task { await perform(option, taskID: taskID) }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                if isPerformingAction {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: option.systemImage)
+                        .frame(width: 18)
+                }
+                Text(option.title)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 13)
+            .contentShape(Capsule())
         }
+        .buttonStyle(.borderedProminent)
+        .tint(option.kind == .cancel ? .red : NanoMuseTones.action)
+        .disabled(isPerformingAction || store.actionInFlight || isLoadingDetail || detailError != nil)
+        .accessibilityIdentifier("morde.task.action.\(option.id)")
     }
 
     @ViewBuilder
     private func taskSteps(_ task: MordeTask) -> some View {
-        let steps = MIFTaskPresentation.visibleSteps(task.steps)
+        let steps = MIFTaskPresentation.visibleSteps(task.steps, waitingForRevisionStart: task.isWaitingForRevisionStart)
         if steps.isEmpty {
             Text(task.steps == nil ? AppLocalized("Step details unavailable") : AppLocalized("No recorded steps"))
                 .font(.subheadline)
@@ -893,15 +1037,13 @@ struct MIFTaskDetailView: View {
                     HStack(alignment: .top, spacing: 16) {
                         taskStepMarker(step)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(step.title)
+                            Text(MordeTaskStepPresentation.title(step.title))
                                 .font(.system(size: 15.5, weight: .semibold))
                                 .fixedSize(horizontal: false, vertical: true)
-                            if !step.summary.isEmpty {
-                                Text(step.summary)
-                                    .font(.system(size: 14))
-                                    .foregroundStyle(NanoMuseTones.secondaryText)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
+                            Text(MIFTaskPresentation.stepSummary(step))
+                                .font(.system(size: 14))
+                                .foregroundStyle(NanoMuseTones.secondaryText)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                         .padding(.top, 1)
                     }
@@ -924,7 +1066,7 @@ struct MIFTaskDetailView: View {
                         }
                     }
                     .accessibilityElement(children: .combine)
-                    .accessibilityValue(MIFTaskPresentation.stepStatusLabel(step.status))
+                    .accessibilityValue(MIFTaskPresentation.stepStatusLabel(step.status, kind: step.kind, title: step.title))
                     .accessibilityIdentifier("morde.task.step.\(step.id)")
                 }
             }
@@ -935,6 +1077,7 @@ struct MIFTaskDetailView: View {
     private func taskStepMarker(_ step: MordeTask.Step) -> some View {
         let marker: MIFTaskTimelineMarker = switch step.status {
         case "succeeded": .completed
+        case "cancelled": .unconfirmed
         case "running", "waiting_user": .current
         case "failed": .failed
         default: .unconfirmed
@@ -957,8 +1100,8 @@ struct MIFTaskDetailView: View {
                 }
                 if let error = store.timelineErrors[task.id] {
                     MIFTaskInlineError(
-                        message: String(format: AppLocalized("Task event stream unavailable: %@"), error),
-                        retry: retryTimeline)
+                        message: String(format: AppLocalized("Task event stream unavailable: %@"), error))
+                        .accessibilityIdentifier("morde.task.activity.timelineError")
                 }
                 if events.isEmpty {
                     if store.timelineErrors[task.id] == nil {
@@ -983,24 +1126,17 @@ struct MIFTaskDetailView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(16)
                         case .unconfirmed:
-                            VStack(alignment: .leading, spacing: 10) {
-                                Text(AppLocalized("Task event history has not been confirmed"))
-                                    .font(.subheadline)
-                                    .foregroundStyle(NanoMuseTones.secondaryText)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                Button(AppLocalized("Retry loading"), action: retryTimeline)
-                                    .font(.footnote.weight(.medium))
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 22)
-                            .padding(.vertical, 8)
+                            MIFTaskInlineError(message: AppLocalized("Task event history has not been confirmed"))
+                                .accessibilityIdentifier("morde.task.activity.unconfirmedHistory")
                         }
                     }
                 } else {
                     ForEach(Array(events.enumerated()), id: \.element.id) { index, event in
+                        let marker = MIFTaskPresentation.eventChainMarker(
+                            eventStatus: event.status, taskStatus: task.status,
+                            index: index, rowCount: events.count)
                         HStack(alignment: .top, spacing: 16) {
-                            MIFTaskTimelineMarkerView(marker: MIFTaskPresentation.timelineMarker(
-                                taskStatus: task.status, index: index, rowCount: events.count))
+                            MIFTaskTimelineMarkerView(marker: marker)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(event.title)
                                     .font(.system(size: 15.5, weight: .semibold))
@@ -1034,6 +1170,7 @@ struct MIFTaskDetailView: View {
                         }
                         .accessibilityElement(children: .combine)
                         .accessibilityLabel("\(event.sequence). \(event.title)")
+                        .accessibilityValue(MIFTaskPresentation.timelineMarkerLabel(marker))
                         .accessibilityIdentifier("morde.task.event.\(event.sequence)")
                     }
                 }
@@ -1136,9 +1273,6 @@ struct MIFTaskDetailView: View {
         _ = await store.actOnTask(taskID: taskID, action: option.action)
     }
 
-    private func retryTimeline() {
-        timelineRetryID = UUID()
-    }
 }
 
 private struct MIFTaskListRow: View {
@@ -1158,10 +1292,12 @@ private struct MIFTaskListRow: View {
                         .font(.subheadline)
                         .foregroundStyle(NanoMuseTones.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("morde.tasks.row.detail.\(task.id)")
                 }
                 Text(task.statusLabel)
                     .font(.caption)
                     .foregroundStyle(.tertiary)
+                    .accessibilityIdentifier("morde.tasks.row.status.\(task.id)")
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1257,7 +1393,6 @@ struct MIFTaskNotice: View {
 
 struct MIFTaskErrorState: View {
     let message: String
-    let retry: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -1267,11 +1402,6 @@ struct MIFTaskErrorState: View {
                 .font(.subheadline)
                 .foregroundStyle(NanoMuseTones.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
-            if let retry {
-                Button(AppLocalized("Retry loading"), action: retry)
-                    .font(.subheadline.weight(.medium))
-                    .accessibilityIdentifier("morde.task.loadError.retry")
-            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
@@ -1284,7 +1414,6 @@ struct MIFTaskErrorState: View {
 
 private struct MIFTaskInlineError: View {
     let message: String
-    let retry: (() -> Void)?
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -1292,10 +1421,6 @@ private struct MIFTaskInlineError: View {
                 .font(.footnote)
                 .foregroundStyle(.orange)
                 .fixedSize(horizontal: false, vertical: true)
-            if let retry {
-                Button(AppLocalized("Retry loading"), action: retry)
-                    .font(.footnote.weight(.medium))
-            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 18)

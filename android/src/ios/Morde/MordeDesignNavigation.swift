@@ -72,11 +72,16 @@ enum MordeDesignRoute: Hashable {
     }
 }
 
+// nanoMuse: the integrated app uses the shared drawer destination; the standalone target owns this copy.
+#if !MORDE_CANONICAL
 enum MIFDrawerDestination: String, CaseIterable, Identifiable {
     case chat, tasks, approvals, eventChain, resources, library, workItems, friends, toolChats
 
     var id: String { rawValue }
+}
+#endif
 
+extension MIFDrawerDestination {
     var route: MordeDesignRoute {
         switch self {
         case .chat: .chat
@@ -95,12 +100,12 @@ enum MIFDrawerDestination: String, CaseIterable, Identifiable {
 struct MordeDesignDrawerItem: Identifiable {
     let id: String
     let title: String
-    let systemImage: String
+    let systemImage: String?
     let route: MordeDesignRoute
     var badge: Int? = nil
     var isSelected = false
 
-    init(id: String, title: String, systemImage: String, route: MordeDesignRoute,
+    init(id: String, title: String, systemImage: String?, route: MordeDesignRoute,
          badge: Int? = nil, isSelected: Bool = false) {
         self.id = id
         self.title = title
@@ -209,47 +214,8 @@ struct MordeDesignNavigationShell<Content: View>: View {
     }
 
     private var bottomBar: some View {
-        HStack(spacing: 2) {
-            ForEach(MordeDesignTab.allCases) { tab in
-                tabButton(tab)
-            }
-        }
-        .padding(5)
-        .frame(height: 62)
-        .background(.ultraThinMaterial, in: Capsule())
-        .overlay(Capsule().strokeBorder(Color.primary.opacity(0.08), lineWidth: 1))
-        .shadow(color: .black.opacity(0.08), radius: 12, y: 5)
-    }
-
-    private func tabButton(_ tab: MordeDesignTab) -> some View {
-        let isSelected = selectedTab == tab
-        return Button { onSelectTab(tab) } label: {
-            ZStack(alignment: .topTrailing) {
-                Image(systemName: tab.symbol)
-                    .font(.system(size: 22, weight: .regular))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .contentShape(Capsule())
-                if tab == .approvals, let approvalCount, approvalCount > 0 {
-                    Text(approvalCount > 99 ? "99+" : String(approvalCount))
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 4)
-                        .frame(minWidth: 17, minHeight: 17)
-                        .background(Color.red, in: Capsule())
-                        .overlay(Capsule().strokeBorder(Color(uiColor: .systemBackground), lineWidth: 2))
-                        .offset(x: -8, y: 2)
-                }
-            }
-            .foregroundStyle(Color.primary)
-            .background(isSelected ? Color.primary.opacity(0.08) : Color.clear, in: Capsule())
-            .frame(maxWidth: .infinity)
-            .frame(height: 52)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(Text(tab.title))
-        .accessibilityValue(isSelected ? Text("Selected") : Text(""))
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
-        .accessibilityIdentifier("morde.nav.tab.\(tab.id)")
+        MordeDesignTabBar(selectedTab: selectedTab, approvalCount: approvalCount,
+                          onSelectTab: onSelectTab)
     }
 
     private var drawerOverlay: some View {
@@ -325,7 +291,7 @@ struct MordeDesignNavigationShell<Content: View>: View {
                 .padding(.top, 5)
         }
         if !section.items.isEmpty {
-            LazyVStack(spacing: 2) {
+            LazyVStack(spacing: section.id == "conversations" ? 0 : 2) {
                 ForEach(section.items) { item in
                     drawerRow(item)
                 }
@@ -352,12 +318,14 @@ struct MordeDesignNavigationShell<Content: View>: View {
             closeDrawer()
             onSelectRoute(item.route)
         } label: {
-            HStack(spacing: 13) {
-                Image(systemName: item.systemImage)
-                    .font(.system(size: 22, weight: .regular))
-                    .frame(width: 24)
+            HStack(spacing: item.systemImage == nil ? 0 : 13) {
+                if let systemImage = item.systemImage {
+                    Image(systemName: systemImage)
+                        .font(.system(size: 22, weight: .regular))
+                        .frame(width: 24)
+                }
                 Text(item.title)
-                    .font(.body.weight(.semibold))
+                    .font(item.systemImage == nil ? .system(size: 16, weight: .medium) : .body.weight(.semibold))
                     .lineLimit(1)
                 Spacer(minLength: 8)
                 if let badge = item.badge, badge > 0 {
@@ -370,10 +338,17 @@ struct MordeDesignNavigationShell<Content: View>: View {
                 }
             }
             .foregroundStyle(Color.primary)
-            .padding(.horizontal, 13)
+            .padding(.horizontal, item.systemImage == nil ? 12 : 13)
             .padding(.vertical, 11)
             .contentShape(Capsule())
-            .background(item.isSelected ? Color.primary.opacity(0.08) : Color.clear, in: Capsule())
+            .background {
+                if item.systemImage == nil {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(item.isSelected ? Color.primary.opacity(0.08) : Color.clear)
+                } else {
+                    Capsule().fill(item.isSelected ? Color.primary.opacity(0.08) : Color.clear)
+                }
+            }
         }
         .buttonStyle(.plain)
         .accessibilityLabel(Text(item.title))
@@ -448,6 +423,62 @@ struct MordeDesignNavigationShell<Content: View>: View {
     }
 }
 
+struct MordeDesignTabBar: View {
+    let selectedTab: MordeDesignTab
+    let approvalCount: Int?
+    let onSelectTab: (MordeDesignTab) -> Void
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(MordeDesignTab.allCases) { tab in
+                tabButton(tab)
+            }
+        }
+        .padding(5)
+        .frame(height: 62)
+        .background(.ultraThinMaterial, in: Capsule())
+        .overlay(Capsule().strokeBorder(Color.primary.opacity(0.08), lineWidth: 1))
+        .shadow(color: .black.opacity(0.08), radius: 12, y: 5)
+    }
+
+    private func tabButton(_ tab: MordeDesignTab) -> some View {
+        let isSelected = selectedTab == tab
+        return Button { onSelectTab(tab) } label: {
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: tab.symbol)
+                    .font(.system(size: 22, weight: .regular))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .contentShape(Capsule())
+                if tab == .approvals, let approvalCount, approvalCount > 0 {
+                    Text(approvalCount > 99 ? "99+" : String(approvalCount))
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 4)
+                        .frame(minWidth: 17, minHeight: 17)
+                        .background(Color.red, in: Capsule())
+                        .overlay(Capsule().strokeBorder(Color(uiColor: .systemBackground), lineWidth: 2))
+                        .offset(x: -8, y: 2)
+                }
+            }
+            .foregroundStyle(Color.primary)
+            .background(isSelected ? Color.primary.opacity(0.08) : Color.clear, in: Capsule())
+            .frame(maxWidth: .infinity)
+            .frame(height: 52)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text(tab.title))
+        .accessibilityValue(isSelected ? Text("Selected") : Text(""))
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityIdentifier("morde.nav.tab.\(tab.id)")
+    }
+}
+
+struct MordeFilePreviewNavigation {
+    let selectedTab: MordeDesignTab
+    let approvalCount: Int?
+    let onSelectTab: (MordeDesignTab) -> Void
+}
+
 private struct MordeDrawerShape: Shape {
     func path(in rect: CGRect) -> Path {
         let radius: CGFloat = 26
@@ -465,6 +496,8 @@ private struct MordeDrawerShape: Shape {
     }
 }
 
+// nanoMuse: the integrated target reuses these shared room types from NanoMuseShell.swift.
+#if !MORDE_CANONICAL
 struct NanoMuseRoomChrome {
     var liveId: String?
     var name: String
@@ -502,3 +535,4 @@ struct NanoMuseRoomHeader<Trailing: View>: View {
         MordeDesignPageHeader(title: chrome.name, onMenu: chrome.onMenu, trailing: trailing)
     }
 }
+#endif

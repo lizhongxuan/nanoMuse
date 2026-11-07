@@ -20,7 +20,7 @@ final class MIFWorkItemAcceptanceUITests: XCTestCase {
         draft.typeText("Draft survives the task tab")
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
         XCTAssertFalse(tasksTab.exists)
-        app.buttons["morde.chat.keyboardDone"].tap()
+        element("morde.chat.transcript", in: app).tap()
         let keyboard = app.keyboards.firstMatch
         let keyboardDismissed = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: keyboard)
         wait(for: [keyboardDismissed], timeout: 5)
@@ -52,7 +52,7 @@ final class MIFWorkItemAcceptanceUITests: XCTestCase {
         XCTAssertTrue(composer.waitForExistence(timeout: 10))
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10),
                       "Creating a task should leave the new conversation ready for its objective.")
-        app.buttons["morde.chat.keyboardDone"].tap()
+        element("morde.chat.transcript", in: app).tap()
         let keyboardHidden = expectation(for: NSPredicate(format: "exists == false"),
                                          evaluatedWith: app.keyboards.firstMatch)
         wait(for: [keyboardHidden], timeout: 5)
@@ -251,6 +251,10 @@ final class MIFWorkItemAcceptanceUITests: XCTestCase {
         scrollUntilHittable(conversationPicker, in: app)
         conversationPicker.tap()
         app.buttons["morde.workItems.conversation.c0000001"].tap()
+        let taskPicker = app.buttons["morde.workItems.taskPicker"]
+        XCTAssertTrue(taskPicker.waitForExistence(timeout: 15))
+        taskPicker.tap()
+        app.buttons["morde.workItems.task.q0000001"].tap()
         XCTAssertTrue(app.staticTexts["本机工作项关联 Task"].waitForExistence(timeout: 15))
 
         selectFilter("bug", in: app)
@@ -571,9 +575,9 @@ final class MIFWorkItemAcceptanceUITests: XCTestCase {
         if workItemDone.exists && workItemDone.isHittable {
             workItemDone.tap()
         } else {
-            let chatDone = app.buttons["morde.chat.keyboardDone"]
-            if chatDone.exists && chatDone.isHittable {
-                chatDone.tap()
+            let transcript = element("morde.chat.transcript", in: app)
+            if transcript.exists && transcript.isHittable {
+                transcript.tap()
             } else {
                 let returnKey = app.keyboards.buttons["Return"]
                 if returnKey.exists && returnKey.isHittable { returnKey.tap() }
@@ -582,6 +586,14 @@ final class MIFWorkItemAcceptanceUITests: XCTestCase {
     }
 
     private func openMordeFromCurrentRoot(_ app: XCUIApplication) {
+        let changedAccountAlert = app.alerts.firstMatch
+        let changedAccountMessage = changedAccountAlert.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "账号已变化")
+        ).firstMatch
+        if changedAccountMessage.waitForExistence(timeout: 1) {
+            changedAccountAlert.buttons["确定"].tap()
+        }
+
         let usernameField = app.textFields["morde.auth.username"]
         if usernameField.waitForExistence(timeout: 2), usernameField.isHittable { return }
         let drawer = app.buttons["morde.shell.drawer"]

@@ -58,6 +58,14 @@ enum MordeWorkspaceTransferTests {
         assert(MordeWorkspaceTransferSupport.hasCaseInsensitiveUniquePaths(["A.txt", "folder/b.txt"]))
         assert(!MordeWorkspaceTransferSupport.hasCaseInsensitiveUniquePaths(["A.txt", "a.TXT"]))
         assert(!MordeWorkspaceTransferSupport.hasCaseInsensitiveUniquePaths(["../bad"]))
+        assert(MordeWorkspaceTransferSupport.hasValidManifestPaths(
+            filePaths: ["docs/guide.md"], directoryPaths: [".", "docs"]))
+        assert(!MordeWorkspaceTransferSupport.hasValidManifestPaths(
+            filePaths: ["docs"], directoryPaths: [".", "docs/project"]))
+        assert(!MordeWorkspaceTransferSupport.hasValidManifestPaths(
+            filePaths: ["Docs"], directoryPaths: ["docs/project"]))
+        assert(!MordeWorkspaceTransferSupport.hasValidManifestPaths(
+            filePaths: ["README.md", "readme.MD"], directoryPaths: ["."]))
 
         let removable = root.appendingPathComponent("local-copy.txt")
         try Data("local copy".utf8).write(to: removable)

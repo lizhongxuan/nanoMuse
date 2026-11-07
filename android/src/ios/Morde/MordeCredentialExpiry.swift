@@ -455,8 +455,8 @@ enum MordeHostControlPolicy {
 
     static func canRelease(state: String, actorID: String?, currentUserID: String?,
                            leaseActive: Bool?, transitioning: Bool) -> Bool {
-        state == "user" && !currentUserID.isNilOrEmpty && actorID == currentUserID &&
-            leaseActive == true && !transitioning
+        state == "user" && !currentUserID.isNilOrEmpty && !transitioning &&
+            ((actorID == currentUserID && leaseActive == true) || (actorID.isNilOrEmpty && leaseActive == false))
     }
 
     static func canRenew(state: String, actorID: String?, currentUserID: String?,
@@ -548,8 +548,9 @@ enum MordeProjectExecutionCapability {
         features?.contains("project_budget_execution") == true
     }
 
-    static func canContinueTask(status: String) -> Bool {
-        ["queued", "running", "waiting_user"].contains(status)
+    static func canContinueTask(status: String, waitingReason: String? = nil) -> Bool {
+        ["queued", "running", "waiting_user"].contains(status) &&
+            !(status == "waiting_user" && waitingReason == "project_recovery_unavailable")
     }
 }
 
@@ -746,6 +747,14 @@ struct MordeClientDataScope: Codable, Equatable, Hashable {
 
     var storageKey: String { Self.digest([serviceOrigin, serviceInstanceID, accountID, installationID]) }
 
+    // A new installation of the same account may resume locally saved messages after sign-in.
+    var messageOutboxKey: String { Self.digest([serviceOrigin, serviceInstanceID, accountID]) }
+
+    func hasSameAccount(as other: MordeClientDataScope) -> Bool {
+        serviceOrigin == other.serviceOrigin && serviceInstanceID == other.serviceInstanceID &&
+            accountID == other.accountID
+    }
+
     static func installationLookupKey(origin: String, serviceInstanceID: String, accountName: String) -> String? {
         guard let canonicalOrigin = MordeLoginStateStore.serviceOrigin(origin),
               let instanceID = UUID(uuidString: serviceInstanceID), !accountName.isEmpty else { return nil }
@@ -755,6 +764,16 @@ struct MordeClientDataScope: Codable, Equatable, Hashable {
     private static func digest(_ parts: [String]) -> String {
         SHA256.hash(data: Data(parts.joined(separator: "\u{0}").utf8))
             .map { String(format: "%02x", $0) }.joined()
+    }
+}
+
+enum MordeOfflineConversationPolicy {
+    static func mayRestore(_ saved: MordeClientDataScope, hasActiveInstallation: Bool,
+                           origin: String?, instanceID: String?, accountID: String?) -> Bool {
+        guard hasActiveInstallation else { return true }
+        guard let accountID, let instanceID else { return false }
+        return saved.serviceOrigin == origin && saved.serviceInstanceID == instanceID.lowercased() &&
+            saved.accountID == accountID
     }
 }
 
@@ -1086,10 +1105,8 @@ final class MordeLoginStateStore {
 
 enum MordeTaskAttempt {
     static func fingerprint(conversationID: String?, hostID: String, workspaceID: String? = nil,
-                            modelID: String, objective: String, attachmentIDs: [String] = [],
-                            expectedTaskID: String? = nil) -> String {
-        var fields = [conversationID ?? "", hostID, workspaceID ?? "", modelID, objective] + attachmentIDs
-        if let expectedTaskID { fields.append("queue:\(expectedTaskID)") }
+                            modelID: String, objective: String, attachmentIDs: [String] = []) -> String {
+        let fields = [conversationID ?? "", hostID, workspaceID ?? "", modelID, objective] + attachmentIDs
         let input = Data(fields.joined(separator: "\u{0}").utf8)
         return SHA256.hash(data: input).map { String(format: "%02x", $0) }.joined()
     }
@@ -1289,9 +1306,18 @@ enum MordeTaskSnapshotCursor {
     }
 }
 
+struct MordeClientMessageSource: Decodable, Equatable {
+    let user_message_id: String
+    let task_id: String
+    let task_revision: Int64
+    let event_sequence: Int64
+    let content: String
+}
+
 struct MordeClientMessage: Decodable, Equatable, Identifiable {
     let id: String
     let conversation_id: String?
+    let sequence: Int64?
     let task_id: String?
     let role: String
     let content: String
@@ -1299,12 +1325,34 @@ struct MordeClientMessage: Decodable, Equatable, Identifiable {
     let status: String?
     let delivery_status: String?
     let created_at: String?
+    let client_message_id: String?
+    let routing_status: String?
+    let routing_failure_reason: String?
+    let local_send_status: String?
+    let owner_id: String?
+    let actor_id: String?
+    let task_revision: Int64?
+    let result_event_sequence: Int64?
+    let sources: [MordeClientMessageSource]?
+    let output_status: String?
+    let output_task_revision: Int64?
+    let output_result_event_sequence: Int64?
 
-    init(id: String, conversation_id: String? = nil, task_id: String? = nil,
+    var displayStatus: String? { output_status ?? status }
+    var displayTaskRevision: Int64? { output_task_revision ?? task_revision }
+    var displayResultEventSequence: Int64? { output_result_event_sequence ?? result_event_sequence }
+
+    init(id: String, conversation_id: String? = nil, sequence: Int64? = nil, task_id: String? = nil,
          role: String, content: String, attachment_ids: [String]? = nil, status: String? = nil, delivery_status: String? = nil,
-         created_at: String? = nil) {
+         created_at: String? = nil, client_message_id: String? = nil, routing_status: String? = nil,
+         routing_failure_reason: String? = nil,
+         local_send_status: String? = nil, owner_id: String? = nil, actor_id: String? = nil,
+         task_revision: Int64? = nil, result_event_sequence: Int64? = nil,
+         sources: [MordeClientMessageSource]? = nil, output_status: String? = nil,
+         output_task_revision: Int64? = nil, output_result_event_sequence: Int64? = nil) {
         self.id = id
         self.conversation_id = conversation_id
+        self.sequence = sequence
         self.task_id = task_id
         self.role = role
         self.content = content
@@ -1312,11 +1360,125 @@ struct MordeClientMessage: Decodable, Equatable, Identifiable {
         self.status = status
         self.delivery_status = delivery_status
         self.created_at = created_at
+        self.client_message_id = client_message_id
+        self.routing_status = routing_status
+        self.routing_failure_reason = routing_failure_reason
+        self.local_send_status = local_send_status
+        self.owner_id = owner_id
+        self.actor_id = actor_id
+        self.task_revision = task_revision
+        self.result_event_sequence = result_event_sequence
+        self.sources = sources
+        self.output_status = output_status
+        self.output_task_revision = output_task_revision
+        self.output_result_event_sequence = output_result_event_sequence
+    }
+}
+
+struct MordeConversationMessageReceipt: Decodable {
+    let message: MordeClientMessage
+    // Text-upload commits may omit this field; a replay has the same message semantics.
+    let replayed: Bool?
+}
+
+enum MordeConversationMessageReceiptPolicy {
+    static func matches(_ message: MordeClientMessage, clientMessageID: String,
+                        conversationID: String, content: String) -> Bool {
+        message.role == "user" && !message.id.isEmpty && message.client_message_id == clientMessageID &&
+            message.conversation_id == conversationID && message.content.utf8.elementsEqual(content.utf8)
+    }
+}
+
+enum MordeConversationMessageOrder {
+    static func ascending<Message>(
+        _ messages: [Message],
+        sequence: (Message) -> Int64?,
+        createdAt: (Message) -> String?,
+        id: (Message) -> String
+    ) -> [Message] {
+        let indexed = Array(messages.enumerated())
+        let sequenced = indexed.filter { sequence($0.element) != nil }.sorted { lhs, rhs in
+            let left = sequence(lhs.element)!
+            let right = sequence(rhs.element)!
+            if left != right { return left < right }
+            let leftDate = createdAt(lhs.element) ?? ""
+            let rightDate = createdAt(rhs.element) ?? ""
+            if leftDate != rightDate { return leftDate < rightDate }
+            let leftID = id(lhs.element), rightID = id(rhs.element)
+            return leftID == rightID ? lhs.offset < rhs.offset : leftID < rightID
+        }
+        let local = indexed.filter { sequence($0.element) == nil }.sorted { lhs, rhs in
+            let leftDate = createdAt(lhs.element) ?? ""
+            let rightDate = createdAt(rhs.element) ?? ""
+            return leftDate == rightDate ? lhs.offset < rhs.offset : leftDate < rightDate
+        }
+        var ordered: [Message] = []
+        ordered.reserveCapacity(messages.count)
+        var serverIndex = 0, localIndex = 0
+        while serverIndex < sequenced.count && localIndex < local.count {
+            let server = sequenced[serverIndex].element
+            let pending = local[localIndex].element
+            if (createdAt(pending) ?? "") < (createdAt(server) ?? "") {
+                ordered.append(pending)
+                localIndex += 1
+            } else {
+                ordered.append(server)
+                serverIndex += 1
+            }
+        }
+        ordered.append(contentsOf: sequenced[serverIndex...].map(\.element))
+        ordered.append(contentsOf: local[localIndex...].map(\.element))
+        return ordered
     }
 }
 
 enum MordeTaskSnapshotMessageMerge {
+    static func shouldIncludeSnapshot(resultMessagePending: Bool?, resultMessagePublished: Bool?, status: String?) -> Bool {
+        if status == "interrupted" { return true }
+        return resultMessagePublished != true && (resultMessagePending != true || status == "streaming")
+    }
+
+    static func shouldDiscardPublishedSynthetic(_ message: MordeClientMessage, taskID: String,
+                                                currentRevision: Int64?, published: Bool?) -> Bool {
+        guard published == true, message.role == "assistant", message.task_id == taskID,
+              message.output_status == nil, message.status != nil, message.displayStatus != "interrupted",
+              message.sources?.isEmpty ?? true,
+              let currentRevision, let revision = message.displayTaskRevision else { return false }
+        return revision == currentRevision
+    }
+
+    static func shouldShowTaskResult(resultMessagePending: Bool?, resultMessagePublished: Bool?) -> Bool {
+        resultMessagePending != true && resultMessagePublished != true
+    }
+
     static let statuses: Set<String> = ["streaming", "completed", "interrupted"]
+
+    static func sourceCoversSnapshot(_ source: MordeClientMessageSource, snapshot: MordeClientMessage,
+                                     taskID: String) -> Bool {
+        guard snapshot.displayStatus == "completed", let revision = snapshot.displayTaskRevision,
+              let eventSequence = snapshot.displayResultEventSequence else { return false }
+        return source.task_id == taskID && source.task_revision == revision && source.event_sequence == eventSequence
+    }
+
+    static func preservingInterrupted(_ previous: [MordeClientMessage], in current: [MordeClientMessage],
+                                      conversationID: String) -> [MordeClientMessage] {
+        var values = current
+        for snapshot in previous where snapshot.role == "assistant" && snapshot.displayStatus == "interrupted" &&
+            snapshot.output_status == nil && snapshot.conversation_id == conversationID {
+            guard let taskID = snapshot.task_id, !values.contains(where: { $0.id == snapshot.id }) else { continue }
+            values = merge(values, snapshot: snapshot, taskID: taskID, conversationID: conversationID)
+        }
+        return values
+    }
+
+    static func deduplicatingPublished(_ messages: [MordeClientMessage]) -> [MordeClientMessage] {
+        let sources = messages.flatMap { $0.sources ?? [] }
+        return messages.filter { message in
+            guard message.role == "assistant", message.displayStatus == "completed",
+                  message.sources?.isEmpty ?? true, let taskID = message.task_id else { return true }
+            return !sources.contains { sourceCoversSnapshot($0, snapshot: message, taskID: taskID) }
+        }
+    }
 
     static func merge(_ messages: [MordeClientMessage], snapshot: MordeClientMessage?,
                       taskID: String, conversationID: String) -> [MordeClientMessage] {
@@ -1324,33 +1486,127 @@ enum MordeTaskSnapshotMessageMerge {
               snapshot.role == "assistant",
               snapshot.task_id == taskID,
               snapshot.conversation_id == conversationID,
-              let status = snapshot.status,
+              let status = snapshot.displayStatus,
               statuses.contains(status) else { return messages }
+
+        if messages.contains(where: { message in
+            message.sources?.contains(where: { sourceCoversSnapshot($0, snapshot: snapshot, taskID: taskID) }) == true
+        }) {
+            return messages.filter { $0.id != snapshot.id || $0.sources?.isEmpty == false }
+        }
 
         var merged = messages
         if let index = merged.firstIndex(where: { $0.id == snapshot.id }) {
             let existing = merged[index]
-            // The conversation endpoint only returns committed messages. If it already has this
-            // ID, prefer its content over an older in-flight snapshot read.
-            if status == "streaming", existing.status == nil {
+            if existing.sources?.isEmpty == false { return merged }
+            guard existing.role == "assistant", existing.conversation_id.map({ $0 == conversationID }) ?? true,
+                  existing.task_id.map({ $0 == taskID }) ?? true else { return merged }
+            if let existingRevision = existing.displayTaskRevision, let snapshotRevision = snapshot.displayTaskRevision,
+               existingRevision != snapshotRevision { return merged }
+            if existing.sequence != nil && existing.output_status != nil {
+                // A persisted final/interrupted message is authoritative. A streaming message may
+                // advance only with a longer snapshot for the same revision and exact byte prefix.
+                guard existing.displayStatus == "streaming", let existingRevision = existing.output_task_revision,
+                      let snapshotRevision = snapshot.displayTaskRevision, existingRevision == snapshotRevision,
+                      snapshot.content.utf8.count > existing.content.utf8.count,
+                      snapshot.content.utf8.starts(with: existing.content.utf8) else { return merged }
+            }
+            if existing.sequence != nil && existing.output_status == nil && existing.status == nil { return merged }
+            // Legacy conversation messages lacked sequence/status. Keep their final text when a
+            // stale streaming snapshot happens to have the same ID.
+            if status == "streaming", existing.output_status == nil, existing.displayStatus == nil {
                 merged[index] = MordeClientMessage(
                     id: existing.id, conversation_id: existing.conversation_id,
-                    task_id: existing.task_id, role: existing.role, content: existing.content,
+                    sequence: existing.sequence, task_id: existing.task_id, role: existing.role, content: existing.content,
                     attachment_ids: existing.attachment_ids,
                     status: "completed", delivery_status: existing.delivery_status,
-                    created_at: existing.created_at)
+                    created_at: existing.created_at, client_message_id: existing.client_message_id,
+                    routing_status: existing.routing_status, routing_failure_reason: existing.routing_failure_reason,
+                    local_send_status: existing.local_send_status,
+                    owner_id: existing.owner_id, actor_id: existing.actor_id, task_revision: existing.task_revision,
+                    result_event_sequence: existing.result_event_sequence, sources: existing.sources,
+                    output_status: existing.output_status, output_task_revision: existing.output_task_revision,
+                    output_result_event_sequence: existing.output_result_event_sequence)
             } else {
                 merged[index] = MordeClientMessage(
                     id: snapshot.id, conversation_id: snapshot.conversation_id ?? existing.conversation_id,
+                    sequence: existing.sequence ?? snapshot.sequence,
                     task_id: snapshot.task_id ?? existing.task_id, role: snapshot.role, content: snapshot.content,
                     attachment_ids: snapshot.attachment_ids ?? existing.attachment_ids,
                     status: snapshot.status, delivery_status: snapshot.delivery_status ?? existing.delivery_status,
-                    created_at: snapshot.created_at ?? existing.created_at)
+                    created_at: snapshot.created_at ?? existing.created_at,
+                    client_message_id: snapshot.client_message_id ?? existing.client_message_id,
+                    routing_status: snapshot.routing_status ?? existing.routing_status,
+                    routing_failure_reason: snapshot.routing_failure_reason ?? existing.routing_failure_reason,
+                    local_send_status: existing.local_send_status,
+                    owner_id: snapshot.owner_id ?? existing.owner_id, actor_id: snapshot.actor_id ?? existing.actor_id,
+                    task_revision: snapshot.task_revision,
+                    result_event_sequence: snapshot.result_event_sequence ?? existing.result_event_sequence,
+                    sources: snapshot.sources ?? existing.sources,
+                    output_status: existing.output_status == nil ? snapshot.output_status : snapshot.displayStatus,
+                    output_task_revision: snapshot.output_task_revision ?? existing.output_task_revision,
+                    output_result_event_sequence: snapshot.output_result_event_sequence ?? existing.output_result_event_sequence)
             }
         } else {
             merged.append(snapshot)
         }
-        return merged
+        return MordeConversationMessageOrder.ascending(
+            merged, sequence: { $0.sequence }, createdAt: { $0.created_at }, id: { $0.id })
+    }
+}
+
+enum MordeTaskStepPresentation {
+    // The server retains the original tool call in its audit trail; these labels are only for display.
+    static func titleLocalizationKey(_ title: String) -> String? {
+        if title == "开始处理" { return "Starting the task" }
+        let prefixes = ["Run cloud dsh tool: ", "Run Hostless Workspace tool: "]
+        guard let prefix = prefixes.first(where: { title.hasPrefix($0) }) else { return nil }
+        let tool = String(title.dropFirst(prefix.count)).lowercased()
+        switch tool {
+        case "morde_web_search": return "Search the web"
+        case "morde_web_read": return "Read a web page"
+        case "morde_workspace_list": return "Browse workspace files"
+        case "morde_workspace_read": return "Read a workspace file"
+        case "morde_workspace_write": return "Update a workspace file"
+        case "morde_read_task_attachment": return "Read an attachment"
+        default:
+            if tool.contains("computer") || tool.contains("desktop") || tool.contains("host") {
+                return "Use the cloud computer"
+            }
+            if tool.hasPrefix("morde_workspace_") || prefix == "Run Hostless Workspace tool: " {
+                return "Work in the workspace"
+            }
+            return "Process the task"
+        }
+    }
+
+    static func title(_ title: String) -> String {
+        guard let key = titleLocalizationKey(title) else { return title }
+        return NSLocalizedString(key, comment: "Task step shown to the user")
+    }
+
+    static func summary(_ summary: String, title: String) -> String? {
+        if summary.isEmpty { return nil }
+        if title == "开始处理" && summary == "正在处理你的请求。" {
+            return NSLocalizedString("Processing your request.", comment: "Task has started")
+        }
+        if titleLocalizationKey(title) != nil &&
+            ["Checking current authorization, budget, and Host control.",
+             "Checking the task checkpoint and Workspace revision."].contains(summary) { return nil }
+        return summary
+    }
+
+    static func isStartedProgress(kind: String?, title: String, status: String) -> Bool {
+        kind == "progress" && title == "开始处理" && status == "succeeded"
+    }
+}
+
+enum MordeTaskStartPresentation {
+    static func isWaiting(status: String, currentRevision: Int64?, desiredRevision: Int64?,
+                          currentRevisionStarted: Bool?) -> Bool {
+        guard ["queued", "running"].contains(status), let started = currentRevisionStarted else { return false }
+        guard started, let currentRevision, let desiredRevision else { return true }
+        return currentRevision != desiredRevision
     }
 }
 
@@ -1371,6 +1627,18 @@ enum MordeTaskStatusPresentation {
         case "连接器已撤销，等待处理": return "Connector revoked; action needed"
         case "电脑状态已变化，等待处理": return "Computer state changed; action needed"
         case "等待任务额度处理": return "Waiting for task quota"
+        case "需要选择电脑才能继续任务": return "Choose a computer to continue this task"
+        case "所需云端电脑暂不可用": return "Required cloud computer is unavailable"
+        case "所需工作区暂不可用": return "Required workspace is unavailable"
+        case "电脑操作结果待核对": return "Computer operation result needs review"
+        case "任务已绑定其他云端电脑，无法安全切换；请为新目标另发起任务。":
+            return "Task is bound to another cloud computer; start a new task for the new target."
+        case "任务已绑定其他工作区，无法安全切换；请为新目标另发起任务。":
+            return "Task is bound to another workspace; start a new task for the new target."
+        case "原项目权限/上下文变化，未安全恢复，请重新发送。":
+            return "原项目权限/上下文变化，未安全恢复，请重新发送。"
+        case "消息及上下文超过当前模型输入上限，原文已保留；请缩短后重新发送。":
+            return "Message and context exceed the model input limit; the original is retained. Shorten and send again."
         case "等待你处理": return "Waiting for you"
         case "正在暂停": return "Pausing"
         case "已暂停": return "Paused"
@@ -1409,6 +1677,14 @@ enum MordeTaskStatusPresentation {
             case "mcp_connector_revoked": return "连接器已撤销，等待处理"
             case "host_fence_changed": return "电脑状态已变化，等待处理"
             case "tool_call_budget": return "等待任务额度处理"
+            case "model_context_limit": return "消息及上下文超过当前模型输入上限，原文已保留；请缩短后重新发送。"
+            case "computer_target_missing": return "需要选择电脑才能继续任务"
+            case "computer_unavailable": return "所需云端电脑暂不可用"
+            case "workspace_unavailable": return "所需工作区暂不可用"
+            case "target_result_unknown": return "电脑操作结果待核对"
+            case "computer_target_changed": return "任务已绑定其他云端电脑，无法安全切换；请为新目标另发起任务。"
+            case "workspace_target_changed": return "任务已绑定其他工作区，无法安全切换；请为新目标另发起任务。"
+            case "project_recovery_unavailable": return "原项目权限/上下文变化，未安全恢复，请重新发送。"
             default: break
             }
             if waitingReason?.localizedCaseInsensitiveContains("unknown") == true { return "操作结果待核对" }
@@ -1440,27 +1716,710 @@ struct MordeRetryAttempt: Codable, Equatable {
     let scope: MordeClientDataScope
     let fingerprint: String
     let key: String
-    let inputRevision: Int64?
-    let expectedTaskID: String?
 
-    init(scope: MordeClientDataScope, fingerprint: String, key: String, inputRevision: Int64? = nil,
-         expectedTaskID: String? = nil) {
+    init(scope: MordeClientDataScope, fingerprint: String, key: String) {
         self.scope = scope
         self.fingerprint = fingerprint
         self.key = key
-        self.inputRevision = inputRevision
-        self.expectedTaskID = expectedTaskID
     }
 
     func matches(scope: MordeClientDataScope, fingerprint: String) -> Bool {
         self.scope == scope && self.fingerprint == fingerprint
     }
 
-    static func decodePersisted(from defaults: UserDefaults, scope: MordeClientDataScope) -> MordeRetryAttempt? {
-        guard let data = defaults.data(forKey: "morde.pendingSendAttempt.\(scope.storageKey)"),
-              let attempt = try? JSONDecoder().decode(MordeRetryAttempt.self, from: data),
-              attempt.scope == scope else { return nil }
+}
+
+enum MordeRoutingPresentation {
+    static func localizationKey(_ status: String?) -> String? {
+        status == "waiting_adjustment" ? "Adjustment received; waiting to update" : nil
+    }
+
+    static func failureLocalizationKey(_ reason: String?) -> String {
+        switch reason {
+        case "model_unavailable": return "Model temporarily unavailable"
+        case "routing_context_unavailable": return "Task context unavailable"
+        case "routing_action_unavailable": return "Unable to update the task"
+        case "message_too_long": return "Message and context exceed the model input limit; the original is retained. Shorten and send again."
+        default: return "Message processing failed"
+        }
+    }
+
+    static func canRetryProcessing(_ reason: String?) -> Bool { reason != "message_too_long" }
+}
+
+enum MordeRoutingRetryAttempt {
+    static func storageKey(scope: MordeClientDataScope, projectID: String?, conversationID: String, messageID: String) -> String {
+        "morde.routingRetry.\(scope.messageOutboxKey).\(projectID ?? "personal").\(conversationID).\(messageID)"
+    }
+}
+
+enum MordeOutboxState: String, Codable {
+    case pending, sending, unknown, failed, accepted
+}
+
+enum MordeOutboxFailurePolicy {
+    static func confirmsRejection(submissionBegan: Bool, firstSubmission: Bool, hadUncertainSubmission: Bool,
+                                  domain: String, code: Int) -> Bool {
+        submissionBegan && firstSubmission && !hadUncertainSubmission && domain == "Morde" && (400..<500).contains(code) &&
+            ![401, 408, 409, 425, 429].contains(code)
+    }
+
+    static func state(mayHaveBeenAccepted: Bool, confirmedRejection: Bool,
+                      domain: String, code: Int) -> MordeOutboxState {
+        if mayHaveBeenAccepted && !confirmedRejection { return .unknown }
+        if domain == "Morde" && (400..<500).contains(code) && code != 401 && code != 429 { return .failed }
+        return .pending
+    }
+}
+
+enum MordeCloudModelConfiguration {
+    static func isConfirmedAbsent(status: String, loaded: Bool, checkedAt: Date?, now: Date = Date()) -> Bool {
+        guard status == "not_configured", loaded, let checkedAt else { return false }
+        let age = now.timeIntervalSince(checkedAt)
+        return age >= 0 && age < 300
+    }
+}
+
+struct MordeProjectAttachmentUploadStatus: Decodable {
+    let attachment_id: String
+    let name: String
+    let media_type: String
+    let size_bytes: Int64
+    let sha256: String
+    let state: String
+    let total_chunks: Int
+    let received_sequences: [Int]
+    let replay: Bool
+    var derivative_mode: String? = nil
+    var derivative_state: String? = nil
+
+    var missingSequences: [Int] {
+        let received = Set(received_sequences)
+        return (0..<max(0, total_chunks)).filter { !received.contains($0) }
+    }
+
+    func isValid(name expectedName: String, mediaType: String, size: Int64, digest: String,
+                 existingID: String?, derivativeMode: String? = nil) -> Bool {
+        guard MordeProjectAttachmentContract.isValidAttachmentID(attachment_id),
+              existingID.map({ $0 == attachment_id }) ?? true,
+              name == expectedName, media_type == mediaType, size_bytes == size, sha256 == digest,
+              digest.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil,
+              let count = MordeProjectAttachmentContract.chunkCount(size: size), total_chunks == count,
+              ["uploading", "committed", "expired"].contains(state),
+              Set(received_sequences).count == received_sequences.count,
+              received_sequences.allSatisfy({ $0 >= 0 && $0 < count }) else { return false }
+        if let derivativeMode {
+            if let actual = derivative_mode {
+                guard actual == derivativeMode else { return false }
+                if derivativeMode == "none" {
+                    guard derivative_state == "none" else { return false }
+                } else {
+                    guard ["awaiting", "completed", "skipped"].contains(derivative_state ?? "") else { return false }
+                }
+            } else if derivativeMode != "none" {
+                return false
+            }
+        }
+        if state == "committed" { return received_sequences.count == count }
+        if state == "expired" { return received_sequences.isEmpty }
+        return true
+    }
+}
+
+struct MordeProjectDerivativeFile: Codable, Equatable {
+    let kind: String
+    let page: Int
+    let name: String
+    let media_type: String
+    let sha256: String
+    let content_base64: String
+}
+
+struct MordeProjectDerivativeRequest: Codable, Equatable {
+    let outcome: String
+    let files: [MordeProjectDerivativeFile]
+
+    func encoded(mode: String) -> Data? {
+        guard ["pdf", "image"].contains(mode), ["completed", "skipped"].contains(outcome) else { return nil }
+        if outcome == "skipped" {
+            guard files.isEmpty else { return nil }
+        } else {
+            if mode == "pdf" {
+                guard files.filter({ $0.kind == "extracted_text" && $0.page == 0 }).count == 1,
+                      files.count <= 11,
+                      files.allSatisfy({ ($0.kind == "extracted_text" && $0.page == 0) ||
+                          ($0.kind == "page_preview" && (1...10).contains($0.page)) }) else { return nil }
+            } else {
+                guard files.count == 1, files[0].kind == "image_conversion", files[0].page == 0 else { return nil }
+            }
+            guard Set(files.map { "\($0.kind):\($0.page)" }).count == files.count else { return nil }
+            for file in files {
+                guard MordeProjectAttachmentContract.isValidName(file.name),
+                      let data = Data(base64Encoded: file.content_base64),
+                      MordeMessageChunking.digest(data) == file.sha256 else { return nil }
+                if file.kind == "extracted_text" {
+                    guard file.media_type == "text/plain", data.count <= 48 * 1024,
+                          String(data: data, encoding: .utf8) != nil else { return nil }
+                } else {
+                    guard file.media_type == "image/jpeg", data.count <= 512 * 1024 else { return nil }
+                }
+            }
+        }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        guard let data = try? encoder.encode(self), data.count <= 8 * 1024 * 1024 else { return nil }
+        return data
+    }
+}
+
+enum MordeProjectAttachmentContract {
+    static let chunkBytes = 4 * 1024 * 1024
+    static let maxBytes: Int64 = 300 * 1024 * 1024
+
+    static func isValidName(_ name: String) -> Bool {
+        !name.isEmpty && name.utf8.count <= 255 && name != "." && name != ".." &&
+            !name.contains("/") && !name.contains("\\") &&
+            !name.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains)
+    }
+
+    static func isValidAttachmentID(_ id: String) -> Bool {
+        id.range(of: "^pca_[0-9a-f]{32}$", options: .regularExpression) != nil
+    }
+
+    static func chunkCount(size: Int64) -> Int? {
+        guard size >= 0, size <= maxBytes else { return nil }
+        return size == 0 ? 0 : Int((size - 1) / Int64(chunkBytes) + 1)
+    }
+
+    static func chunkRange(size: Int64, sequence: Int) -> Range<Int64>? {
+        guard let count = chunkCount(size: size), sequence >= 0, sequence < count else { return nil }
+        let offset = Int64(sequence) * Int64(chunkBytes)
+        return offset..<min(size, offset + Int64(chunkBytes))
+    }
+}
+
+enum MordePDFTextLimit {
+    static func appendingNote(_ text: String, note: String, limit: Int) -> String {
+        guard limit >= note.utf8.count else { return "" }
+        let budget = limit - note.utf8.count
+        var prefix = String.UnicodeScalarView()
+        var count = 0
+        for scalar in text.unicodeScalars {
+            let length = String(scalar).utf8.count
+            if count + length > budget { break }
+            prefix.append(scalar)
+            count += length
+        }
+        return String(prefix) + note
+    }
+}
+
+enum MordeMessageChunking {
+    static let directLimit = 32 * 1024
+    static let chunkSize = 16 * 1024
+    static let messageLimit = 8 * 1024 * 1024
+
+    static func count(for data: Data) -> Int {
+        (data.count + chunkSize - 1) / chunkSize
+    }
+
+    static func chunk(_ data: Data, sequence: Int) -> Data? {
+        guard sequence >= 0, sequence < count(for: data) else { return nil }
+        let start = sequence * chunkSize
+        return data.subdata(in: start..<min(start + chunkSize, data.count))
+    }
+
+    static func digest(_ data: Data) -> String {
+        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+}
+
+struct MordeOutboxAttachment: Codable, Equatable, Identifiable, Sendable {
+    let id: String
+    var attachmentID: String?
+    let localPath: String?
+    var linked: Bool
+    var sourceBookmark: Data?
+    var sourcePath: String?
+    var derivedLocalPaths: [String]?
+    var derivedAssociationPending: Bool?
+    var projectDerivativeMode: String?
+    var projectDerivativePayloadPath: String?
+    var projectDerivativePayloadDigest: String?
+    var originalFilename: String?
+
+    init(id: String, attachmentID: String?, localPath: String? = nil, linked: Bool,
+         sourceBookmark: Data? = nil, sourcePath: String? = nil,
+         derivedLocalPaths: [String]? = nil, derivedAssociationPending: Bool? = nil,
+         projectDerivativeMode: String? = nil, projectDerivativePayloadPath: String? = nil,
+         projectDerivativePayloadDigest: String? = nil, originalFilename: String? = nil) {
+        self.id = id
+        self.attachmentID = attachmentID
+        self.localPath = localPath
+        self.linked = linked
+        self.sourceBookmark = sourceBookmark
+        self.sourcePath = sourcePath
+        self.derivedLocalPaths = derivedLocalPaths
+        self.derivedAssociationPending = derivedAssociationPending
+        self.projectDerivativeMode = projectDerivativeMode
+        self.projectDerivativePayloadPath = projectDerivativePayloadPath
+        self.projectDerivativePayloadDigest = projectDerivativePayloadDigest
+        self.originalFilename = originalFilename
+    }
+}
+
+struct MordeOutboxMessage: Codable, Equatable, Identifiable {
+    let id: String
+    let scope: MordeClientDataScope
+    var conversationID: String
+    let projectID: String?
+    var previousClientMessageID: String?
+    let content: String
+    let modelID: String?
+    let referenceTaskID: String?
+    let hostID: String?
+    let workspaceID: String?
+    let createdAt: String
+    var attachments: [MordeOutboxAttachment]
+    var awaitingAttachmentBatch: Bool?
+    var pendingUploadPaths: [String]?
+    var preparedBatchAttachmentIDs: [String]?
+    var serverMessageID: String?
+    var state: MordeOutboxState
+    var error: String?
+    var submissionStarted: Bool? = nil
+    var submissionUncertain: Bool? = nil
+    var confirmedNotAccepted: Bool? = nil
+    var bypassedPredecessorIDs: [String]? = nil
+
+    var statusLocalizationKey: String {
+        if awaitingAttachmentBatch == true {
+            return state == .failed ? "Attachments need attention" : "Waiting for attachments"
+        }
+        if state == .accepted && attachments.contains(where: { !$0.linked || $0.derivedAssociationPending == true }) {
+            return error == nil
+                ? "Sent; uploading attachments" : "Sent; attachments need attention"
+        }
+        switch state {
+        case .pending: return "Waiting to send"
+        case .sending: return "Sending"
+        case .unknown: return "Send status unknown"
+        case .failed: return "Send failed"
+        case .accepted: return "Sent"
+        }
+    }
+}
+
+enum MordeOutboxScheduling {
+    private struct Conversation: Hashable {
+        let projectID: String?
+        let conversationID: String
+    }
+
+    private struct Dependency: Hashable {
+        let conversation: Conversation
+        let predecessorID: String
+    }
+
+    private static func conversation(_ message: MordeOutboxMessage) -> Conversation {
+        Conversation(projectID: message.projectID, conversationID: message.conversationID)
+    }
+
+    private static func dependencies(_ messages: [MordeOutboxMessage]) -> Set<Dependency> {
+        Set(messages.compactMap { message in
+            guard message.serverMessageID == nil, let previous = message.previousClientMessageID else { return nil }
+            return Dependency(conversation: conversation(message), predecessorID: previous)
+        })
+    }
+
+    private static func independentRetryBlocks(_ messages: [MordeOutboxMessage]) -> Set<Dependency> {
+        var blocked = Set<Dependency>()
+        for message in messages where message.serverMessageID == nil {
+            for skipped in message.bypassedPredecessorIDs ?? [] {
+                blocked.insert(Dependency(conversation: conversation(message), predecessorID: skipped))
+            }
+        }
+        return blocked
+    }
+
+    static func bypassablePredecessor(of message: MordeOutboxMessage, in messages: [MordeOutboxMessage],
+                                      inFlight: Set<String>) -> MordeOutboxMessage? {
+        guard message.state == .pending, message.serverMessageID == nil, message.submissionStarted == false,
+              message.submissionUncertain == false,
+              !inFlight.contains(message.id), let previousID = message.previousClientMessageID,
+              !inFlight.contains(previousID),
+              let index = messages.firstIndex(where: { $0.id == message.id }),
+              let previous = messages[..<index].first(where: { $0.id == previousID }),
+              previous.scope.hasSameAccount(as: message.scope), conversation(previous) == conversation(message),
+              previous.state == .failed, previous.serverMessageID == nil,
+              previous.confirmedNotAccepted == true, previous.submissionUncertain == false else { return nil }
+        return previous
+    }
+
+    static func readyIDs(_ messages: [MordeOutboxMessage], scope: MordeClientDataScope,
+                         inFlight: Set<String>) -> [String] {
+        let scoped = messages.filter { $0.scope.hasSameAccount(as: scope) }
+        let required = dependencies(scoped)
+        let independentBlocks = independentRetryBlocks(scoped)
+        let occupied = Set(scoped.filter { $0.serverMessageID == nil && inFlight.contains($0.id) }.map(conversation))
+        var awaitingReceipt = Set<Conversation>()
+        var ready: [String] = []
+        for message in scoped {
+            let conversation = conversation(message)
+            if message.serverMessageID == nil {
+                if independentBlocks.contains(Dependency(conversation: conversation, predecessorID: message.id)) { continue }
+                if message.state == .failed && !required.contains(Dependency(conversation: conversation, predecessorID: message.id)) {
+                    continue
+                }
+                if !awaitingReceipt.insert(conversation).inserted || occupied.contains(conversation) { continue }
+            }
+            guard message.state != .failed, !inFlight.contains(message.id) else { continue }
+            ready.append(message.id)
+        }
+        return ready
+    }
+
+    static func waitingForEarlierMessage(_ message: MordeOutboxMessage,
+                                         in messages: [MordeOutboxMessage]) -> String? {
+        guard message.serverMessageID == nil, let index = messages.firstIndex(where: { $0.id == message.id }) else { return nil }
+        let scoped = messages.filter { $0.scope.hasSameAccount(as: message.scope) }
+        if independentRetryBlocks(scoped).contains(Dependency(conversation: conversation(message), predecessorID: message.id)) {
+            return "Retry will wait until the independent message is received."
+        }
+        let required = dependencies(scoped)
+        guard let earlier = messages[..<index].first(where: {
+            $0.scope.hasSameAccount(as: message.scope) && conversation($0) == conversation(message) &&
+                $0.serverMessageID == nil &&
+                ($0.state != .failed || required.contains(Dependency(conversation: conversation($0), predecessorID: $0.id)))
+        }) else { return nil }
+        if earlier.state == .unknown {
+            return "The previous message’s delivery could not be verified. Retry or check it first."
+        }
+        if earlier.state == .failed {
+            return earlier.confirmedNotAccepted == true && earlier.submissionUncertain == false
+                ? "The previous message failed to send. Please handle it first."
+                : "The previous message’s delivery could not be verified. Retry or check it first."
+        }
+        return "Waiting for the previous message to be received."
+    }
+}
+
+enum MordeConversationMessagePayload {
+    private static func routingFields(_ message: MordeOutboxMessage) -> [String: Any] {
+        var fields: [String: Any] = [:]
+        if let previous = message.previousClientMessageID { fields["previous_client_message_id"] = previous }
+        if let model = message.modelID { fields["model_id"] = model }
+        if let target = message.referenceTaskID { fields["reference_task_id"] = target }
+        if let host = message.hostID { fields["host_id"] = host }
+        if let workspace = message.workspaceID { fields["workspace_id"] = workspace }
+        if !message.attachments.isEmpty { fields["client_attachment_ids"] = message.attachments.map(\.id) }
+        return fields
+    }
+
+    static func direct(_ message: MordeOutboxMessage) -> [String: Any] {
+        var fields = routingFields(message)
+        fields["client_message_id"] = message.id
+        fields["content"] = message.content
+        return fields
+    }
+
+    static func uploadInitialization(_ message: MordeOutboxMessage, bytes: Data) -> [String: Any] {
+        var fields = routingFields(message)
+        fields["total_bytes"] = bytes.count
+        fields["total_chunks"] = MordeMessageChunking.count(for: bytes)
+        fields["sha256"] = MordeMessageChunking.digest(bytes)
+        return fields
+    }
+}
+
+enum MordeOfflineProjectQueue {
+    static func messages(_ values: [MordeOutboxMessage], scope: MordeClientDataScope) -> [MordeOutboxMessage] {
+        values.filter { $0.projectID != nil && $0.scope.hasSameAccount(as: scope) }
+    }
+}
+
+/// A message written before its account can be verified, or with attachments that need repair.
+/// These records are never read by the network outbox and can only be recovered explicitly.
+struct MordeUnconfirmedMessage: Codable, Equatable, Identifiable {
+    let id: String
+    let serviceOrigin: String
+    let serviceInstanceID: String?
+    let accountName: String
+    let accountID: String?
+    var installationID: String? = nil
+    let conversationID: String?
+    let projectID: String?
+    let content: String
+    let modelID: String?
+    let referenceTaskID: String?
+    let hostID: String?
+    let workspaceID: String?
+    let attachmentIDs: [String]
+    let stagedAttachments: [MordeOutboxAttachment]
+    let pendingUploadPaths: [String]
+    let createdAt: String
+    let reason: String
+    var localAttachmentStatus: String? = nil
+
+    func belongsTo(origin: String?, accountName: String?, accountID: String?) -> Bool {
+        guard let origin, serviceOrigin == origin else { return false }
+        // A known account ID must never become visible to a different account with the same name.
+        if let expected = self.accountID { return expected == accountID }
+        guard let accountName, !self.accountName.isEmpty else { return false }
+        return self.accountName == accountName
+    }
+
+    func matchesInstance(_ instanceID: String?) -> Bool {
+        serviceInstanceID != nil && serviceInstanceID == instanceID
+    }
+
+    func matchesInstallation(_ activeInstallationID: String?) -> Bool {
+        accountID != nil || (installationID != nil && installationID == activeInstallationID)
+    }
+}
+
+enum MordeMessageAttachmentValidation {
+    static func isValid(attachmentIDs: [String], stagedAttachments: [MordeOutboxAttachment], projectID: String?,
+                        personalAttachmentIsValid: (String) -> Bool) -> Bool {
+        (projectID == nil || attachmentIDs.isEmpty) && attachmentIDs.count + stagedAttachments.count <= 16 &&
+            Set(attachmentIDs).count == attachmentIDs.count &&
+            attachmentIDs.allSatisfy(personalAttachmentIsValid) &&
+            Set(stagedAttachments.map(\.id)).count == stagedAttachments.count &&
+            stagedAttachments.allSatisfy {
+                $0.id.range(of: "^[A-Za-z0-9._~-]{8,128}$", options: .regularExpression) != nil
+            }
+    }
+}
+
+final class MordeUnconfirmedMessageStore {
+    private static let lock = NSLock()
+    private let root: URL
+    private let files: FileManager
+    init(root: URL, files: FileManager = .default) { self.root = root; self.files = files }
+
+    func messages() throws -> [MordeUnconfirmedMessage] {
+        Self.lock.lock(); defer { Self.lock.unlock() }
+        return try read()
+    }
+
+    func append(_ message: MordeUnconfirmedMessage) throws {
+        Self.lock.lock(); defer { Self.lock.unlock() }
+        var values = try read()
+        guard !values.contains(where: { $0.id == message.id }) else { throw CocoaError(.fileWriteFileExists) }
+        values.append(message)
+        try write(values)
+    }
+
+    func remove(id: String) throws {
+        Self.lock.lock(); defer { Self.lock.unlock() }
+        var values = try read()
+        values.removeAll { $0.id == id }
+        try write(values)
+    }
+
+    func updateAttachmentStatus(id: String, status: String) throws -> [MordeUnconfirmedMessage] {
+        Self.lock.lock(); defer { Self.lock.unlock() }
+        var values = try read()
+        guard let index = values.firstIndex(where: { $0.id == id }) else { return values }
+        values[index].localAttachmentStatus = status
+        try write(values)
+        return values
+    }
+
+    private var location: URL { root.appendingPathComponent("unconfirmed-messages.json") }
+    private func read() throws -> [MordeUnconfirmedMessage] {
+        guard files.fileExists(atPath: location.path) else { return [] }
+        return try JSONDecoder().decode([MordeUnconfirmedMessage].self, from: Data(contentsOf: location))
+    }
+    private func write(_ values: [MordeUnconfirmedMessage]) throws {
+        try files.createDirectory(at: root, withIntermediateDirectories: true)
+#if os(iOS)
+        try files.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
+                                ofItemAtPath: root.path)
+        try JSONEncoder().encode(values).write(to: location, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+#else
+        try JSONEncoder().encode(values).write(to: location, options: .atomic)
+#endif
+    }
+}
+
+private struct MordeOutboxSnapshot: Codable {
+    var messages: [MordeOutboxMessage] = []
+    var lastMessageIDs: [String: String] = [:]
+    var resolvedConversations: [String: String]? = nil
+    var routingRetryAttempts: [String: String]? = nil
+}
+
+/// Each account's messages are written atomically before the composer is cleared.
+final class MordeMessageOutbox {
+    private static let lock = NSLock()
+    private let root: URL
+    private let files: FileManager
+
+    init(root: URL, files: FileManager = .default) {
+        self.root = root
+        self.files = files
+    }
+
+    func messages(scope: MordeClientDataScope) throws -> [MordeOutboxMessage] {
+        Self.lock.lock()
+        defer { Self.lock.unlock() }
+        return try read(scope: scope).messages
+    }
+
+    func resolvedConversationID(_ id: String, scope: MordeClientDataScope) throws -> String {
+        Self.lock.lock()
+        defer { Self.lock.unlock() }
+        return try read(scope: scope).resolvedConversations?[id] ?? id
+    }
+
+    func beginRoutingRetry(storageKey: String, scope: MordeClientDataScope) throws -> String {
+        Self.lock.lock()
+        defer { Self.lock.unlock() }
+        var snapshot = try read(scope: scope)
+        if let existing = snapshot.routingRetryAttempts?[storageKey] { return existing }
+        let attempt = UUID().uuidString.lowercased()
+        var attempts = snapshot.routingRetryAttempts ?? [:]
+        attempts[storageKey] = attempt
+        snapshot.routingRetryAttempts = attempts
+        try write(snapshot, scope: scope)
         return attempt
+    }
+
+    func finishRoutingRetry(storageKey: String, attempt: String, scope: MordeClientDataScope) throws {
+        Self.lock.lock()
+        defer { Self.lock.unlock() }
+        var snapshot = try read(scope: scope)
+        guard snapshot.routingRetryAttempts?[storageKey] == attempt else { return }
+        snapshot.routingRetryAttempts?.removeValue(forKey: storageKey)
+        try write(snapshot, scope: scope)
+    }
+
+    func resolveLocalConversation(_ localID: String, serverID: String,
+                                  scope: MordeClientDataScope) throws {
+        Self.lock.lock()
+        defer { Self.lock.unlock() }
+        var snapshot = try read(scope: scope)
+        if let existing = snapshot.resolvedConversations?[localID], existing != serverID {
+            throw CocoaError(.fileWriteInvalidFileName)
+        }
+        var mappings = snapshot.resolvedConversations ?? [:]
+        mappings[localID] = serverID
+        snapshot.resolvedConversations = mappings
+        for index in snapshot.messages.indices where snapshot.messages[index].conversationID == localID {
+            snapshot.messages[index].conversationID = serverID
+        }
+        if let previous = snapshot.lastMessageIDs.removeValue(forKey: localID) {
+            snapshot.lastMessageIDs[serverID] = previous
+        }
+        try write(snapshot, scope: scope)
+    }
+
+    func enqueue(scope: MordeClientDataScope, conversationID: String, content: String,
+                 modelID: String?, attachmentIDs: [String], projectID: String? = nil,
+                 referenceTaskID: String? = nil, hostID: String? = nil,
+                 workspaceID: String? = nil, awaitingAttachmentBatch: Bool = false,
+                 stagedAttachments: [MordeOutboxAttachment] = [], pendingUploadPaths: [String] = []) throws -> MordeOutboxMessage {
+        Self.lock.lock()
+        defer { Self.lock.unlock() }
+        var snapshot = try read(scope: scope)
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let message = MordeOutboxMessage(
+            id: UUID().uuidString.lowercased(), scope: scope, conversationID: conversationID, projectID: projectID,
+            previousClientMessageID: snapshot.lastMessageIDs[conversationID], content: content,
+            modelID: modelID, referenceTaskID: referenceTaskID, hostID: hostID, workspaceID: workspaceID,
+            createdAt: formatter.string(from: Date()),
+            attachments: attachmentIDs.map {
+                MordeOutboxAttachment(id: UUID().uuidString.lowercased(), attachmentID: $0, linked: false)
+            } + stagedAttachments, awaitingAttachmentBatch: awaitingAttachmentBatch,
+            pendingUploadPaths: pendingUploadPaths, preparedBatchAttachmentIDs: nil,
+            serverMessageID: nil, state: .pending, error: nil,
+            submissionStarted: false, submissionUncertain: false, confirmedNotAccepted: false)
+        snapshot.messages.append(message)
+        snapshot.lastMessageIDs[conversationID] = message.id
+        try write(snapshot, scope: scope)
+        return message
+    }
+
+    func replace(_ message: MordeOutboxMessage, scope: MordeClientDataScope) throws {
+        Self.lock.lock()
+        defer { Self.lock.unlock() }
+        guard message.scope.hasSameAccount(as: scope) else { throw CocoaError(.fileWriteNoPermission) }
+        var snapshot = try read(scope: scope)
+        guard let index = snapshot.messages.firstIndex(where: { $0.id == message.id }) else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+        snapshot.messages[index] = message
+        try write(snapshot, scope: scope)
+    }
+
+    func detachFailedPredecessor(messageID: String, predecessorID: String,
+                                 scope: MordeClientDataScope) throws -> Bool {
+        Self.lock.lock()
+        defer { Self.lock.unlock() }
+        var snapshot = try read(scope: scope)
+        guard let index = snapshot.messages.firstIndex(where: { $0.id == messageID }),
+              let previous = MordeOutboxScheduling.bypassablePredecessor(of: snapshot.messages[index],
+                  in: snapshot.messages, inFlight: []), previous.id == predecessorID else { return false }
+        snapshot.messages[index].previousClientMessageID = previous.previousClientMessageID
+        var skipped = snapshot.messages[index].bypassedPredecessorIDs ?? []
+        if !skipped.contains(previous.id) { skipped.append(previous.id) }
+        snapshot.messages[index].bypassedPredecessorIDs = skipped
+        try write(snapshot, scope: scope)
+        return true
+    }
+
+    @discardableResult
+    func update(id: String, scope: MordeClientDataScope,
+                _ change: (inout MordeOutboxMessage) -> Void) throws -> MordeOutboxMessage {
+        Self.lock.lock()
+        defer { Self.lock.unlock() }
+        var snapshot = try read(scope: scope)
+        guard let index = snapshot.messages.firstIndex(where: { $0.id == id }) else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+        change(&snapshot.messages[index])
+        let message = snapshot.messages[index]
+        try write(snapshot, scope: scope)
+        return message
+    }
+
+    func remove(id: String, scope: MordeClientDataScope) throws {
+        Self.lock.lock()
+        defer { Self.lock.unlock() }
+        var snapshot = try read(scope: scope)
+        snapshot.messages.removeAll { $0.id == id }
+        try write(snapshot, scope: scope)
+    }
+
+    private func location(scope: MordeClientDataScope) -> URL {
+        root.appendingPathComponent("\(scope.messageOutboxKey).json")
+    }
+
+    private func read(scope: MordeClientDataScope) throws -> MordeOutboxSnapshot {
+        let url = location(scope: scope)
+        guard files.fileExists(atPath: url.path) else { return MordeOutboxSnapshot() }
+        let snapshot = try JSONDecoder().decode(MordeOutboxSnapshot.self, from: Data(contentsOf: url))
+        guard snapshot.messages.allSatisfy({ $0.scope.hasSameAccount(as: scope) }) else {
+            throw CocoaError(.fileReadNoPermission)
+        }
+        return snapshot
+    }
+
+    private func write(_ snapshot: MordeOutboxSnapshot, scope: MordeClientDataScope) throws {
+        try files.createDirectory(at: root, withIntermediateDirectories: true)
+#if os(iOS)
+        try files.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
+                                ofItemAtPath: root.path)
+#endif
+        let url = location(scope: scope)
+        let data = try JSONEncoder().encode(snapshot)
+#if os(iOS)
+        try data.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+#else
+        try data.write(to: url, options: .atomic)
+#endif
     }
 }
 

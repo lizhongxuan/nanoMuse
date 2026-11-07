@@ -552,6 +552,7 @@ struct MIFLibraryRoot: View {
     var chrome: NanoMuseRoomChrome? = nil
     var onMenu: (() -> Void)? = nil
     var personalDataRoot: URL = MordePersonalStorage.root
+    var previewNavigation: MordeFilePreviewNavigation? = nil
     @ObservedObject private var personal = NanoMuseMordePersonalContentStore.shared
     @ObservedObject private var authorization = MordeShellAuthorization.shared
     @ObservedObject private var taskStore = MIFTaskPageStore.shared
@@ -567,6 +568,9 @@ struct MIFLibraryRoot: View {
     @State private var personalAttachmentDownload: MordePersonalAttachmentDownload?
     @State private var personalAttachmentDownloadTask: Task<Void, Never>?
     @State private var personalAttachmentRequestID: UUID?
+#if DEBUG
+    @State private var localAttachmentPreviewIsolationFixtureStarted = false
+#endif
     @State private var previewUnavailable = false
     @State private var previewUnavailableAfterDismissal = false
 
@@ -672,12 +676,19 @@ struct MIFLibraryRoot: View {
                        taskMediaGenerationAvailable: taskStore.taskMediaGenerationAvailable,
                        localItems: localItems, taskArtifacts: taskArtifacts, accountItems: accountItems,
                        onPreview: preview)
-            .sheet(item: $previewItem, onDismiss: previewDismissed) { item in
+            .fullScreenCover(item: personalPreviewBinding, onDismiss: previewDismissed) { item in
                 if let name = item.attachmentName, let mediaType = item.attachmentMediaType {
                     MIFPersonalAttachmentPreview(
                         item: MIFPersonalAttachmentPreviewItem(fileURL: item.url, name: name, mediaType: mediaType),
+                        navigation: previewNavigation,
                         onClose: { dismissPersonalAttachmentPreview() })
-                } else if let url = item.url {
+                } else {
+                    Text(AppLocalized("Artifact details unavailable"))
+                        .foregroundStyle(NanoMuseTones.secondaryText)
+                }
+            }
+            .sheet(item: nonPersonalPreviewBinding, onDismiss: previewDismissed) { item in
+                if let url = item.url {
                     NanoMuseQuickLook(url: url).ignoresSafeArea()
                 } else {
                     ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -912,8 +923,34 @@ struct MIFLibraryRoot: View {
                 previewUnavailableAfterDismissal = true
             }
         }
+#if DEBUG
+        scheduleLocalAttachmentPreviewIsolationFixture(scopeKey: target.scopeKey, requestID: requestID)
+#endif
         await personalAttachmentDownloadTask?.value
     }
+
+#if DEBUG
+    private func scheduleLocalAttachmentPreviewIsolationFixture(scopeKey: String, requestID: UUID) {
+        let arguments = ProcessInfo.processInfo.arguments
+        let changesAccount = arguments.contains("-morde.localAttachmentPreviewAccountChangeFixture")
+        let disablesSync = arguments.contains("-morde.localAttachmentPreviewSyncDisableFixture")
+        guard (changesAccount || disablesSync), !localAttachmentPreviewIsolationFixtureStarted else { return }
+        localAttachmentPreviewIsolationFixtureStarted = true
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            guard personalAttachmentRequestID == requestID else { return }
+            if changesAccount {
+                NotificationCenter.default.post(
+                    name: Notification.Name("morde.localAttachmentPreviewChangeAccount"), object: nil)
+            } else {
+                NanoMuseMordeProfileSyncPreference.setEnabled(false, scopeKey: scopeKey)
+                await personal.refresh(root: personalDataRoot)
+                // Keep the test fixture from persisting a preference into later Simulator tests.
+                NanoMuseMordeProfileSyncPreference.setEnabled(true, scopeKey: scopeKey)
+            }
+        }
+    }
+#endif
 
     private func personalAttachmentTargetIsCurrent(_ target: MIFLibraryAttachmentPreviewTarget) -> Bool {
         guard authorization.signedIn, authorization.personalDataScopeKey == target.scopeKey,
@@ -947,6 +984,16 @@ struct MIFLibraryRoot: View {
             previewUnavailableAfterDismissal = false
             previewUnavailable = true
         }
+    }
+
+    private var personalPreviewBinding: Binding<MIFLibraryPreviewItem?> {
+        Binding(get: { previewItem?.isPersonalAttachment == true ? previewItem : nil },
+                set: { if $0 == nil, previewItem?.isPersonalAttachment == true { previewItem = nil } })
+    }
+
+    private var nonPersonalPreviewBinding: Binding<MIFLibraryPreviewItem?> {
+        Binding(get: { previewItem?.isPersonalAttachment == false ? previewItem : nil },
+                set: { if $0 == nil, previewItem?.isPersonalAttachment == false { previewItem = nil } })
     }
 
     private func visibleSessionTitles() async -> [String: String] {
@@ -1101,6 +1148,7 @@ enum MIFLibraryTemporaryFileCleanup {
 
 struct MIFPersonalAttachmentPreview: View {
     let item: MIFPersonalAttachmentPreviewItem
+    var navigation: MordeFilePreviewNavigation? = nil
     let onClose: () -> Void
 
     @State private var image: UIImage?
@@ -1168,6 +1216,18 @@ struct MIFPersonalAttachmentPreview: View {
                 .padding(.top, 2)
             }
             .accessibilityIdentifier("morde.attachment.preview.scroll")
+
+            if let navigation {
+                MordeDesignTabBar(selectedTab: navigation.selectedTab,
+                                  approvalCount: navigation.approvalCount) { tab in
+                    onClose()
+                    navigation.onSelectTab(tab)
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+                .padding(.bottom, 16)
+                .accessibilityIdentifier("morde.attachment.preview.tabBar")
+            }
         }
         .background(ChatColors.background.ignoresSafeArea())
         .task(id: item.fileURL) {

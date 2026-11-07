@@ -145,13 +145,14 @@ final class MordeRegistrationUITests: XCTestCase {
 
         let running = app.buttons["morde.resources.host.open.h0000001"]
         XCTAssertTrue(running.waitForExistence(timeout: 15), "A running host with a ready binding can open.")
-        XCTAssertFalse(app.buttons["morde.resources.host.open.h0000002"].exists,
-                       "An offline host has no open action.")
+        let offlineOpen = app.buttons["morde.resources.host.open.h0000002"]
+        XCTAssertTrue(offlineOpen.waitForExistence(timeout: 10))
+        XCTAssertFalse(offlineOpen.isEnabled, "An offline host's open action is disabled.")
 
         let unready = app.staticTexts["A ready Workspace binding is required to open this computer."]
         for _ in 0..<10 where !unready.exists { app.swipeUp() }
         XCTAssertTrue(unready.exists, "A syncing binding explains why its host cannot open.")
-        XCTAssertFalse(app.buttons["morde.resources.host.open.h0000003"].exists)
+        XCTAssertFalse(app.buttons["morde.resources.host.open.h0000003"].isEnabled)
 
         let unknown = app.staticTexts["Control status unknown"]
         for _ in 0..<10 where !unknown.exists { app.swipeUp() }
@@ -168,12 +169,8 @@ final class MordeRegistrationUITests: XCTestCase {
         XCTAssertFalse(app.buttons["morde.resources.host.takeOver.h0000008"].exists,
                        "Shared Hosts never expose control actions.")
 
-        let takeover = app.buttons["morde.resources.host.takeOver.h0000006"]
-        for _ in 0..<10 where !takeover.isHittable { app.swipeUp() }
-        XCTAssertTrue(takeover.isHittable)
-        takeover.tap()
-        XCTAssertTrue(app.staticTexts["morde.resources.host.error.h0000006"].waitForExistence(timeout: 10),
-                      "The local conflict is surfaced on the affected Host.")
+        // nanoMuse: Resource rows may only release active user control; takeover lives in the host control screen.
+        XCTAssertFalse(app.buttons["morde.resources.host.takeOver.h0000006"].exists)
 
         let returnToAI = app.buttons["morde.resources.host.returnToAI.h0000007"]
         for _ in 0..<10 where !returnToAI.isHittable { app.swipeUp() }
@@ -284,7 +281,10 @@ final class MordeRegistrationUITests: XCTestCase {
                        "Task list errors use pull-to-refresh, not an extra retry button.")
         let taskList = app.scrollViews["morde.tasks.list"]
         XCTAssertTrue(taskList.waitForExistence(timeout: 5))
-        taskList.swipeDown()
+        // nanoMuse: Start at the scroll view's top edge so the short error state receives a pull gesture.
+        let pullStart = taskList.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.05))
+        let pullEnd = taskList.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.65))
+        pullStart.press(forDuration: 0.05, thenDragTo: pullEnd)
         XCTAssertTrue(app.descendants(matching: .any)
             .matching(identifier: "morde.tasks.empty").firstMatch.waitForExistence(timeout: 15))
         app.terminate()
@@ -327,7 +327,8 @@ final class MordeRegistrationUITests: XCTestCase {
             .matching(identifier: "morde.task.loadError").firstMatch
         XCTAssertTrue(error.waitForExistence(timeout: 15))
         XCTAssertFalse(app.staticTexts["morde.task.objective"].exists)
-        XCTAssertTrue(error.buttons["morde.task.loadError.retry"].exists)
+        XCTAssertFalse(error.buttons["morde.task.loadError.retry"].exists,
+                       "Task detail permission errors do not add a retry button; reopen the detail to reload.")
         app.terminate()
     }
 
@@ -902,7 +903,7 @@ final class MordeRegistrationUITests: XCTestCase {
             XCTFail("First sequential send failed: \(firstSendAlert.staticTexts.allElementsBoundByIndex.map(\.label).joined(separator: " | "))")
             return
         }
-        if app.keyboards.firstMatch.exists { app.buttons["morde.chat.keyboardDone"].tap() }
+        dismissKeyboard(in: app)
         for _ in 0..<8 where !firstReply.isHittable { transcript.swipeDown() }
         XCTAssertTrue(firstReply.waitForExistence(timeout: 15))
         XCTAssertTrue(app.staticTexts["Sequential prompt one"].exists)
@@ -918,7 +919,7 @@ final class MordeRegistrationUITests: XCTestCase {
             XCTFail("Second sequential send failed: \(secondSendAlert.staticTexts.allElementsBoundByIndex.map(\.label).joined(separator: " | "))")
             return
         }
-        if app.keyboards.firstMatch.exists { app.buttons["morde.chat.keyboardDone"].tap() }
+        dismissKeyboard(in: app)
 
         let secondPrompt = app.staticTexts["Sequential prompt two"]
         let secondReply = app.staticTexts["Local sequential reply 2"]
@@ -931,6 +932,372 @@ final class MordeRegistrationUITests: XCTestCase {
         for _ in 0..<8 where !secondReply.isHittable { transcript.swipeUp() }
         XCTAssertTrue(secondReply.waitForExistence(timeout: 15))
         signOutFromSettings(app)
+        app.terminate()
+    }
+
+    func testProjectOutboxVisibleAfterOfflineRestartWithoutPersonalConversation() throws {
+        let app = XCUIApplication()
+        let baseArguments = ["-morde.server", "https://127.0.0.1:7080", "-morde.localRegistrationStub",
+                             "-morde.localRegistrationApproved", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        app.launchArguments = baseArguments + ["-morde.localProjectQueueFixture"]
+        app.launch()
+        if app.buttons["morde.shell.drawer"].waitForExistence(timeout: 2) { signOutFromSettings(app) }
+        openMordeFromCurrentRoot(app)
+        let fixtureUser = "project-offline-" + String(UUID().uuidString.prefix(8)).lowercased()
+        try signInToFixtureAccount(fixtureUser, in: app)
+        let disclosure = app.descendants(matching: .any).matching(identifier: "morde.projectOutbox.disclosure").firstMatch
+        XCTAssertTrue(disclosure.waitForExistence(timeout: 20))
+        app.terminate()
+
+        app.launchArguments = baseArguments + ["-morde.localProjectQueueOffline"]
+        app.launch()
+        let alert = app.alerts.firstMatch
+        if alert.waitForExistence(timeout: 4) { alert.buttons.firstMatch.tap() }
+        openMordeFromCurrentRoot(app)
+        if alert.waitForExistence(timeout: 2) { alert.buttons.firstMatch.tap() }
+        XCTAssertTrue(disclosure.waitForExistence(timeout: 15), "The scoped project queue must remain discoverable offline.")
+        disclosure.tap()
+        let message = app.staticTexts["Local offline project message"]
+        XCTAssertTrue(message.waitForExistence(timeout: 5))
+        app.buttons["重试发送"].tap()
+        XCTAssertTrue(message.exists, "Retrying while offline must keep the message locally.")
+        app.terminate()
+    }
+
+    func testIdentityPendingMessageSurvivesRestartAndNeedsExplicitRecovery() throws {
+        let app = XCUIApplication()
+        let baseArguments = ["-morde.server", "https://127.0.0.1:7080", "-morde.localRegistrationStub",
+                             "-morde.localRegistrationApproved", "-morde.localTaskSSEFixture",
+                             "-morde.localTaskSequentialSendFixture", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launchArguments = baseArguments + ["-morde.localDelayIdentityFixture"]
+        app.launch()
+        if app.buttons["morde.shell.drawer"].waitForExistence(timeout: 2) { signOutFromSettings(app) }
+        openMordeFromCurrentRoot(app)
+        let fixtureUser = "identity-pending-" + String(UUID().uuidString.prefix(8)).lowercased()
+        try signInToFixtureAccount(fixtureUser, in: app)
+        let draft = app.descendants(matching: .any).matching(identifier: "morde.chat.composer").firstMatch
+        XCTAssertTrue(draft.waitForExistence(timeout: 10))
+        let text = "Local pending " + String(UUID().uuidString.prefix(8))
+        draft.tap()
+        draft.typeText(text)
+        app.buttons["morde.task.send"].tap()
+        XCTAssertTrue(app.staticTexts[text].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["账号或服务身份待确认；消息仅保存在本机。"].exists)
+        app.terminate()
+
+        app.launchArguments = baseArguments
+        app.launch()
+        openMordeFromCurrentRoot(app)
+        XCTAssertTrue(app.staticTexts[text].waitForExistence(timeout: 20), "A restart must not lose or auto-send the local record.")
+        let restore = app.buttons["确认并恢复"]
+        XCTAssertTrue(restore.waitForExistence(timeout: 10))
+        restore.tap()
+        app.buttons["确认归属并恢复到输入框"].tap()
+        let restored = expectation(for: NSPredicate(format: "value == %@", text), evaluatedWith: draft)
+        wait(for: [restored], timeout: 10)
+        XCTAssertTrue(app.staticTexts[text].exists, "Recovery must retain the local original until explicitly removed.")
+        app.buttons["删除本机记录"].tap()
+        app.buttons["morde.unconfirmed.delete.confirm"].firstMatch.tap()
+        app.terminate()
+    }
+
+    func testAnotherMessageCanBeSentWhileFirstResponseIsPending() throws {
+        let app = XCUIApplication()
+        let fixtureServer = "https://127.0.0.1:\(Int.random(in: 20000...60000))"
+        app.launchArguments = ["-morde.server", fixtureServer, "-morde.localRegistrationStub",
+                              "-morde.localRegistrationApproved", "-morde.localTaskSSEFixture",
+                              "-morde.localTaskSequentialSendFixture", "-morde.localDelayFirstMessageResponse",
+                              "-morde.localAdjustmentFixture", "-morde.localFixtureDiagnostics",
+                              "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launch()
+        if app.buttons["morde.shell.drawer"].waitForExistence(timeout: 2) { signOutFromSettings(app) }
+        openMordeFromCurrentRoot(app)
+        try signInToFixtureAccount("concurrent-send-user", in: app)
+        let draft = app.descendants(matching: .any).matching(identifier: "morde.chat.composer").firstMatch
+        let send = app.buttons["morde.task.send"]
+        XCTAssertTrue(draft.waitForExistence(timeout: 10))
+        draft.tap()
+        draft.typeText("Sequential prompt one")
+        XCTAssertTrue(send.isEnabled)
+        send.tap()
+        XCTAssertTrue(app.staticTexts["Sending"].waitForExistence(timeout: 5))
+        draft.tap()
+        draft.typeText("Sequential prompt two")
+        XCTAssertTrue(send.isEnabled)
+        let keyboard = app.keyboards.firstMatch
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 5))
+        XCTAssertGreaterThanOrEqual(send.frame.width, 44)
+        XCTAssertGreaterThanOrEqual(send.frame.height, 44)
+        XCTAssertLessThanOrEqual(send.frame.maxY, keyboard.frame.minY + 1)
+        let keyboardLayout = XCTAttachment(screenshot: app.screenshot())
+        keyboardLayout.name = "Chat with keyboard and pending message"
+        keyboardLayout.lifetime = .keepAlways
+        add(keyboardLayout)
+        send.tap()
+        XCTAssertTrue(app.staticTexts["Sequential prompt two"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Sequential prompt one"].exists)
+        XCTAssertTrue(app.staticTexts["Adjustment received; waiting to update"].waitForExistence(timeout: 10))
+        let transcript = app.descendants(matching: .any).matching(identifier: "morde.chat.transcript").firstMatch
+        XCTAssertTrue(transcript.waitForExistence(timeout: 5))
+        let visibleReply = app.staticTexts["Local sequential reply 2"]
+        XCTAssertTrue(visibleReply.waitForExistence(timeout: 5))
+        XCTAssertTrue(visibleReply.isHittable)
+        let attachmentButton = app.buttons["morde.chat.addAttachment"]
+        // Account for the message bubble padding and the composer's pill insets.
+        let keyboardPosition = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            visibleReply.frame.maxY + 10 <= attachmentButton.frame.minY - 20 - 8
+        }, object: nil)
+        let keyboardLayoutResult = XCTWaiter.wait(for: [keyboardPosition], timeout: 5)
+        if keyboardLayoutResult != .completed {
+            let screenshot = XCTAttachment(screenshot: app.screenshot())
+            screenshot.name = "Latest reply and composer after layout"
+            screenshot.lifetime = .keepAlways
+            add(screenshot)
+        }
+        XCTAssertEqual(keyboardLayoutResult, .completed,
+                       "The newest reply must stay above the composer while typing.")
+        visibleReply.tap()
+        XCTAssertTrue(keyboard.waitForNonExistence(timeout: 5))
+        let chatTab = app.buttons["morde.shell.tab.chat"]
+        XCTAssertTrue(chatTab.waitForExistence(timeout: 5))
+        XCTAssertTrue(chatTab.isHittable)
+        let latestReply = app.staticTexts["Local sequential reply 2"]
+        XCTAssertTrue(latestReply.waitForExistence(timeout: 10))
+        XCTAssertTrue(latestReply.isHittable)
+        let restingPosition = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            latestReply.frame.maxY + 10 <= attachmentButton.frame.minY - 20 - 8
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [restingPosition], timeout: 5), .completed)
+        let restingLayout = XCTAttachment(screenshot: app.screenshot())
+        restingLayout.name = "Chat with bottom navigation"
+        restingLayout.lifetime = .keepAlways
+        add(restingLayout)
+        app.terminate()
+    }
+
+    func testConfirmedRejectionCanBeBypassedWithoutLosingTheOriginal() throws {
+        let app = XCUIApplication()
+        let fixtureServer = "https://127.0.0.1:\(Int.random(in: 20000...60000))"
+        let baseArguments = ["-morde.server", fixtureServer, "-morde.localRegistrationStub",
+                             "-morde.localRegistrationApproved", "-morde.localTaskSSEFixture",
+                             "-morde.localTaskSequentialSendFixture", "-morde.localIndependentSendFixture",
+                             "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launchArguments = baseArguments + ["-morde.localDelayFirstMessageResponse"]
+        app.launch()
+        if app.buttons["morde.shell.drawer"].waitForExistence(timeout: 2) { signOutFromSettings(app) }
+        openMordeFromCurrentRoot(app)
+        try signInToFixtureAccount("independent-" + String(UUID().uuidString.prefix(8)).lowercased(), in: app)
+
+        let draft = app.descendants(matching: .any).matching(identifier: "morde.chat.composer").firstMatch
+        let send = app.buttons["morde.task.send"]
+        XCTAssertTrue(draft.waitForExistence(timeout: 10))
+        draft.tap(); draft.typeText("Synthetic rejected message"); send.tap()
+        XCTAssertTrue(app.staticTexts["Synthetic permanent rejection"].waitForExistence(timeout: 10))
+        draft.tap(); draft.typeText("Independent follow-up"); send.tap()
+        let independent = app.buttons["Send this message independently"]
+        XCTAssertTrue(independent.waitForExistence(timeout: 10))
+        independent.tap()
+        XCTAssertTrue(app.staticTexts["The failed message remains on this device. It will not be included in the AI task for this message."].waitForExistence(timeout: 5))
+        let cancel = app.buttons["Cancel"].firstMatch
+        if cancel.exists { cancel.tap() }
+        else { app.otherElements["PopoverDismissRegion"].firstMatch.tap() }
+        XCTAssertTrue(independent.exists, "Cancel must not change the predecessor or start sending.")
+        XCTAssertTrue(app.staticTexts["Synthetic rejected message"].exists)
+        app.terminate()
+
+        app.launch()
+        openMordeFromCurrentRoot(app)
+        XCTAssertTrue(app.staticTexts["Synthetic rejected message"].waitForExistence(timeout: 15))
+        XCTAssertTrue(independent.waitForExistence(timeout: 10), "Failure evidence must survive a restart.")
+        independent.tap()
+        app.buttons["morde.outbox.detach.confirm"].firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["Sending"].waitForExistence(timeout: 5))
+        app.terminate()
+
+        app.launchArguments = baseArguments
+        app.launch()
+        openMordeFromCurrentRoot(app)
+        XCTAssertTrue(app.staticTexts["Independent follow-up"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["Local sequential reply 1"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["Synthetic rejected message"].exists, "The rejected original must remain local.")
+        XCTAssertFalse(independent.exists, "The confirmed predecessor change must survive a restart.")
+        draft.tap(); draft.typeText("Following message"); send.tap()
+        XCTAssertTrue(app.staticTexts["Local sequential reply 2"].waitForExistence(timeout: 15),
+                      "The next message must refer to the independently sent message.")
+        XCTAssertTrue(app.staticTexts["Synthetic rejected message"].exists)
+        app.terminate()
+    }
+
+    func testUnknownDeliveryAndFailedLookupCannotBeBypassed() throws {
+        let app = XCUIApplication()
+        let fixtureServer = "https://127.0.0.1:\(Int.random(in: 20000...60000))"
+        app.launchArguments = ["-morde.server", fixtureServer, "-morde.localRegistrationStub",
+                               "-morde.localRegistrationApproved", "-morde.localTaskSSEFixture",
+                               "-morde.localTaskSequentialSendFixture", "-morde.localUncertainReconcileFixture",
+                               "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launch()
+        if app.buttons["morde.shell.drawer"].waitForExistence(timeout: 2) { signOutFromSettings(app) }
+        openMordeFromCurrentRoot(app)
+        try signInToFixtureAccount("uncertain-" + String(UUID().uuidString.prefix(8)).lowercased(), in: app)
+        let draft = app.descendants(matching: .any).matching(identifier: "morde.chat.composer").firstMatch
+        let send = app.buttons["morde.task.send"]
+        XCTAssertTrue(draft.waitForExistence(timeout: 10))
+        draft.tap(); draft.typeText("Synthetic ambiguous message"); send.tap()
+        XCTAssertTrue(app.staticTexts["Send status unknown"].waitForExistence(timeout: 10))
+        draft.tap(); draft.typeText("Wait for verification"); send.tap()
+        XCTAssertTrue(app.staticTexts["Synthetic lookup failure"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["Synthetic ambiguous message"].exists)
+        XCTAssertTrue(app.staticTexts["Wait for verification"].exists)
+        XCTAssertTrue(app.staticTexts["Send status unknown"].exists)
+        XCTAssertFalse(app.buttons["Send this message independently"].exists)
+        XCTAssertFalse(app.staticTexts["Local sequential reply 1"].exists)
+        app.terminate()
+    }
+
+    func testRoutingFailureCanBeRetriedWithoutResendingMessage() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-morde.server", "", "-morde.localRegistrationStub",
+                              "-morde.localRegistrationApproved", "-morde.localTaskSSEFixture",
+                              "-morde.localTaskSequentialSendFixture", "-morde.localRoutingFailureFixture",
+                              "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launch()
+        if app.buttons["morde.shell.drawer"].waitForExistence(timeout: 2) { signOutFromSettings(app) }
+        openMordeFromCurrentRoot(app)
+        try signInToFixtureAccount("routing-retry-user", in: app)
+        let draft = app.descendants(matching: .any).matching(identifier: "morde.chat.composer").firstMatch
+        XCTAssertTrue(draft.waitForExistence(timeout: 10))
+        draft.tap()
+        draft.typeText("Sequential prompt one")
+        app.buttons["morde.task.send"].tap()
+        let failure = app.staticTexts["Model temporarily unavailable"]
+        XCTAssertTrue(failure.waitForExistence(timeout: 15))
+        let retry = app.buttons["Retry processing"]
+        XCTAssertTrue(retry.waitForExistence(timeout: 5))
+        retry.tap()
+        XCTAssertTrue(failure.waitForNonExistence(timeout: 15))
+        XCTAssertEqual(app.staticTexts.matching(identifier: "Sequential prompt one").count, 1)
+        app.terminate()
+    }
+
+    func testMessageExceedingModelLimitKeepsTextAndDoesNotOfferUnchangedRetry() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-morde.server", "", "-morde.localRegistrationStub",
+                              "-morde.localRegistrationApproved", "-morde.localTaskSSEFixture",
+                              "-morde.localTaskSequentialSendFixture", "-morde.localMessageTooLongFixture",
+                              "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launch()
+        if app.buttons["morde.shell.drawer"].waitForExistence(timeout: 2) { signOutFromSettings(app) }
+        openMordeFromCurrentRoot(app)
+        try signInToFixtureAccount("message-limit-user", in: app)
+        let draft = app.descendants(matching: .any).matching(identifier: "morde.chat.composer").firstMatch
+        XCTAssertTrue(draft.waitForExistence(timeout: 10))
+        draft.tap()
+        draft.typeText("Sequential prompt one")
+        app.buttons["morde.task.send"].tap()
+        let failure = app.staticTexts["Message and context exceed the model input limit; the original is retained. Shorten and send again."]
+        XCTAssertTrue(failure.waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["Sequential prompt one"].exists)
+        XCTAssertFalse(app.buttons["Retry processing"].exists)
+        draft.tap()
+        draft.typeText("Sequential prompt two")
+        app.buttons["morde.task.send"].tap()
+        XCTAssertTrue(app.staticTexts["Sequential prompt two"].waitForExistence(timeout: 10))
+        app.terminate()
+    }
+
+    func testChinesePinyinInputCanBeSent() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-morde.server", "https://127.0.0.1:7080", "-morde.localRegistrationStub",
+                              "-morde.localRegistrationApproved", "-morde.localTaskSSEFixture",
+                              "-morde.localTaskSequentialSendFixture", "-morde.localFixtureDiagnostics",
+                              "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        app.launch()
+        if app.buttons["morde.shell.drawer"].waitForExistence(timeout: 2) { signOutFromSettings(app) }
+        openMordeFromCurrentRoot(app)
+        try signInToFixtureAccount("pinyin-test-user", in: app)
+        let draft = app.descendants(matching: .any).matching(identifier: "morde.chat.composer").firstMatch
+        XCTAssertTrue(draft.waitForExistence(timeout: 10))
+        draft.tap()
+        let keyboard = app.keyboards.firstMatch
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 5))
+        for letter in ["n", "i", "h", "a", "o"] {
+            let lowercase = keyboard.keys[letter]
+            let key = lowercase.exists ? lowercase : keyboard.keys[letter.uppercased()]
+            XCTAssertTrue(key.waitForExistence(timeout: 5), "Missing Pinyin key \(letter).")
+            key.tap()
+        }
+        let composing = XCTAttachment(screenshot: app.screenshot())
+        composing.name = "Chinese Pinyin composition"
+        composing.lifetime = .keepAlways
+        add(composing)
+        let send = app.buttons["morde.task.send"]
+        XCTAssertTrue(send.waitForExistence(timeout: 5))
+        XCTAssertTrue(send.isEnabled, "Composing text must not disable sending.")
+        let candidate = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", "你好")).firstMatch
+        XCTAssertTrue(candidate.waitForExistence(timeout: 5), "The simplified Pinyin keyboard should offer 你好.")
+        candidate.tap()
+        send.tap()
+        XCTAssertTrue(app.staticTexts["你好"].waitForExistence(timeout: 15))
+        app.terminate()
+    }
+
+    func testLocalCrossClientTextSync() throws {
+        guard let path = UserDefaults.standard.string(forKey: "MordeCrossDeviceFixturePath") else {
+            throw XCTSkip("No local cross-device test fixture is configured.")
+        }
+        let data = try Data(contentsOf: URL(fileURLWithPath: path))
+        let fixture = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: String])
+        let server = try XCTUnwrap(fixture["url"])
+        let username = try XCTUnwrap(fixture["username"])
+        let password = try XCTUnwrap(fixture["password"])
+        _ = try XCTUnwrap(fixture["conversation_id"])
+        let app = XCUIApplication()
+        app.launchArguments = ["-morde.server", server, "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launch()
+        openMordeFromCurrentRoot(app)
+        try signInToFixtureAccount(username, in: app, password: password)
+        let browserText = "跨端验收：这条消息从浏览器发送。"
+        XCTAssertTrue(app.staticTexts[browserText].waitForExistence(timeout: 30),
+                      "The browser's message should appear in the same cloud conversation.")
+        let draft = app.descendants(matching: .any).matching(identifier: "morde.chat.composer").firstMatch
+        XCTAssertTrue(draft.waitForExistence(timeout: 10))
+        draft.tap()
+        let text = "Cross-device acceptance from iOS simulator (local fixture)."
+        draft.typeText(text)
+        let send = app.buttons["morde.task.send"]
+        XCTAssertTrue(send.waitForExistence(timeout: 5))
+        XCTAssertTrue(send.isEnabled)
+        send.tap()
+        XCTAssertTrue(app.staticTexts[text].waitForExistence(timeout: 15))
+        app.terminate()
+    }
+
+    func testMessageCanReferenceTheTaskExplicitlyChosenByTheUser() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-morde.server", "", "-morde.localRegistrationStub",
+                              "-morde.localRegistrationApproved", "-morde.localMainChatFixture",
+                              "-morde.localTaskSSEFixture", "-morde.localTaskQueueFixture",
+                              "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launch()
+        if app.buttons["morde.shell.drawer"].waitForExistence(timeout: 2) { signOutFromSettings(app) }
+        openMordeFromCurrentRoot(app)
+        try signInToFixtureAccount("explicit-append-user", in: app)
+
+        let target = app.buttons["morde.chat.taskTarget"]
+        XCTAssertTrue(target.waitForExistence(timeout: 15))
+        let task = app.staticTexts["Local active queue fixture"]
+        XCTAssertTrue(task.waitForExistence(timeout: 15))
+        target.tap()
+        app.buttons["morde.chat.taskTarget.option.q1234567"].tap()
+        let draft = app.descendants(matching: .any).matching(identifier: "morde.chat.composer").firstMatch
+        draft.tap()
+        draft.typeText("Additional task detail")
+        let send = app.buttons["morde.task.send"]
+        let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isEnabled == true"), object: send)
+        wait(for: [enabled], timeout: 10)
+        send.tap()
+        XCTAssertTrue(app.staticTexts["Additional task detail"].waitForExistence(timeout: 15))
+        XCTAssertFalse(app.alerts.firstMatch.exists)
         app.terminate()
     }
 
@@ -1047,16 +1414,12 @@ final class MordeRegistrationUITests: XCTestCase {
 
         let message = app.descendants(matching: .any)
             .matching(identifier: "morde.chat.message.m9999999").firstMatch
-        let sendFailure = app.alerts.firstMatch
-        XCTAssertTrue(sendFailure.waitForExistence(timeout: 15))
-        XCTAssertTrue(sendFailure.staticTexts.matching(
-            NSPredicate(format: "label CONTAINS %@", "Synthetic response lost")).firstMatch.exists)
-        XCTAssertTrue(pending.exists, "A failed send keeps both uploaded attachments available for retry.")
-        XCTAssertFalse(message.exists)
-        sendFailure.buttons["确定"].tap()
-        send.tap()
+        XCTAssertTrue(app.staticTexts["Send status unknown"].waitForExistence(timeout: 15))
+        let retry = app.buttons["Retry"].firstMatch
+        XCTAssertTrue(retry.waitForExistence(timeout: 10))
+        retry.tap()
         XCTAssertTrue(message.waitForExistence(timeout: 20),
-                      "The idempotent retry should succeed only when it reuses the first send key and all four attachment IDs.")
+                      "The retry must reconcile the accepted message and then link the same attachment placeholders.")
         XCTAssertTrue(app.staticTexts["Summarize the attached image and PDF"].exists)
         XCTAssertTrue(app.staticTexts["fixture-image.jpg"].exists)
         XCTAssertTrue(app.staticTexts["fixture.pdf"].exists)
@@ -1276,7 +1639,7 @@ final class MordeRegistrationUITests: XCTestCase {
         app.terminate()
     }
 
-    func testCloudTaskSendRequiresConfiguredAdministratorDefaultModel() throws {
+    func testPersonalModelCanSendWithoutAdministratorDefaultModel() throws {
         let app = XCUIApplication()
         app.launchArguments = ["-morde.server", "", "-morde.localRegistrationStub",
                               "-morde.localRegistrationApproved", "-morde.localMainChatFixture",
@@ -1295,12 +1658,10 @@ final class MordeRegistrationUITests: XCTestCase {
         let send = app.buttons["morde.task.send"]
         XCTAssertTrue(composer.waitForExistence(timeout: 15))
         composer.tap()
-        composer.typeText("This must remain unsent")
-        XCTAssertTrue(app.staticTexts[
-            "An administrator must configure a usable default model before cloud tasks can be sent."
-        ].waitForExistence(timeout: 10))
-        XCTAssertFalse(send.isEnabled,
-                       "A private model alone cannot enable a Cloud Agent send without the configured admin default.")
+        composer.typeText("A personal model can be used")
+        let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isEnabled == true"), object: send)
+        wait(for: [enabled], timeout: 10)
+        XCTAssertTrue(send.isEnabled, "A checked personal model should be usable without a platform default.")
         app.terminate()
     }
 
@@ -1586,7 +1947,8 @@ final class MordeRegistrationUITests: XCTestCase {
         return app
     }
 
-    private func signInToFixtureAccount(_ username: String, in app: XCUIApplication) throws {
+    private func signInToFixtureAccount(_ username: String, in app: XCUIApplication,
+                                        password: String = "LocalAccountFixture!2468") throws {
         let usernameField = app.textFields["morde.auth.username"]
         let voiceOverTest = app.launchArguments.contains("-morde.voiceOverUITest")
         _ = try XCTUnwrap(usernameField.waitForExistence(timeout: 10) ? usernameField : nil,
@@ -1614,10 +1976,18 @@ final class MordeRegistrationUITests: XCTestCase {
         _ = try XCTUnwrap((usernameField.value as? String) == username ? usernameField : nil,
                           "The fixture username should be entered before submitting.")
         app.secureTextFields["morde.auth.password"].tap()
-        app.secureTextFields["morde.auth.password"].typeText("LocalAccountFixture!2468")
+        app.secureTextFields["morde.auth.password"].typeText(password)
         app.buttons["morde.auth.submit"].tap()
-        let signedIn = app.buttons["morde.shell.drawer"].waitForExistence(timeout: 15)
-            && !usernameField.exists && !app.alerts.firstMatch.exists
+        let loginFinished = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"),
+                                                       object: usernameField)
+        let signedIn = XCTWaiter.wait(for: [loginFinished], timeout: 15) == .completed
+            && app.buttons["morde.shell.drawer"].waitForExistence(timeout: 5) && !app.alerts.firstMatch.exists
+        if !signedIn {
+            let screenshot = XCTAttachment(screenshot: app.screenshot())
+            screenshot.name = "Local fixture sign-in failure"
+            screenshot.lifetime = .keepAlways
+            add(screenshot)
+        }
         _ = try XCTUnwrap(signedIn ? app.buttons["morde.shell.drawer"] : nil,
                           "The fixture sign-in must complete before page assertions run.")
         dismissKeyboard(in: app)
@@ -1748,6 +2118,23 @@ final class MordeRegistrationUITests: XCTestCase {
     }
 
     private func openMordeFromCurrentRoot(_ app: XCUIApplication) {
+        let changedAccountAlert = app.alerts.firstMatch
+        let changedAccountMessage = changedAccountAlert.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "账号已变化")
+        ).firstMatch
+        if changedAccountMessage.waitForExistence(timeout: 1) {
+            changedAccountAlert.buttons["确定"].tap()
+        }
+
+        // nanoMuse: Fresh test simulators show a one-time provider-key migration notice over the sign-in form.
+        let migrationNotice = app.alerts.matching(NSPredicate(format: "label CONTAINS[c] %@", "API")).firstMatch
+        if migrationNotice.waitForExistence(timeout: 1) {
+            let acknowledge = migrationNotice.buttons.matching(
+                NSPredicate(format: "label == %@ OR label == %@", "Got it", "知道了")
+            ).firstMatch
+            if acknowledge.exists { acknowledge.tap() }
+        }
+
         let usernameField = app.textFields["morde.auth.username"]
         if usernameField.waitForExistence(timeout: 2), usernameField.isHittable { return }
         let rootDrawer = app.buttons["morde.shell.drawer"]
@@ -1812,9 +2199,9 @@ final class MordeRegistrationUITests: XCTestCase {
 
     private func dismissKeyboard(in app: XCUIApplication) {
         guard app.keyboards.firstMatch.exists else { return }
-        let done = app.buttons["morde.chat.keyboardDone"]
-        if done.exists && done.isHittable {
-            done.tap()
+        let transcript = app.descendants(matching: .any).matching(identifier: "morde.chat.transcript").firstMatch
+        if transcript.exists && transcript.isHittable {
+            transcript.tap()
         } else {
             let returnKey = app.keyboards.buttons["Return"]
             if returnKey.exists && returnKey.isHittable { returnKey.tap() }

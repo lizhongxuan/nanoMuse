@@ -4,6 +4,1142 @@
     "" : {
 
     },
+    "Retry will wait until the independent message is received." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Retry will wait until the independent message is received." } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Der erneute Versuch wartet, bis die unabhängige Nachricht empfangen wurde." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "El reintento esperará hasta que se reciba el mensaje independiente." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "La nouvelle tentative attendra la réception du message envoyé séparément." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "独立して送信したメッセージが受信されるまで、再試行を待機します。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "독립적으로 보낸 메시지가 수신될 때까지 재시도를 기다립니다." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Повторная отправка будет ждать получения независимого сообщения." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "重试将在独立发送的消息被接收后继续。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "重試將在獨立傳送的訊息被接收後繼續。" } }
+      }
+    },
+    "The message exceeds 8 MiB; the full text is saved on this device." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The message exceeds 8 MiB; the full text is saved on this device." } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Die Nachricht überschreitet 8 MiB. Der vollständige Text ist auf diesem Gerät gespeichert." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "El mensaje supera los 8 MiB; el texto completo está guardado en este dispositivo." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Le message dépasse 8 Mio ; le texte complet est enregistré sur cet appareil." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "メッセージが 8 MiB を超えています。全文はこのデバイスに保存されています。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "메시지가 8 MiB를 초과했습니다. 전체 내용은 이 기기에 저장됩니다." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Объём сообщения превышает 8 МиБ. Полный текст сохранён на этом устройстве." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "消息超过 8 MiB，本机已保留完整内容。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "訊息超過 8 MiB，本機已保留完整內容。" } }
+      }
+    },
+    "Send this message independently" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Send this message independently" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Diese Nachricht unabhängig senden" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Enviar este mensaje de forma independiente" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Envoyer ce message séparément" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "このメッセージを独立して送信" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이 메시지를 독립적으로 보내기" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Отправить это сообщение отдельно" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "独立发送这条消息" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "獨立傳送這則訊息" } }
+      }
+    },
+    "Send this message independently?" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Send this message independently?" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Diese Nachricht unabhängig senden?" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "¿Enviar este mensaje de forma independiente?" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Envoyer ce message séparément ?" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "このメッセージを独立して送信しますか？" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이 메시지를 독립적으로 보낼까요?" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Отправить это сообщение отдельно?" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "独立发送这条消息？" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "獨立傳送這則訊息？" } }
+      }
+    },
+    "Confirm independent send" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Confirm independent send" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Unabhängiges Senden bestätigen" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Confirmar envío independiente" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Confirmer l’envoi séparé" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "独立した送信を確認" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "독립 전송 확인" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Подтвердить отдельную отправку" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "确认独立发送" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "確認獨立傳送" } }
+      }
+    },
+    "The failed message remains on this device. It will not be included in the AI task for this message." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The failed message remains on this device. It will not be included in the AI task for this message." } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Die fehlgeschlagene Nachricht bleibt auf diesem Gerät. Sie wird nicht in die KI-Aufgabe für diese Nachricht aufgenommen." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "El mensaje fallido permanece en este dispositivo. No se incluirá en la tarea de IA de este mensaje." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Le message en échec reste sur cet appareil. Il ne sera pas inclus dans la tâche IA de ce message." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "送信に失敗したメッセージはこのデバイスに保存されたままです。このメッセージの AI タスクには含まれません。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "전송에 실패한 메시지는 이 기기에 보관됩니다. 이 메시지의 AI 작업에는 포함되지 않습니다." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Неотправленное сообщение останется на этом устройстве. Оно не попадёт в задачу ИИ для этого сообщения." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "失败的消息仍保存在本机。这条消息对应的 AI 任务不会收到失败消息的内容。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "傳送失敗的訊息仍保留在本機。這則訊息對應的 AI 工作不會收到失敗訊息的內容。" } }
+      }
+    },
+    "The previous message failed to send. Please handle it first." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The previous message failed to send. Please handle it first." } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Die vorherige Nachricht konnte nicht gesendet werden. Bitte kümmere dich zuerst darum." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "No se pudo enviar el mensaje anterior. Resuélvelo primero." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Le message précédent n’a pas pu être envoyé. Traitez-le d’abord." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "前のメッセージを送信できませんでした。先に対処してください。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이전 메시지를 보내지 못했습니다. 먼저 해당 메시지를 처리해 주세요." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось отправить предыдущее сообщение. Сначала разберитесь с ним." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "前一条消息发送失败，请先处理。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "前一則訊息傳送失敗，請先處理。" } }
+      }
+    },
+    "Waiting for the previous message to be received." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Waiting for the previous message to be received." } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Warten auf den Empfang der vorherigen Nachricht." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Esperando la recepción del mensaje anterior." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "En attente de la réception du message précédent." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "前のメッセージの受信確認を待っています。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이전 메시지의 수신 확인을 기다리는 중입니다." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Ожидание подтверждения получения предыдущего сообщения." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "等待前一条消息确认接收。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "等待前一則訊息確認接收。" } }
+      }
+    },
+    "The previous message’s delivery could not be verified. Retry or check it first." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The previous message’s delivery could not be verified. Retry or check it first." } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Die Zustellung der vorherigen Nachricht konnte nicht bestätigt werden. Versuche es erneut oder prüfe sie zuerst." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "No se pudo confirmar la entrega del mensaje anterior. Reinténtalo o revísalo primero." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "La réception du message précédent n’a pas pu être confirmée. Réessayez ou vérifiez-le d’abord." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "前のメッセージの配信を確認できませんでした。再試行するか、先に確認してください。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이전 메시지의 전달 여부를 확인할 수 없습니다. 다시 시도하거나 먼저 확인해 주세요." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось проверить доставку предыдущего сообщения. Повторите попытку или сначала проверьте его." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法确认前一条消息是否送达，请先重试或核对。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "無法確認前一則訊息是否送達，請先重試或核對。" } }
+      }
+    },
+    "Message or account changed. Refresh and try again." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Message or account changed. Refresh and try again." } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Nachricht oder Konto hat sich geändert. Aktualisiere die Ansicht und versuche es erneut." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "El mensaje o la cuenta ha cambiado. Actualiza y vuelve a intentarlo." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Le message ou le compte a changé. Actualisez et réessayez." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "メッセージまたはアカウントが変更されました。更新して再試行してください。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "메시지나 계정이 변경되었습니다. 새로고침한 후 다시 시도해 주세요." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сообщение или учётная запись изменились. Обновите данные и повторите попытку." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "消息状态或账号已变化，请刷新后重试。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "訊息狀態或帳號已變更，請重新整理後再試。" } }
+      }
+    },
+    "Message status changed. Refresh and try again." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Message status changed. Refresh and try again." } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Der Nachrichtenstatus hat sich geändert. Aktualisiere die Ansicht und versuche es erneut." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "El estado del mensaje ha cambiado. Actualiza y vuelve a intentarlo." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "L’état du message a changé. Actualisez et réessayez." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "メッセージの状態が変更されました。更新して再試行してください。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "메시지 상태가 변경되었습니다. 새로고침한 후 다시 시도해 주세요." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Статус сообщения изменился. Обновите данные и повторите попытку." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "消息状态已变化，请刷新后重试。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "訊息狀態已變更，請重新整理後再試。" } }
+      }
+    },
+    "Could not save the independent send: %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Could not save the independent send: %@" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Unabhängiges Senden konnte nicht gespeichert werden: %@" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "No se pudo guardar el envío independiente: %@" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Impossible d’enregistrer l’envoi séparé : %@" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "独立した送信を保存できませんでした：%@" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "독립 전송을 저장할 수 없습니다: %@" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось сохранить отдельную отправку: %@" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法保存独立发送操作：%@" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "無法儲存獨立傳送操作：%@" } }
+      }
+    },
+    "Attachment" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Anhang" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Attachment" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Archivo adjunto" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Pièce jointe" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "添付ファイル" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "첨부 파일" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Вложение" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "附件" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "附件" } }
+      }
+    },
+    "Waiting to start" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Wartet auf Start" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Waiting to start" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Esperando para comenzar" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "En attente de démarrage" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "開始待ち" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "시작 대기 중" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Ожидание запуска" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "等待开始" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "等待開始" } }
+      }
+    },
+    "Starting the task" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Aufgabe beginnen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Starting the task" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Iniciar la tarea" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Démarrer la tâche" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "タスクを開始" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "작업 시작" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Начать задачу" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "开始处理" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "開始處理" } }
+      }
+    },
+    "Task started" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Gestartet" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Task started" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Iniciado" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Démarré" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "開始済み" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "시작됨" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Начато" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已开始" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "已開始" } }
+      }
+    },
+    "Processing your request." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Ihre Anfrage wird bearbeitet." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Processing your request." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Procesando tu solicitud." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Traitement de votre demande." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "リクエストを処理しています。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "요청을 처리하고 있습니다." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Ваш запрос обрабатывается." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在处理你的请求。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "正在處理你的請求。" } }
+      }
+    },
+    "Search the web" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Im Web suchen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Search the web" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Buscar en la web" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Rechercher sur le Web" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ウェブを検索" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "웹 검색" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Поиск в интернете" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "搜索网页" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "搜尋網頁" } }
+      }
+    },
+    "Read a web page" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Webseite lesen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Read a web page" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Leer una página web" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Lire une page Web" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ウェブページを読む" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "웹 페이지 읽기" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Чтение веб-страницы" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "读取网页" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "讀取網頁" } }
+      }
+    },
+    "Browse workspace files" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Arbeitsbereichsdateien durchsuchen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Browse workspace files" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Explorar archivos del espacio de trabajo" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Parcourir les fichiers de l’espace de travail" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ワークスペースのファイルを確認" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "작업 공간 파일 살펴보기" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Просмотр файлов рабочего пространства" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "查看工作区文件" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "查看工作區檔案" } }
+      }
+    },
+    "Read a workspace file" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Arbeitsbereichsdatei lesen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Read a workspace file" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Leer un archivo del espacio de trabajo" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Lire un fichier de l’espace de travail" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ワークスペースのファイルを読む" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "작업 공간 파일 읽기" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Чтение файла рабочего пространства" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "读取工作区文件" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "讀取工作區檔案" } }
+      }
+    },
+    "Update a workspace file" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Arbeitsbereichsdatei aktualisieren" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Update a workspace file" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Actualizar un archivo del espacio de trabajo" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Mettre à jour un fichier de l’espace de travail" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ワークスペースのファイルを更新" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "작업 공간 파일 업데이트" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Обновление файла рабочего пространства" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "更新工作区文件" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "更新工作區檔案" } }
+      }
+    },
+    "Read an attachment" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Anhang lesen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Read an attachment" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Leer un archivo adjunto" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Lire une pièce jointe" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "添付ファイルを読む" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "첨부 파일 읽기" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Чтение вложения" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "读取附件" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "讀取附件" } }
+      }
+    },
+    "Use the cloud computer" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Cloud-Computer verwenden" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Use the cloud computer" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Usar el equipo en la nube" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Utiliser l’ordinateur cloud" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "クラウドコンピューターを使用" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "클라우드 컴퓨터 사용" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Использование облачного компьютера" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "使用云端电脑" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "使用雲端電腦" } }
+      }
+    },
+    "Work in the workspace" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Im Arbeitsbereich arbeiten" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Work in the workspace" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Trabajar en el espacio de trabajo" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Travailler dans l’espace de travail" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ワークスペースで作業" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "작업 공간에서 작업" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Работа в рабочем пространстве" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "处理工作区内容" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "處理工作區內容" } }
+      }
+    },
+    "Process the task" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Aufgabe bearbeiten" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Process the task" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Procesar la tarea" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Traiter la tâche" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "タスクを処理" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "작업 처리" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Обработка задачи" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "处理任务" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "處理任務" } }
+      }
+    },
+    "Task is bound to another cloud computer; start a new task for the new target." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Die Aufgabe ist an einen anderen Cloud-Computer gebunden. Starten Sie für das neue Ziel eine neue Aufgabe." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Task is bound to another cloud computer; start a new task for the new target." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "La tarea está vinculada a otro equipo en la nube. Inicia una nueva tarea para el nuevo destino." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "La tâche est liée à un autre ordinateur cloud. Créez une nouvelle tâche pour la nouvelle cible." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "タスクは別のクラウドコンピューターに紐付いています。新しい対象には別のタスクを開始してください。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "작업이 다른 클라우드 컴퓨터에 연결되어 있습니다. 새 대상에 대해 새 작업을 시작하세요." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Задача привязана к другому облачному компьютеру. Для новой цели начните новую задачу." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "任务已绑定其他云端电脑，无法安全切换；请为新目标另发起任务。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "任務已綁定其他雲端電腦，無法安全切換；請為新目標另行發起任務。" } }
+      }
+    },
+    "Task is bound to another workspace; start a new task for the new target." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Die Aufgabe ist an einen anderen Arbeitsbereich gebunden. Starten Sie für das neue Ziel eine neue Aufgabe." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Task is bound to another workspace; start a new task for the new target." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "La tarea está vinculada a otro espacio de trabajo. Inicia una nueva tarea para el nuevo destino." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "La tâche est liée à un autre espace de travail. Créez une nouvelle tâche pour la nouvelle cible." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "タスクは別のワークスペースに紐付いています。新しい対象には別のタスクを開始してください。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "작업이 다른 작업 공간에 연결되어 있습니다. 새 대상에 대해 새 작업을 시작하세요." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Задача привязана к другому рабочему пространству. Для новой цели начните новую задачу." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "任务已绑定其他工作区，无法安全切换；请为新目标另发起任务。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "任務已綁定其他工作區，無法安全切換；請為新目標另行發起任務。" } }
+      }
+    },
+    "Choose a computer to continue this task" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Computer auswählen, um die Aufgabe fortzusetzen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose a computer to continue this task" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Elige un equipo para continuar la tarea" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Choisissez un ordinateur pour continuer la tâche" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "タスクを続けるにはコンピューターを選択してください" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "작업을 계속하려면 컴퓨터를 선택하세요" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выберите компьютер, чтобы продолжить задачу" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "需要选择电脑才能继续任务" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "需要選擇電腦才能繼續任務" } }
+      }
+    },
+    "Required cloud computer is unavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Benötigter Cloud-Computer nicht verfügbar" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Required cloud computer is unavailable" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "El equipo en la nube necesario no está disponible" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "L’ordinateur cloud requis est indisponible" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "必要なクラウドコンピューターを利用できません" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "필요한 클라우드 컴퓨터를 사용할 수 없습니다" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Нужный облачный компьютер недоступен" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "所需云端电脑暂不可用" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "所需雲端電腦暫時無法使用" } }
+      }
+    },
+    "Required workspace is unavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Benötigter Arbeitsbereich nicht verfügbar" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Required workspace is unavailable" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "El espacio de trabajo necesario no está disponible" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "L’espace de travail requis est indisponible" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "必要なワークスペースを利用できません" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "필요한 작업 공간을 사용할 수 없습니다" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Нужное рабочее пространство недоступно" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "所需工作区暂不可用" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "所需工作區暫時無法使用" } }
+      }
+    },
+    "Computer operation result needs review" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Ergebnis der Computeraktion muss geprüft werden" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Computer operation result needs review" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Hay que revisar el resultado de la operación del equipo" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Le résultat de l’opération sur l’ordinateur doit être vérifié" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "コンピューター操作の結果を確認する必要があります" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "컴퓨터 작업 결과를 확인해야 합니다" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Результат операции на компьютере требует проверки" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "电脑操作结果待核对" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "電腦操作結果待核對" } }
+      }
+    },
+    "Message and context exceed the model input limit; the original is retained. Shorten and send again." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Nachricht und Kontext überschreiten das Modelllimit. Der Originaltext bleibt erhalten; bitte kürzen und erneut senden." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Message and context exceed the model input limit; the original is retained. Shorten and send again." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "El mensaje y el contexto superan el límite del modelo. El original se conserva; acórtalo y envíalo de nuevo." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Le message et son contexte dépassent la limite du modèle. Le texte original est conservé ; raccourcissez-le et renvoyez-le." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "メッセージと文脈がモデルの入力上限を超えています。原文は保存されています。短くして再送してください。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "메시지와 문맥이 모델 입력 한도를 초과했습니다. 원문은 보관되며, 내용을 줄여 다시 보내 주세요." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сообщение и контекст превышают лимит модели. Оригинал сохранён; сократите сообщение и отправьте снова." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "消息及上下文超过当前模型输入上限，原文已保留；请缩短后重新发送。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "訊息及上下文超過目前模型輸入上限，原文已保留；請縮短後重新傳送。" } }
+      }
+    },
+    "Model temporarily unavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Modell vorübergehend nicht verfügbar" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Model temporarily unavailable" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Modelo no disponible temporalmente" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Modèle temporairement indisponible" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "モデルを一時的に利用できません" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "모델을 일시적으로 사용할 수 없습니다" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Модель временно недоступна" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "模型暂时不可用" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "模型暫時無法使用" } }
+      }
+    },
+    "Task context unavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Aufgabenkontext nicht verfügbar" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Task context unavailable" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Contexto de la tarea no disponible" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Contexte de la tâche indisponible" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "タスクの内容を取得できません" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "작업 맥락을 사용할 수 없습니다" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Контекст задачи недоступен" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "任务上下文暂不可用" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "任務上下文暫時無法使用" } }
+      }
+    },
+    "Unable to update the task" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Aufgabe kann nicht aktualisiert werden" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Unable to update the task" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "No se puede actualizar la tarea" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Impossible de mettre à jour la tâche" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "タスクを更新できません" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "작업을 업데이트할 수 없습니다" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось обновить задачу" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "暂时无法调整任务" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "暫時無法調整任務" } }
+      }
+    },
+    "Message processing failed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Nachrichtenverarbeitung fehlgeschlagen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Message processing failed" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Error al procesar el mensaje" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Échec du traitement du message" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "メッセージを処理できませんでした" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "메시지를 처리하지 못했습니다" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось обработать сообщение" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "消息处理失败" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "訊息處理失敗" } }
+      }
+    },
+    "Retry processing" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Verarbeitung erneut versuchen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Retry processing" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Reintentar procesamiento" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Réessayer le traitement" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "処理を再試行" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "처리 다시 시도" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Повторить обработку" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "重试处理" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "重試處理" } }
+      }
+    },
+    "Adjustment received; waiting to update" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Änderung erhalten; Anpassung ausstehend" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Adjustment received; waiting to update" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Cambio recibido; pendiente de ajuste" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Modification reçue ; ajustement en attente" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "変更を受け付けました。調整を待っています" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "수정 요청을 받았으며 조정을 기다리는 중입니다" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Изменение получено; ожидается корректировка" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已收到修改，等待调整" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "已收到修改，等待調整" } }
+      }
+    },
+    "Waiting to send" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wartet auf Versand"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Waiting to send"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pendiente de envío"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En attente d’envoi"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "送信待ち"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "전송 대기 중"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ожидает отправки"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "待发送"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "待傳送"
+          }
+        }
+      }
+    },
+    "Sending" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wird gesendet"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sending"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enviando"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Envoi en cours"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "送信中"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "전송 중"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Отправляется"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "发送中"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "傳送中"
+          }
+        }
+      }
+    },
+    "Send status unknown" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sendestatus unbekannt"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Send status unknown"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Estado de envío desconocido"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "État d’envoi inconnu"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "送信状態を確認できません"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "전송 상태를 확인할 수 없음"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Статус отправки неизвестен"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "发送结果待确认"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "傳送結果待確認"
+          }
+        }
+      }
+    },
+    "Send failed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Senden fehlgeschlagen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Send failed"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Error al enviar"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Échec de l’envoi"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "送信に失敗しました"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "전송 실패"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не удалось отправить"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "发送失败"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "傳送失敗"
+          }
+        }
+      }
+    },
+    "Sent" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gesendet"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sent"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enviado"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Envoyé"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "送信済み"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "전송됨"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Отправлено"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已发送"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已傳送"
+          }
+        }
+      }
+    },
+    "Waiting for attachments" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wartet auf Anhänge"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Waiting for attachments"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esperando archivos adjuntos"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En attente des pièces jointes"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添付ファイルを準備中"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "첨부 파일 준비 중"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ожидание вложений"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "等待附件"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "等待附件"
+          }
+        }
+      }
+    },
+    "Attachments need attention" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anhänge benötigen Aufmerksamkeit"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Attachments need attention"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Los archivos adjuntos requieren atención"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Les pièces jointes nécessitent votre attention"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添付ファイルを確認してください"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "첨부 파일을 확인해 주세요"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Требуется проверить вложения"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "附件需要处理"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "附件需要處理"
+          }
+        }
+      }
+    },
+    "Sent; uploading attachments" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gesendet; Anhänge werden hochgeladen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sent; uploading attachments"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enviado; subiendo archivos adjuntos"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Envoyé ; téléversement des pièces jointes"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "送信済み、添付ファイルをアップロード中"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "전송됨, 첨부 파일 업로드 중"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Отправлено; вложения загружаются"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已发送，正在上传附件"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已傳送，正在上傳附件"
+          }
+        }
+      }
+    },
+    "Sent; attachments need attention" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gesendet; Anhänge benötigen Aufmerksamkeit"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sent; attachments need attention"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enviado; los archivos adjuntos requieren atención"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Envoyé ; les pièces jointes nécessitent votre attention"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "送信済み、添付ファイルを確認してください"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "전송됨, 첨부 파일을 확인해 주세요"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Отправлено; требуется проверить вложения"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已发送，附件需要处理"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已傳送，附件需要處理"
+          }
+        }
+      }
+    },
+    "Update the service to send this message" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dienst aktualisieren, um diese Nachricht zu senden"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Update the service to send this message"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Actualiza el servicio para enviar este mensaje"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mettez à jour le service pour envoyer ce message"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このメッセージを送信するにはサービスを更新してください"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 메시지를 보내려면 서비스를 업데이트하세요"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Обновите службу, чтобы отправить сообщение"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请更新服务后发送此消息"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "請更新服務後傳送此訊息"
+          }
+        }
+      }
+    },
     " · %@" : {
 
     },
@@ -62,6 +1198,124 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "- %@：用戶把我的虛擬形象換成了\"%@\"。"
+          }
+        }
+      }
+    },
+    "A message can include up to 16 items after processing. PDFs also add extracted text and up to 10 page previews." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eine Nachricht kann nach der Verarbeitung bis zu 16 Anhänge enthalten. PDFs fügen außerdem extrahierten Text und Vorschauen von bis zu 10 Seiten hinzu."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A message can include up to 16 items after processing. PDFs also add extracted text and up to 10 page previews."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un mensaje puede incluir hasta 16 elementos después del procesamiento. Los PDF también añaden texto extraído y vistas previas de hasta 10 páginas."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un message peut contenir jusqu’à 16 éléments après traitement. Les PDF ajoutent aussi le texte extrait et un aperçu de 10 pages au maximum."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "処理後の添付項目は、1メッセージにつき最大16個です。PDFからは抽出したテキストと最大10ページのプレビューも追加されます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "처리 후 메시지 하나에 최대 16개 항목을 첨부할 수 있습니다. PDF에서는 추출된 텍스트와 최대 10페이지의 미리보기도 추가됩니다."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "После обработки к одному сообщению можно добавить не более 16 элементов. Для PDF также добавляются извлечённый текст и изображения не более 10 страниц."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "附件处理后，每条消息最多包含 16 项；PDF 还会添加提取的文本和最多 10 页预览。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "附件處理後，每則訊息最多包含 16 項；PDF 還會加入擷取的文字和最多 10 頁預覽。"
+          }
+        }
+      }
+    },
+    "Chat attachments support images, PDF, DOCX, and XLSX." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chat-Anhänge unterstützen Bilder, PDF, DOCX und XLSX."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chat attachments support images, PDF, DOCX, and XLSX."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Los archivos adjuntos del chat admiten imágenes, PDF, DOCX y XLSX."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Les pièces jointes du chat acceptent les images, PDF, DOCX et XLSX."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "チャットの添付ファイルは画像、PDF、DOCX、XLSXに対応しています。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "채팅 첨부 파일은 이미지, PDF, DOCX, XLSX를 지원합니다."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "В чат можно прикрепить изображения, PDF, DOCX и XLSX."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聊天附件支持图片、PDF、DOCX 和 XLSX。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聊天附件支援圖片、PDF、DOCX 和 XLSX。"
           }
         }
       }
@@ -275,6 +1529,7 @@
       }
     },
     "\"%@\" has been copied to your sessions. You can find it in the main session list." : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -1060,22 +2315,22 @@
         }
       }
     },
-    "%@ · %@ · %@。摘要见本页文件列表。" : {
+    "%@ · %@ · %@。" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "%1$@ · %2$@ · %3$@。摘要见本页文件列表。"
+            "value" : "%1$@ · %2$@ · %3$@。"
           }
         }
       }
     },
-    "%@ · %@ · SHA-256 %@" : {
+    "%@ · %@ · SHA-256 %@。下载只写入本机应用目录；同名文件已存在时不会覆盖。" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "%1$@ · %2$@ · SHA-256 %3$@"
+            "value" : "%1$@ · %2$@ · SHA-256 %3$@。下载只写入本机应用目录；同名文件已存在时不会覆盖。"
           }
         }
       }
@@ -3102,6 +4357,9 @@
     "%@ Workspace 文件" : {
 
     },
+    "%@ 的操作" : {
+
+    },
     "%@, %@" : {
       "localizations" : {
         "en" : {
@@ -3501,6 +4759,16 @@
     },
     "%@: credential section could not be read; no credentials from it were restored." : {
 
+    },
+    "%@：%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@：%2$@"
+          }
+        }
+      }
     },
     "%@. Today's allowance could not be checked right now." : {
       "extractionState" : "manual",
@@ -6507,6 +7775,16 @@
         }
       }
     },
+    "%lld. %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld. %2$@"
+          }
+        }
+      }
+    },
     "%lld/%lld" : {
       "localizations" : {
         "de" : {
@@ -8677,6 +9955,7 @@
       }
     },
     "512 KB" : {
+      "extractionState" : "stale",
       "localizations" : {
         "es" : {
           "stringUnit" : {
@@ -12453,6 +13732,29 @@
         }
       }
     },
+    "Access revoked." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Access revoked."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "访问权限已撤销。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "存取權限已撤銷。"
+          }
+        }
+      }
+    },
     "Account activity" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -14547,6 +15849,9 @@
         }
       }
     },
+    "Add resource" : {
+
+    },
     "Add Rule" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -15330,7 +16635,67 @@
         }
       }
     },
+    "Administrator default" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Administratorstandard"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Administrator default"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Predeterminado del administrador"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Par défaut de l’administrateur"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "管理者のデフォルト"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "관리자 기본값"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Модель администратора по умолчанию"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "管理员默认"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "管理員預設"
+          }
+        }
+      }
+    },
     "Advanced" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -15990,6 +17355,65 @@
         }
       }
     },
+    "AI outputs" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KI-Ergebnisse"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI outputs"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Resultados de IA"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Résultats de l’IA"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI の生成物"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI 결과물"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Результаты ИИ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI 产物"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI 產物"
+          }
+        }
+      }
+    },
     "AI Suggest" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -16047,34 +17471,6 @@
             "value" : "AI 建議"
           }
         }
-      }
-    },
-    "AI tools" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "KI-Tools" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "AI tools" } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "Herramientas de IA" } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Outils IA" } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "AI ツール" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "AI 도구" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Инструменты ИИ" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "AI 工具" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "AI 工具" } }
-      }
-    },
-    "AI outputs" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "KI-Ergebnisse" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "AI outputs" } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "Resultados de IA" } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Résultats de l’IA" } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "AI の生成物" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "AI 결과물" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Результаты ИИ" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "AI 产物" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "AI 產物" } }
       }
     },
     "AI Suggest (failed — try again)" : {
@@ -16191,6 +17587,65 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "AI 工具對話"
+          }
+        }
+      }
+    },
+    "AI tools" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KI-Tools"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI tools"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Herramientas de IA"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Outils IA"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI ツール"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI 도구"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Инструменты ИИ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI 工具"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI 工具"
           }
         }
       }
@@ -17215,6 +18670,7 @@
       }
     },
     "All morde data has been removed from iCloud. This device is now re-uploading its local content to a fresh iCloud zone." : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -19164,6 +20620,65 @@
         }
       }
     },
+    "An administrator must configure a usable default model before cloud tasks can be sent." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ein Administrator muss ein verwendbares Standardmodell einrichten, bevor Cloud-Aufgaben gesendet werden können."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "An administrator must configure a usable default model before cloud tasks can be sent."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un administrador debe configurar un modelo predeterminado válido antes de enviar tareas en la nube."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un administrateur doit configurer un modèle par défaut utilisable avant l’envoi de tâches cloud."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "クラウドタスクを送信するには、管理者が使用可能なデフォルトモデルを設定する必要があります。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "클라우드 작업을 보내려면 관리자가 사용할 수 있는 기본 모델을 설정해야 합니다."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Чтобы отправлять облачные задачи, администратор должен настроить доступную модель по умолчанию."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "管理员需配置可用的默认模型后，才能发送云端任务。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "管理員必須先設定可用的預設模型，才能傳送雲端任務。"
+          }
+        }
+      }
+    },
     "An emoji set on another device" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -20561,6 +22076,65 @@
         }
       }
     },
+    "Append to %@ · %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ergänzen: %@ · %@"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Append to %@ · %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Añadir a %@ · %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ajouter à %@ · %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ に追加 · %@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@에 추가 · %@"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Добавить в %@ · %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "补充：%@ · %@"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "補充：%@ · %@"
+          }
+        }
+      }
+    },
     "Applied automatically when a new session is bound to this group." : {
       "localizations" : {
         "de" : {
@@ -21173,6 +22747,7 @@
       }
     },
     "Are you absolutely sure?" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -29417,7 +30992,6 @@
       }
     },
     "Chat" : {
-      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -29471,6 +31045,65 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "閒聊"
+          }
+        }
+      }
+    },
+    "Chat actions" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chataktionen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chat actions"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Acciones del chat"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Actions du chat"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "チャット操作"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "채팅 작업"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Действия чата"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聊天操作"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聊天操作"
           }
         }
       }
@@ -29829,6 +31462,7 @@
       }
     },
     "Chat Sessions" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -31400,6 +33034,65 @@
         }
       }
     },
+    "Choose a task to stop" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aufgabe zum Stoppen wählen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a task to stop"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Elegir una tarea para detener"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choisir une tâche à arrêter"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止するタスクを選択"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "중지할 작업 선택"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Выбрать задачу для остановки"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择要停止的任务"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選擇要停止的任務"
+          }
+        }
+      }
+    },
     "Choose another model" : {
       "localizations" : {
         "de" : {
@@ -31836,6 +33529,65 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "選擇模型"
+          }
+        }
+      }
+    },
+    "Choose new or existing task" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Neue oder bestehende Aufgabe wählen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose new or existing task"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Elegir tarea nueva o existente"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choisir une tâche nouvelle ou existante"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新規または既存のタスクを選択"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새 작업 또는 기존 작업 선택"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Выбрать новую или существующую задачу"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择新任务或补充现有任务"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選擇新任務或補充現有任務"
           }
         }
       }
@@ -34056,6 +35808,9 @@
         }
       }
     },
+    "Close navigation menu" : {
+
+    },
     "Cloud" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -34222,29 +35977,15 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "云端电脑"
+            "value" : "云端主机"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "雲端電腦"
+            "value" : "雲端主機"
           }
         }
-      }
-    },
-    "Cloud phones" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Cloud-Telefone" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Cloud phones" } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "Teléfonos en la nube" } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Téléphones cloud" } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "クラウドフォン" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "클라우드폰" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Облачные телефоны" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "云手机" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "雲端手機" } }
       }
     },
     "Cloud data changed" : {
@@ -34951,6 +36692,65 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "雲端資源庫無法使用"
+          }
+        }
+      }
+    },
+    "Cloud phones" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cloud-Telefone"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cloud phones"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Teléfonos en la nube"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Téléphones cloud"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "クラウドフォン"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "클라우드폰"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Облачные телефоны"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "云手机"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "雲端手機"
           }
         }
       }
@@ -37623,6 +39423,9 @@
         }
       }
     },
+    "Confirming the current account scope…" : {
+
+    },
     "Connect" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -39268,6 +41071,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "控制權限已過期"
+          }
+        }
+      }
+    },
+    "Control remains available until you revoke access. Each control session still follows the existing lease and renewal flow." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Control remains available until you revoke access. Each control session still follows the existing lease and renewal flow."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "控制权限持续有效，直到你撤销访问。每次控制仍按现有租约期限和续期流程执行。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "控制權限持續有效，直到你撤銷存取。每次控制仍依現有租約期限和續期流程執行。"
           }
         }
       }
@@ -41140,6 +42966,7 @@
       }
     },
     "Copy to My Device" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -44774,6 +46601,7 @@
       }
     },
     "Danger Zone" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -46916,6 +48744,7 @@
       }
     },
     "Delete Failed" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -47268,6 +49097,7 @@
       }
     },
     "Delete iCloud Data" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -47326,6 +49156,7 @@
       }
     },
     "Delete iCloud Data?" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -48486,6 +50317,29 @@
         }
       }
     },
+    "Deleted" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deleted"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已删除"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已刪除"
+          }
+        }
+      }
+    },
     "Deleted %@" : {
       "localizations" : {
         "de" : {
@@ -48593,6 +50447,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已刪除：記錄 %1$d 輪、檔案 %2$d 個、訓練輪次 %3$d 輪。"
+          }
+        }
+      }
+    },
+    "Deleting" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deleting"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除中"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "刪除中"
           }
         }
       }
@@ -49142,6 +51019,65 @@
         }
       }
     },
+    "Describe the issue or request in one sentence" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beschreibe das Problem oder den Wunsch in einem Satz"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Describe the issue or request in one sentence"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Describe el problema o la solicitud en una frase"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Décrivez le problème ou la demande en une phrase"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "問題や要望を一文で説明"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "문제 또는 요청을 한 문장으로 설명"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Опишите проблему или запрос одним предложением"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一句话说清问题或需求"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用一句話說明問題或需求"
+          }
+        }
+      }
+    },
     "Describe the personality and voice you want for your agent" : {
       "localizations" : {
         "de" : {
@@ -49492,65 +51428,6 @@
         }
       }
     },
-    "Describe the issue or request in one sentence" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Beschreibe das Problem oder den Wunsch in einem Satz"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Describe the issue or request in one sentence"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Describe el problema o la solicitud en una frase"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Décrivez le problème ou la demande en une phrase"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "問題や要望を一文で説明"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "문제 또는 요청을 한 문장으로 설명"
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Опишите проблему или запрос одним предложением"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "一句话说清问题或需求"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "用一句話說明問題或需求"
-          }
-        }
-      }
-    },
     "Design" : {
       "localizations" : {
         "de" : {
@@ -49605,6 +51482,75 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "設計"
+          }
+        }
+      }
+    },
+    "Desktop control" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Desktop control"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "桌面控制"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "桌面控制"
+          }
+        }
+      }
+    },
+    "Desktop control granted." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Desktop control granted."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已授予桌面控制权限。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已授予桌面控制權限。"
+          }
+        }
+      }
+    },
+    "Desktop view" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Desktop view"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "桌面查看"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "桌面檢視"
           }
         }
       }
@@ -51391,6 +53337,7 @@
       }
     },
     "Download (%@)" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -56250,6 +58197,7 @@
       }
     },
     "Environments" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -56501,6 +58449,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "预计耗时"
+          }
+        }
+      }
+    },
+    "Event chain" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "事件链"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "事件鏈"
           }
         }
       }
@@ -61923,6 +63888,7 @@
       }
     },
     "Force Full Sync" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -61981,6 +63947,7 @@
       }
     },
     "Force Full Sync?" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -62412,6 +64379,7 @@
       }
     },
     "Fork" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -62470,6 +64438,7 @@
       }
     },
     "Fork Session" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -64928,6 +66897,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "GPT 與 o 系列模型（openai.com）"
+          }
+        }
+      }
+    },
+    "Grant control" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Grant control"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "授予控制权"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "授予控制權"
           }
         }
       }
@@ -68251,6 +70243,7 @@
       }
     },
     "iCloud Data Deleted" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -68485,6 +70478,7 @@
       }
     },
     "iCloud Sync Logs" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -74815,6 +76809,7 @@
       }
     },
     "Last seen: %@" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -74954,6 +76949,7 @@
       }
     },
     "Last synced" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -76379,13 +78375,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "资源库"
+            "value" : "文件库"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "資源庫"
+            "value" : "文件庫"
           }
         }
       }
@@ -77639,6 +79635,65 @@
         }
       }
     },
+    "Load earlier messages" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ältere Nachrichten laden"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Load earlier messages"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cargar mensajes anteriores"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Charger les messages précédents"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "以前のメッセージを読み込む"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이전 메시지 불러오기"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Загрузить предыдущие сообщения"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "加载更早消息"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "載入較早訊息"
+          }
+        }
+      }
+    },
     "Load more (%lld lines)" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -77696,62 +79751,6 @@
             "value" : "載入更多（%lld 行）"
           }
         }
-      }
-    },
-    "Administrator default" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Administratorstandard" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Administrator default" } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "Predeterminado del administrador" } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Par défaut de l’administrateur" } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "管理者のデフォルト" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "관리자 기본값" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Модель администратора по умолчанию" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "管理员默认" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "管理員預設" } }
-      }
-    },
-    "An administrator must configure a usable default model before cloud tasks can be sent." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Ein Administrator muss ein verwendbares Standardmodell einrichten, bevor Cloud-Aufgaben gesendet werden können." } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "An administrator must configure a usable default model before cloud tasks can be sent." } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "Un administrador debe configurar un modelo predeterminado válido antes de enviar tareas en la nube." } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Un administrateur doit configurer un modèle par défaut utilisable avant l’envoi de tâches cloud." } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "クラウドタスクを送信するには、管理者が使用可能なデフォルトモデルを設定する必要があります。" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "클라우드 작업을 보내려면 관리자가 사용할 수 있는 기본 모델을 설정해야 합니다." } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Чтобы отправлять облачные задачи, администратор должен настроить доступную модель по умолчанию." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "管理员需配置可用的默认模型后，才能发送云端任务。" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "管理員必須先設定可用的預設模型，才能傳送雲端任務。" } }
-      }
-    },
-    "Load earlier messages" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Ältere Nachrichten laden" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Load earlier messages" } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "Cargar mensajes anteriores" } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Charger les messages précédents" } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "以前のメッセージを読み込む" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이전 메시지 불러오기" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Загрузить предыдущие сообщения" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "加载更早消息" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "載入較早訊息" } }
-      }
-    },
-    "Personal model" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Persönliches Modell" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Personal model" } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "Modelo personal" } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Modèle personnel" } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "個人モデル" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "개인 모델" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Личная модель" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "个人模型" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "個人模型" } }
       }
     },
     "Load more tasks" : {
@@ -78530,6 +80529,9 @@
         }
       }
     },
+    "Loading task details…" : {
+
+    },
     "Loading tasks…" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -79127,6 +81129,7 @@
       }
     },
     "Local Sessions" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -79870,6 +81873,65 @@
         }
       }
     },
+    "Long press to open chat actions" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lange drücken, um Chataktionen zu öffnen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Long press to open chat actions"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mantén pulsado para abrir las acciones del chat"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Maintenez le doigt pour ouvrir les actions du chat"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "長押ししてチャット操作を開く"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "길게 눌러 채팅 작업 열기"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Нажмите и удерживайте, чтобы открыть действия чата"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "长按打开聊天操作"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "長按以開啟聊天操作"
+          }
+        }
+      }
+    },
     "Long press to paste" : {
       "comment" : "Voice tip: paste from clipboard",
       "localizations" : {
@@ -79886,6 +81948,9 @@
           }
         }
       }
+    },
+    "Long press to reorder" : {
+
     },
     "Long tasks are better placed on a computer that stays on. Your computers run them in full and send the result here." : {
       "extractionState" : "manual",
@@ -81886,6 +83951,29 @@
         }
       }
     },
+    "MCP control" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MCP control"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MCP 控制"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MCP 控制"
+          }
+        }
+      }
+    },
     "MCP Integrations" : {
       "localizations" : {
         "de" : {
@@ -82587,6 +84675,7 @@
       }
     },
     "Memories from %@" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -83045,13 +85134,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "消息"
+            "value" : "发消息…"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "消息"
+            "value" : "發送訊息…"
           }
         }
       }
@@ -83289,6 +85378,65 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "向 morde 發消息"
+          }
+        }
+      }
+    },
+    "Message selected task" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ausgewählte Aufgabe ergänzen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Message selected task"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Añadir mensaje a la tarea seleccionada"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ajouter un message à la tâche sélectionnée"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選択したタスクにメッセージ"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "선택한 작업에 메시지 보내기"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сообщение выбранной задаче"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "补充所选任务"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "補充所選任務"
           }
         }
       }
@@ -85074,6 +87222,9 @@
         }
       }
     },
+    "Morde" : {
+
+    },
     "Morde · Computers" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -86306,6 +88457,9 @@
       }
     },
     "Morde history import" : {
+
+    },
+    "Morde iOS" : {
 
     },
     "morde is a non-profit open-source community project, free, forever. Nothing is sold; what the relay keeps is in the privacy policy, and Settings → Data controls is yours." : {
@@ -88246,6 +90400,65 @@
         }
       }
     },
+    "Mounted" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eingehängt"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mounted"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Montado"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Monté"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "マウント済み"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "마운트됨"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Смонтировано"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已挂载"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已掛載"
+          }
+        }
+      }
+    },
     "Mounted Folders" : {
       "localizations" : {
         "de" : {
@@ -89161,15 +91374,60 @@
     "My uploads" : {
       "extractionState" : "manual",
       "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Meine Uploads" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "My uploads" } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "Mis archivos" } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Mes fichiers importés" } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "自分がアップロードしたファイル" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "내가 업로드한 파일" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Мои загрузки" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "我上传的" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "我上傳的" } }
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Meine Uploads"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "My uploads"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mis archivos"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mes fichiers importés"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自分がアップロードしたファイル"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "내가 업로드한 파일"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Мои загрузки"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "我上传的"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "我上傳的"
+          }
+        }
       }
     },
     "name" : {
@@ -91282,6 +93540,65 @@
         }
       }
     },
+    "New task" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Neue Aufgabe"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New task"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nueva tarea"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nouvelle tâche"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新しいタスク"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새 작업"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Новая задача"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新任务"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新任務"
+          }
+        }
+      }
+    },
     "New to Morde? Create account" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -91887,6 +94204,65 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "這部 iPhone 上沒有儲存其他動態。"
+          }
+        }
+      }
+    },
+    "No AI tool runtime status is available in this account scope." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In diesem Kontobereich ist kein Laufzeitstatus für KI-Tools verfügbar."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No AI tool runtime status is available in this account scope."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No hay un estado de ejecución de herramientas de IA disponible en este ámbito de la cuenta."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aucun état d’exécution des outils IA n’est disponible dans ce compte."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このアカウントでは利用できる AI ツールの実行状態がありません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 계정 범위에서 사용할 수 있는 AI 도구 실행 상태가 없습니다."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "В этой области учётной записи нет доступного состояния инструментов ИИ."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前没有可展示的 AI 工具运行状态。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "目前沒有可顯示的 AI 工具執行狀態。"
           }
         }
       }
@@ -92629,6 +95005,9 @@
         }
       }
     },
+    "No chats found" : {
+
+    },
     "No chats yet" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -92809,34 +95188,6 @@
         }
       }
     },
-    "No cloud phones are available in this account scope." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "In diesem Kontobereich sind keine Cloud-Telefone verfügbar." } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "No cloud phones are available in this account scope." } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "No hay teléfonos en la nube disponibles en este ámbito de la cuenta." } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Aucun téléphone cloud n’est disponible dans ce compte." } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "このアカウントでは利用できるクラウドフォンがありません。" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이 계정 범위에서 사용할 수 있는 클라우드폰이 없습니다." } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "В этой области учётной записи нет доступных облачных телефонов." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "当前没有可展示的云手机数据。" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "目前沒有可顯示的雲端手機資料。" } }
-      }
-    },
-    "No AI tool runtime status is available in this account scope." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "In diesem Kontobereich ist kein Laufzeitstatus für KI-Tools verfügbar." } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "No AI tool runtime status is available in this account scope." } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "No hay un estado de ejecución de herramientas de IA disponible en este ámbito de la cuenta." } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Aucun état d’exécution des outils IA n’est disponible dans ce compte." } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "このアカウントでは利用できる AI ツールの実行状態がありません。" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이 계정 범위에서 사용할 수 있는 AI 도구 실행 상태가 없습니다." } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "В этой области учётной записи нет доступного состояния инструментов ИИ." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "当前没有可展示的 AI 工具运行状态。" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "目前沒有可顯示的 AI 工具執行狀態。" } }
-      }
-    },
     "No cloud feed posts yet." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -93010,6 +95361,65 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "雲端還沒有目標。"
+          }
+        }
+      }
+    },
+    "No cloud phones are available in this account scope." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In diesem Kontobereich sind keine Cloud-Telefone verfügbar."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No cloud phones are available in this account scope."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No hay teléfonos en la nube disponibles en este ámbito de la cuenta."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aucun téléphone cloud n’est disponible dans ce compte."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このアカウントでは利用できるクラウドフォンがありません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 계정 범위에서 사용할 수 있는 클라우드폰이 없습니다."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "В этой области учётной записи нет доступных облачных телефонов."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前没有可展示的云手机数据。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "目前沒有可顯示的雲端手機資料。"
           }
         }
       }
@@ -93304,6 +95714,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "無需糾正"
+          }
+        }
+      }
+    },
+    "No current task is available" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前没有可用的任务"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "目前沒有可用的任務"
           }
         }
       }
@@ -94621,6 +97048,7 @@
       }
     },
     "No memories synced from this device." : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -95581,6 +98009,7 @@
       }
     },
     "No other devices found yet. Devices appear here after they enable iCloud Sync." : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -96157,6 +98586,7 @@
       }
     },
     "No sessions synced from this device yet." : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -96389,6 +98819,7 @@
       }
     },
     "No skills synced from this device." : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -96547,6 +98978,7 @@
       }
     },
     "No sync events yet." : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -96840,6 +99272,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此會話中未找到用戶消息。"
+          }
+        }
+      }
+    },
+    "No users currently have access." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No users currently have access."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前没有已授权用户。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "目前沒有已授權使用者。"
           }
         }
       }
@@ -98868,6 +101323,7 @@
       }
     },
     "Not Sync" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -108927,6 +111383,7 @@
       }
     },
     "Permanently erase all morde data from iCloud. Local data on this device is not affected." : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -109282,6 +111739,65 @@
     },
     "Personal data sync" : {
 
+    },
+    "Personal model" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Persönliches Modell"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Personal model"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modelo personal"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modèle personnel"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "個人モデル"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "개인 모델"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Личная модель"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "个人模型"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "個人模型"
+          }
+        }
+      }
     },
     "Personal profile" : {
 
@@ -115948,6 +118464,29 @@
         }
       }
     },
+    "Recipient Morde user ID" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recipient Morde user ID"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "接收者 Morde 用户 ID"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "接收者 Morde 使用者 ID"
+          }
+        }
+      }
+    },
     "Reclaim v1 space" : {
       "localizations" : {
         "en" : {
@@ -117286,6 +119825,9 @@
         }
       }
     },
+    "Refreshing task details…" : {
+
+    },
     "Refreshing…" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -118402,6 +120944,65 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "移除所有會話鎖"
+          }
+        }
+      }
+    },
+    "Remove attachment" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anhang entfernen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remove attachment"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quitar adjunto"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Supprimer la pièce jointe"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添付ファイルを削除"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "첨부 파일 제거"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Удалить вложение"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除附件"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除附件"
           }
         }
       }
@@ -124583,6 +127184,52 @@
         }
       }
     },
+    "Revoke access" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Revoke access"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "撤销访问"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "撤銷存取"
+          }
+        }
+      }
+    },
+    "Revoke all access for this user on this computer?" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Revoke all access for this user on this computer?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要撤销此用户对这台云端电脑的全部访问权限吗？"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要撤銷此使用者對這台雲端電腦的所有存取權限嗎？"
+          }
+        }
+      }
+    },
     "Revoke Memory" : {
       "localizations" : {
         "de" : {
@@ -127780,6 +130427,7 @@
       }
     },
     "Search covers loaded cloud chats only." : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -128597,8 +131245,10 @@
         }
       }
     },
+    "selected" : {
+
+    },
     "Selected" : {
-      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -130237,6 +132887,7 @@
       }
     },
     "Session Forked" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -131592,6 +134243,52 @@
         }
       }
     },
+    "Share cloud computer" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Share cloud computer"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分享云端电脑"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分享雲端電腦"
+          }
+        }
+      }
+    },
+    "Share control" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Share control"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分享控制权"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分享控制權"
+          }
+        }
+      }
+    },
     "Share JSON" : {
       "localizations" : {
         "de" : {
@@ -132211,6 +134908,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "共用，唯讀"
+          }
+        }
+      }
+    },
+    "Shared users" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shared users"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已授权用户"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已授權使用者"
           }
         }
       }
@@ -137629,6 +140349,7 @@
       }
     },
     "Skills from %@" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -141211,6 +143932,65 @@
         }
       }
     },
+    "Stop %@ · %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stoppen: %@ · %@"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stop %@ · %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Detener %@ · %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Arrêter %@ · %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ を停止 · %@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 중지 · %@"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Остановить %@ · %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止：%@ · %@"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止：%@ · %@"
+          }
+        }
+      }
+    },
     "Stop all cloud tasks" : {
       "comment" : "Morde cloud execution control",
       "localizations" : {
@@ -141611,6 +144391,65 @@
         }
       }
     },
+    "Stop task" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aufgabe stoppen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stop task"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Detener tarea"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Arrêter la tâche"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タスクを停止"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "작업 중지"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Остановить задачу"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止任务"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止任務"
+          }
+        }
+      }
+    },
     "Stopped" : {
       "localizations" : {
         "de" : {
@@ -141747,6 +144586,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已停止。"
+          }
+        }
+      }
+    },
+    "Stopping" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stopping"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止中"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止中"
           }
         }
       }
@@ -142721,6 +145583,7 @@
       }
     },
     "Sync events are recorded as iCloud sync sends and receives data. Up to 1,000 entries are kept." : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -143086,6 +145949,7 @@
 
     },
     "Sync Now" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -143248,6 +146112,7 @@
       }
     },
     "Synced Devices (Download)" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -143507,6 +146372,7 @@
       }
     },
     "Syncing..." : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -144323,6 +147189,9 @@
           }
         }
       }
+    },
+    "Tabs" : {
+
     },
     "Take a screenshot there" : {
       "extractionState" : "manual",
@@ -145676,6 +148545,65 @@
         }
       }
     },
+    "Task event connection interrupted. Retrying…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verbindung zu Aufgabenereignissen unterbrochen. Erneuter Versuch läuft…"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Task event connection interrupted. Retrying…"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se interrumpió la conexión con los eventos de la tarea. Reintentando…"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La connexion aux événements de la tâche a été interrompue. Nouvelle tentative…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タスクイベントへの接続が中断されました。再試行しています…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "작업 이벤트 연결이 끊겼습니다. 다시 시도하는 중…"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Соединение с событиями задачи прервано. Повторная попытка…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "任务事件连接中断，正在重试…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "任務事件連線中斷，正在重試…"
+          }
+        }
+      }
+    },
     "Task event history has not been confirmed" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -146899,6 +149827,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在聊天裡告訴我你想多看什麼；等能按時寫了，動態就會跟上。"
+          }
+        }
+      }
+    },
+    "Terminal control" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Terminal control"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "终端控制"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "終端控制"
           }
         }
       }
@@ -155977,6 +158928,7 @@
       }
     },
     "This action cannot be undone. All morde data stored in iCloud will be erased immediately. Other devices signed into the same iCloud account will lose their synced copies on the next sync.\n\nLocal data on this device is safe." : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -159554,6 +162506,7 @@
       }
     },
     "This will permanently delete everything morde has uploaded to your iCloud account, across ALL of your devices:\n\n• Chat sessions & messages\n• Session files & attachments\n• Skills\n• Provider configurations\n• Environment variables\n\nThis device's local data will NOT be deleted — only the cloud copy. After the wipe, this device will re-upload its local content to a fresh iCloud zone." : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -159612,6 +162565,7 @@
       }
     },
     "This will re-download all sync data from iCloud, which may take 10–30 seconds and consume significant network traffic. Wi-Fi is recommended.\n\nYour local sessions, skills, and files are not affected." : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -165539,6 +168493,65 @@
         }
       }
     },
+    "Uploading attachments…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anhänge werden hochgeladen…"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uploading attachments…"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Subiendo archivos adjuntos…"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Envoi des pièces jointes…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添付ファイルをアップロード中…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "첨부 파일 업로드 중…"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Загрузка вложений…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在上传附件…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在上傳附件…"
+          }
+        }
+      }
+    },
     "Uploading to %@ — %@ of %@" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -168288,6 +171301,7 @@
       }
     },
     "v%@" : {
+      "extractionState" : "stale",
       "localizations" : {
         "es" : {
           "stringUnit" : {
@@ -174185,6 +177199,29 @@
         }
       }
     },
+    "Workspace file read" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Workspace file read"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Workspace 文件读取"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Workspace 檔案讀取"
+          }
+        }
+      }
+    },
     "Workspace layout" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -174247,10 +177284,7 @@
     "Workspace 列表未成功读取：%@，本条消息不会提交。" : {
 
     },
-    "Workspace 列表读取失败：%@" : {
-
-    },
-    "Workspace 文件" : {
+    "Workspace 路径" : {
 
     },
     "Workspaces" : {
@@ -177548,6 +180582,9 @@
     "上传并确认检查点" : {
 
     },
+    "上传文件" : {
+
+    },
     "下载并校验" : {
 
     },
@@ -177734,7 +180771,13 @@
         }
       }
     },
-    "云端操作" : {
+    "云电脑" : {
+
+    },
+    "云电脑页面加载失败，请关闭后重试。" : {
+
+    },
+    "云端文件" : {
 
     },
     "云端运行" : {
@@ -177773,12 +180816,6 @@
       }
     },
     "会话列表读取失败：%@" : {
-
-    },
-    "传输失败" : {
-
-    },
-    "传输状态" : {
 
     },
     "你好，这是语音预览。" : {
@@ -177991,6 +181028,9 @@
           }
         }
       }
+    },
+    "分享「%@」" : {
+
     },
     "分析睡眠" : {
       "extractionState" : "stale",
@@ -178244,12 +181284,6 @@
         }
       }
     },
-    "发送前请在聊天菜单中选择任务模型。" : {
-
-    },
-    "发送并创建/继续 Task" : {
-
-    },
     "发送项目消息" : {
 
     },
@@ -178325,6 +181359,12 @@
 
     },
     "只读成员可以查看工作项；创建和变更由负责人或项目成员执行。" : {
+
+    },
+    "可查看 · 只能看文件" : {
+
+    },
+    "可编辑 · 能改文件" : {
 
     },
     "可访问资源" : {
@@ -178451,6 +181491,20 @@
         }
       }
     },
+    "回复已中断" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Antwort unterbrochen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Reply interrupted" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Respuesta interrumpida" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Réponse interrompue" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "応答が中断されました" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "응답이 중단되었습니다" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Ответ прерван" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "回复已中断" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "回覆已中斷" } }
+      }
+    },
     "回复问题" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -178510,7 +181564,10 @@
         }
       }
     },
-    "对话" : {
+    "复制分享链接" : {
+
+    },
+    "完成" : {
 
     },
     "尚未选择文件。取消文件选择或本确认框都不会上传。" : {
@@ -178534,9 +181591,6 @@
           }
         }
       }
-    },
-    "已确认检查点文件" : {
-
     },
     "已结算" : {
 
@@ -178938,9 +181992,6 @@
         }
       }
     },
-    "当前版本 v%lld" : {
-
-    },
     "当前版本：\n%@" : {
 
     },
@@ -178950,16 +182001,19 @@
     "当前账号尚未加入项目。" : {
 
     },
-    "当前账号没有可访问的 Workspace。" : {
-
-    },
-    "当前路径前缀：%@" : {
-
-    },
     "当前项目会话或 Workspace 已变化，请重新选择。" : {
 
     },
     "当前项目还没有共享会话。" : {
+
+    },
+    "急停会停止当前账号下的云端任务。状态由服务端确认后更新。" : {
+
+    },
+    "急停全部云端任务？" : {
+
+    },
+    "急停全部任务" : {
 
     },
     "恢复会保留当前电脑 ID、Workspace 和运行数据，并轮换运行凭据。只有服务端确认成功后，状态才会更新。" : {
@@ -179622,13 +182676,7 @@
     "文件操作失败" : {
 
     },
-    "文件来自 Workspace v%lld 的真实清单。下载只写入本机应用目录；不会覆盖已存在的本机文件。" : {
-
-    },
     "文件清单暂不可用：%@" : {
-
-    },
-    "文件能力" : {
 
     },
     "新任务" : {
@@ -179758,6 +182806,9 @@
     "新文件名" : {
 
     },
+    "无法创建分享链接" : {
+
+    },
     "无电脑目标" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -179879,6 +182930,9 @@
         }
       }
     },
+    "显示此文件在本机和 Workspace 云端的操作" : {
+
+    },
     "智能家居" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -179997,6 +183051,9 @@
         }
       }
     },
+    "暂未实现" : {
+
+    },
     "更新项目预算" : {
 
     },
@@ -180006,16 +183063,13 @@
     "服务端只提供当前账号收到的邀请列表；刚创建的邀请可在本机当前会话中撤销。" : {
 
     },
-    "服务端已声明 Workspace 文件能力。写入仍按服务端授权和版本检查结果执行。" : {
-
-    },
-    "服务端未声明 workspace_sync。当前不会读取、上传或下载 Workspace 文件。" : {
-
-    },
     "服务端未开放 Workspace 文件传输；上传和下载已锁定。" : {
 
     },
     "未读" : {
+
+    },
+    "本机副本" : {
 
     },
     "本条消息固定使用 Workspace v%lld。" : {
@@ -180263,7 +183317,16 @@
         }
       }
     },
+    "正在创建链接…" : {
+
+    },
+    "正在加载云电脑…" : {
+
+    },
     "正在恢复…" : {
+
+    },
+    "正在提交 Workspace 操作…" : {
 
     },
     "正在核验所选 Host，本条消息暂不可提交。" : {
@@ -180390,10 +183453,10 @@
     "正在读取 Workspace 差异…" : {
 
     },
-    "正在读取 Workspace…" : {
+    "正在读取…" : {
 
     },
-    "正在读取…" : {
+    "正在读取分享信息…" : {
 
     },
     "正在读取工作项…" : {
@@ -180423,10 +183486,13 @@
     "正在读取预算和费用…" : {
 
     },
-    "此 Schedule 暂无运行记录。" : {
+    "正在连接云电脑…" : {
 
     },
-    "此 Workspace 版本当前没有文件。" : {
+    "正在领取…" : {
+
+    },
+    "此 Schedule 暂无运行记录。" : {
 
     },
     "此对话暂无 Task。" : {
@@ -180547,10 +183613,10 @@
         }
       }
     },
-    "比较来源版本与当前版本" : {
+    "此目录当前没有文件。" : {
 
     },
-    "没有匹配“%@”的文件。" : {
+    "比较来源版本与当前版本" : {
 
     },
     "没有当前账号可见的关联资源。" : {
@@ -180559,13 +183625,13 @@
     "消息读取失败：%@" : {
 
     },
-    "清除" : {
-
-    },
     "版本 %lld · 任务提交时会重新核验电脑绑定状态" : {
 
     },
     "版本差异与恢复" : {
+
+    },
+    "版本比较与恢复" : {
 
     },
     "电脑" : {
@@ -180597,6 +183663,9 @@
 
     },
     "登记当前 Workspace 版本交付" : {
+
+    },
+    "目录" : {
 
     },
     "目标 Workspace" : {
@@ -180821,9 +183890,6 @@
     "移除项目成员？" : {
 
     },
-    "筛选路径" : {
-
-    },
     "管理" : {
 
     },
@@ -180969,9 +184035,6 @@
     "请求失败" : {
 
     },
-    "读取更多文件" : {
-
-    },
     "读取更多运行记录" : {
 
     },
@@ -180982,9 +184045,6 @@
 
     },
     "资源类型" : {
-
-    },
-    "路径前缀，例如 src/" : {
 
     },
     "转移给 %@" : {
@@ -181178,6 +184238,12 @@
     "重命名" : {
 
     },
+    "重新加载" : {
+
+    },
+    "重新启用全部任务" : {
+
+    },
     "重试" : {
 
     },
@@ -181353,64 +184419,17 @@
     "预算读取失败：%@" : {
 
     },
-    "默认电脑与 Workspace 选择尚未接入。此页只读账号资源列表；会话目标只影响之后提交的消息，不会更改已受理任务。" : {
+    "领取 Workspace" : {
 
     },
-    "Chat actions" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Chataktionen" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Chat actions" } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "Acciones del chat" } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Actions du chat" } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "チャット操作" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "채팅 작업" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Действия чата" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "聊天操作" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "聊天操作" } }
-      }
+    "领取后会创建归你所有的独立副本，之后与原 Workspace 无关。" : {
+
     },
-    "Long press to open chat actions" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Lange drücken, um Chataktionen zu öffnen" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Long press to open chat actions" } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "Mantén pulsado para abrir las acciones del chat" } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Maintenez le doigt pour ouvrir les actions du chat" } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "長押ししてチャット操作を開く" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "길게 눌러 채팅 작업 열기" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Нажмите и удерживайте, чтобы открыть действия чата" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "长按打开聊天操作" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "長按以開啟聊天操作" } }
-      }
+    "领取独立副本" : {
+
     },
-    "Uploading attachments…" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Anhänge werden hochgeladen…" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Uploading attachments…" } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "Subiendo archivos adjuntos…" } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Envoi des pièces jointes…" } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "添付ファイルをアップロード中…" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "첨부 파일 업로드 중…" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Загрузка вложений…" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在上传附件…" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "正在上傳附件…" } }
-      }
-    },
-    "Remove attachment" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Anhang entfernen" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Remove attachment" } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "Quitar adjunto" } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Supprimer la pièce jointe" } },
-        "ja" : { "stringUnit" : { "state" : "translated", "value" : "添付ファイルを削除" } },
-        "ko" : { "stringUnit" : { "state" : "translated", "value" : "첨부 파일 제거" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Удалить вложение" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "移除附件" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "移除附件" } }
-      }
+    "默认电脑与 Workspace 选择尚未接入。此页只读账号资源列表；会话目标只影响之后提交的消息，不会更改已受理任务。" : {
+
     }
   },
   "version" : "1.0"

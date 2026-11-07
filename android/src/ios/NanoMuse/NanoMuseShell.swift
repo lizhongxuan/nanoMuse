@@ -111,12 +111,12 @@ struct NanoMuseRoot: View {
         if let hasSessions {
             return NanoMuseFirstRun.needed(signedIn: NanoMuseCloud.isSignedIn, hasProviders: providers,
                                            hasSessions: hasSessions, done: setupDone,
-                                           mordeSignedIn: mordeAuthorization.signedIn)
+                                           mordeSignedIn: mordeAuthorization.signedIn || mordeAuthorization.offlineConversationAvailable)
         }
         // Without the sessions: an app with neither a sign-in nor a key of its own needs the setup
         // whatever the list says; a finished setup never does; the one case between waits.
         // nanoMuse: A restored Morde credential is verified before deciding whether legacy setup is needed.
-        if mordeAuthorization.signedIn { return false }
+        if mordeAuthorization.signedIn || mordeAuthorization.offlineConversationAvailable { return false }
         if !NanoMuseCloud.isSignedIn && !providers { return true }
         return setupDone ? false : nil
 #endif
@@ -434,6 +434,7 @@ struct NanoMuseHomeView: View {
     @State private var agentName = NanoMuseHomeView.currentAgentName()
     /// Reduce Motion on: the bottom bar fades out for the keyboard instead of sliding down.
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     /// The agent's name from SOUL.md, "nanoMuse" until it has one.
     static func currentAgentName() -> String {
@@ -783,8 +784,12 @@ struct NanoMuseHomeView: View {
                     if abs(height - chatHeaderHeight) > 0.5 { chatHeaderHeight = height }
                 }
                 .background {
-                    NanoMuseHeaderScrim(scrolledUp: false)
-                        .ignoresSafeArea(edges: .top)
+                    if dynamicTypeSize.isAccessibilitySize {
+                        ChatColors.background.ignoresSafeArea(edges: .top)
+                            .contentShape(Rectangle()).onTapGesture {}
+                    } else {
+                        NanoMuseHeaderScrim(scrolledUp: false).ignoresSafeArea(edges: .top)
+                    }
                 }
             }
             .background(ChatColors.background.ignoresSafeArea())

@@ -41,7 +41,16 @@ struct MIFApprovalInboxRoom: View {
                 MordeDesignPageHeader(title: AppLocalized("Approvals"), onMenu: onMenu,
                                        titleAccessory: confirmedHeaderCountText) { EmptyView() }
             } else if let chrome {
-                NanoMuseRoomHeader(chrome: chrome) { EmptyView() }
+                NanoMuseRoomHeader(chrome: chrome) {
+                    // nanoMuse: shared room headers need the confirmed count for the approval inbox.
+                    if let confirmedHeaderCountText {
+                        Text(confirmedHeaderCountText)
+                            .font(.system(size: 13.5, weight: .medium))
+                            .foregroundStyle(NanoMuseTones.secondaryText)
+                            .lineLimit(1)
+                            .accessibilityIdentifier("mif.approval.count")
+                    }
+                }
             } else {
                 NanoMuseTopBar(title: AppLocalized("Approvals"), onBack: { dismiss() })
             }
@@ -70,6 +79,7 @@ struct MIFApprovalInboxRoom: View {
                                 emptyState
                             } else {
                                 statusCard(AppLocalized("Unable to confirm whether any approvals are pending. Refresh and try again."))
+                                    .accessibilityIdentifier("mif.approval.unconfirmed")
                             }
                         } else {
                             VStack(spacing: 0) {
@@ -89,6 +99,7 @@ struct MIFApprovalInboxRoom: View {
                 .padding(.top, 2)
                 .padding(.bottom, onMenu == nil && chrome != nil ? NanoMuseBottomBar.height : 0)
             }
+            .accessibilityIdentifier("mif.approval.list")
             .refreshable { await reload(scopeKey: store.scopeKey) }
         }
         .background(NanoMuseTones.canvas.ignoresSafeArea())
@@ -376,7 +387,9 @@ struct MIFApprovalInboxRoom: View {
     }
 
     private func isCurrent(_ scopeKey: String, generation: Int) -> Bool {
-        !Task.isCancelled && store.scopeKey == scopeKey && loadGeneration == generation
+        // SwiftUI can cancel the refresh task after its response arrives; these two checks
+        // still reject account switches and superseded reloads without dropping valid data.
+        store.scopeKey == scopeKey && loadGeneration == generation
     }
 
     private func taskStillHasPendingRequest(_ task: MordeTask, matching approval: MIFApprovalEntry) -> Bool {
