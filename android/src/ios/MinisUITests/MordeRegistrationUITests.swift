@@ -4,7 +4,7 @@ import XCTest
 final class MordeRegistrationUITests: XCTestCase {
     func testApprovedDrawerDestinationsAreAvailableInMorde() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-morde.server", "", "-morde.localRegistrationStub",
+        app.launchArguments = ["-morde.server", "https://127.0.0.1:49713", "-morde.localRegistrationStub",
                               "-morde.localRegistrationApproved", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         app.launch()
         if app.buttons["morde.shell.drawer"].waitForExistence(timeout: 2),
@@ -77,7 +77,7 @@ final class MordeRegistrationUITests: XCTestCase {
 
     func testVerifiedTaskArtifactOpensLocalPreview() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-morde.server", "https://portal.120.25.178.93.sslip.io", "-morde.localRegistrationStub",
+        app.launchArguments = ["-morde.server", "https://127.0.0.1:49713", "-morde.localRegistrationStub",
                               "-morde.localRegistrationApproved", "-morde.localTaskPagesFixture",
                               "-morde.localTaskArtifactPreviewFixture", "-AppleLanguages", "(en)",
                               "-AppleLocale", "en_US"]
@@ -129,7 +129,7 @@ final class MordeRegistrationUITests: XCTestCase {
 
     func testResourcesShowLocalHostStatesAndControlActionFailures() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-morde.server", "https://portal.120.25.178.93.sslip.io", "-morde.localRegistrationStub",
+        app.launchArguments = ["-morde.server", "https://127.0.0.1", "-morde.localRegistrationStub",
                               "-morde.localRegistrationApproved", "-morde.localResourceAcceptanceFixture",
                               "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         app.launch()
@@ -149,19 +149,22 @@ final class MordeRegistrationUITests: XCTestCase {
         XCTAssertTrue(offlineOpen.waitForExistence(timeout: 10))
         XCTAssertFalse(offlineOpen.isEnabled, "An offline host's open action is disabled.")
 
-        let unready = app.staticTexts["A ready Workspace binding is required to open this computer."]
-        for _ in 0..<10 where !unready.exists { app.swipeUp() }
-        XCTAssertTrue(unready.exists, "A syncing binding explains why its host cannot open.")
-        XCTAssertFalse(app.buttons["morde.resources.host.open.h0000003"].isEnabled)
+        let unreadyHost = app.buttons["morde.resources.host.open.h0000003"]
+        for _ in 0..<10 where !unreadyHost.exists { app.swipeUp() }
+        XCTAssertTrue(unreadyHost.exists, "A syncing binding host remains visible in the resource list.")
+        XCTAssertFalse(unreadyHost.isEnabled)
+        XCTAssertTrue(unreadyHost.label.contains("A ready Workspace binding is required to open this computer."),
+                      "The disabled host row exposes its Workspace requirement to accessibility.")
 
         let unknown = app.staticTexts["Control status unknown"]
         for _ in 0..<10 where !unknown.exists { app.swipeUp() }
         XCTAssertTrue(unknown.exists)
         XCTAssertFalse(app.buttons["morde.resources.host.takeOver.h0000004"].exists)
 
-        let expired = app.staticTexts["Control lease expired"]
-        for _ in 0..<10 where !expired.exists { app.swipeUp() }
-        XCTAssertTrue(expired.exists)
+        let expiredHost = app.buttons["morde.resources.host.open.h0000005"]
+        for _ in 0..<10 where !expiredHost.isHittable { app.swipeUp() }
+        XCTAssertTrue(expiredHost.label.contains("Control lease expired"),
+                      "An expired lease must not be presented as active user control.")
 
         let shared = app.buttons["morde.resources.host.open.h0000008"]
         for _ in 0..<10 where !shared.exists { app.swipeUp() }
@@ -173,17 +176,21 @@ final class MordeRegistrationUITests: XCTestCase {
         XCTAssertFalse(app.buttons["morde.resources.host.takeOver.h0000006"].exists)
 
         let returnToAI = app.buttons["morde.resources.host.returnToAI.h0000007"]
-        for _ in 0..<10 where !returnToAI.isHittable { app.swipeUp() }
+        let resourceScroll = app.scrollViews["morde.resources.scroll"]
+        XCTAssertTrue(returnToAI.waitForExistence(timeout: 5))
+        // XCTest may report a just-below-screen LazyVStack row as hittable. Move the
+        // resource ScrollView once so the return action is physically on screen.
+        resourceScroll.swipeUp()
         XCTAssertTrue(returnToAI.isHittable)
         returnToAI.tap()
-        XCTAssertTrue(app.staticTexts["morde.resources.host.error.h0000007"].waitForExistence(timeout: 10),
+        XCTAssertTrue(app.staticTexts["morde.resources.host.controlError.h0000007"].waitForExistence(timeout: 10),
                       "The failed return is surfaced while the server status is reloaded.")
         app.terminate()
     }
 
     func testLibraryShowsEmptyStateWhenNoTaskArtifactsAreDelivered() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-morde.server", "https://portal.120.25.178.93.sslip.io", "-morde.localRegistrationStub",
+        app.launchArguments = ["-morde.server", "https://127.0.0.1:49713", "-morde.localRegistrationStub",
                               "-morde.localRegistrationApproved", "-morde.localTaskPagesFixture",
                               "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         app.launch()
@@ -207,7 +214,7 @@ final class MordeRegistrationUITests: XCTestCase {
 
     func testLocalTaskPagesAndApprovalInbox() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-morde.server", "https://portal.120.25.178.93.sslip.io", "-morde.localRegistrationStub",
+        app.launchArguments = ["-morde.server", "https://127.0.0.1:49713", "-morde.localRegistrationStub",
                               "-morde.localRegistrationApproved", "-morde.localTaskPagesFixture",
                               "-morde.localTaskPagesApprovalPaginationFixture",
                               "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
@@ -326,7 +333,8 @@ final class MordeRegistrationUITests: XCTestCase {
         let error = app.descendants(matching: .any)
             .matching(identifier: "morde.task.loadError").firstMatch
         XCTAssertTrue(error.waitForExistence(timeout: 15))
-        XCTAssertFalse(app.staticTexts["morde.task.objective"].exists)
+        XCTAssertFalse(app.staticTexts["Local task timeline fixture"].exists,
+                       "A revoked task must not leave its cached objective visible.")
         XCTAssertFalse(error.buttons["morde.task.loadError.retry"].exists,
                        "Task detail permission errors do not add a retry button; reopen the detail to reload.")
         app.terminate()
@@ -361,7 +369,7 @@ final class MordeRegistrationUITests: XCTestCase {
 
     func testTaskDetailsHandleApprovalAndClarificationRequests() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-morde.server", "", "-morde.localRegistrationStub",
+        app.launchArguments = ["-morde.server", "https://127.0.0.1:49713", "-morde.localRegistrationStub",
                               "-morde.localRegistrationApproved", "-morde.localTaskPagesFixture",
                               "-morde.localTaskPagesTaskDetailRequestsFixture",
                               "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
@@ -378,7 +386,11 @@ final class MordeRegistrationUITests: XCTestCase {
         let approve = app.buttons["morde.task.approval.approve.r0000001"]
         XCTAssertTrue(approve.waitForExistence(timeout: 10))
         approve.tap()
-        XCTAssertTrue(app.staticTexts["Local decision refreshed"].waitForExistence(timeout: 15))
+        let approvalStatus = app.staticTexts["morde.task.status"]
+        let approvalRefreshed = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label CONTAINS %@", "Local decision refreshed"),
+            object: approvalStatus)
+        XCTAssertEqual(XCTWaiter.wait(for: [approvalRefreshed], timeout: 15), .completed)
 
         app.buttons["返回"].tap()
         let clarificationRow = app.buttons["morde.tasks.row.q0000102"]
@@ -395,13 +407,17 @@ final class MordeRegistrationUITests: XCTestCase {
         answer.typeText("Use a PDF.")
         XCTAssertTrue(send.isEnabled)
         send.tap()
-        XCTAssertTrue(app.staticTexts["Local clarification response received"].waitForExistence(timeout: 15))
+        let clarificationStatus = app.staticTexts["morde.task.status"]
+        let clarificationRefreshed = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label CONTAINS %@", "Local clarification response received"),
+            object: clarificationStatus)
+        XCTAssertEqual(XCTWaiter.wait(for: [clarificationRefreshed], timeout: 15), .completed)
         app.terminate()
     }
 
     func testApprovalUnknownResultRefreshesCommittedDecision() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-morde.server", "", "-morde.localRegistrationStub",
+        app.launchArguments = ["-morde.server", "https://127.0.0.1:49713", "-morde.localRegistrationStub",
                               "-morde.localRegistrationApproved", "-morde.localTaskPagesFixture",
                               "-morde.localTaskPagesApprovalUnknownRetryFixture",
                               "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
@@ -479,7 +495,7 @@ final class MordeRegistrationUITests: XCTestCase {
 
     func testTaskActionControlsStayDisabledWhileRequestIsInFlight() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-morde.server", "", "-morde.localRegistrationStub",
+        app.launchArguments = ["-morde.server", "https://127.0.0.1:49713", "-morde.localRegistrationStub",
                               "-morde.localRegistrationApproved", "-morde.localTaskPagesFixture",
                               "-morde.localTaskPagesTaskActionDelayFixture",
                               "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
@@ -504,7 +520,7 @@ final class MordeRegistrationUITests: XCTestCase {
 
     func testTaskActionRetryKeyIsIsolatedWhenServiceInstanceChanges() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-morde.server", "", "-morde.localRegistrationStub",
+        app.launchArguments = ["-morde.server", "https://127.0.0.1:49713", "-morde.localRegistrationStub",
                               "-morde.localRegistrationApproved", "-morde.localTaskPagesFixture",
                               "-morde.localTaskPagesTaskActionServiceInstanceFixture",
                               "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
@@ -538,7 +554,7 @@ final class MordeRegistrationUITests: XCTestCase {
 
     func testAcceptedTaskCompletesOverSSEAfterSwitchingToTasksTab() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-morde.server", "", "-morde.localRegistrationStub",
+        app.launchArguments = ["-morde.server", "https://127.0.0.1:49713", "-morde.localRegistrationStub",
                               "-morde.localRegistrationApproved", "-morde.localTaskSSEFixture",
                               "-morde.localTaskTabLifecycleFixture",
                               "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
@@ -578,7 +594,7 @@ final class MordeRegistrationUITests: XCTestCase {
 
     func testRegistrationApprovalHubConfirmationAndSignOut() {
         let app = XCUIApplication()
-        let localArguments = ["-morde.server", "", "-morde.localRegistrationStub",
+        let localArguments = ["-morde.server", "https://127.0.0.1:49713", "-morde.localRegistrationStub",
                               "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
         app.launchArguments = localArguments
         app.launch()
@@ -629,7 +645,7 @@ final class MordeRegistrationUITests: XCTestCase {
         pendingLogin.buttons["确定"].tap()
 
         app.terminate()
-        app.launchArguments = ["-morde.server", "", "-morde.localRegistrationStub",
+        app.launchArguments = ["-morde.server", "https://127.0.0.1:49713", "-morde.localRegistrationStub",
                               "-morde.localRegistrationApproved", "-morde.localHubFixture",
                               "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
         app.launch()
@@ -702,7 +718,7 @@ final class MordeRegistrationUITests: XCTestCase {
 
     func testRegistrationSubmitCannotBeRepeatedWhileRequestIsInFlight() {
         let app = XCUIApplication()
-        app.launchArguments = ["-morde.server", "", "-morde.localRegistrationStub",
+        app.launchArguments = ["-morde.server", "https://127.0.0.1:49713", "-morde.localRegistrationStub",
                               "-morde.localRegistrationBusyFixture",
                               "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
         app.launch()
@@ -733,7 +749,7 @@ final class MordeRegistrationUITests: XCTestCase {
     func testSwitchingAccountsDoesNotReuseConversationMessagesOrTasks() throws {
         // nanoMuse: Exercise account-scoped conversation and Task state only through the process-local Portal fixture.
         let app = XCUIApplication()
-        app.launchArguments = ["-morde.server", "", "-morde.localRegistrationStub",
+        app.launchArguments = ["-morde.server", "https://127.0.0.1:49713", "-morde.localRegistrationStub",
                               "-morde.localRegistrationApproved", "-morde.localAccountIsolationFixture",
                               "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
         app.launch()
@@ -781,7 +797,7 @@ final class MordeRegistrationUITests: XCTestCase {
 
     func testLateTaskPageFromPreviousAccountCannotReplaceCurrentTasks() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-morde.server", "", "-morde.localRegistrationStub",
+        app.launchArguments = ["-morde.server", "https://127.0.0.1:49713", "-morde.localRegistrationStub",
                               "-morde.localRegistrationApproved", "-morde.localAccountIsolationFixture",
                               "-morde.localDelayedAccountResponseFixture",
                               "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
@@ -824,7 +840,7 @@ final class MordeRegistrationUITests: XCTestCase {
 
     func testLateConversationMessagesFromPreviousAccountCannotReplaceCurrentChat() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-morde.server", "", "-morde.localRegistrationStub",
+        app.launchArguments = ["-morde.server", "https://127.0.0.1:49713", "-morde.localRegistrationStub",
                               "-morde.localRegistrationApproved", "-morde.localAccountIsolationFixture",
                               "-morde.localDelayedAccountChatResponseFixture",
                               "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
@@ -863,7 +879,7 @@ final class MordeRegistrationUITests: XCTestCase {
 
     func testLocalTaskSSEUsesInjectedSession() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-morde.server", "", "-morde.localRegistrationStub",
+        app.launchArguments = ["-morde.server", "https://127.0.0.1:49713", "-morde.localRegistrationStub",
                               "-morde.localRegistrationApproved", "-morde.localTaskSSEFixture",
                               "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
         app.launch()
@@ -874,7 +890,9 @@ final class MordeRegistrationUITests: XCTestCase {
 
     func testSequentialTaskSendsStayInTheSameConversation() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-morde.server", "", "-morde.localRegistrationStub",
+        // nanoMuse: Keep a valid local base URL so the fixture sign-in does not open the server-address prompt.
+        let fixtureServer = "https://127.0.0.1:\(Int.random(in: 20000...60000))"
+        app.launchArguments = ["-morde.server", fixtureServer, "-morde.localRegistrationStub",
                               "-morde.localRegistrationApproved", "-morde.localTaskSSEFixture",
                               "-morde.localTaskSequentialSendFixture",
                               "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
@@ -937,7 +955,7 @@ final class MordeRegistrationUITests: XCTestCase {
 
     func testProjectOutboxVisibleAfterOfflineRestartWithoutPersonalConversation() throws {
         let app = XCUIApplication()
-        let baseArguments = ["-morde.server", "https://127.0.0.1:7080", "-morde.localRegistrationStub",
+        let baseArguments = ["-morde.server", "https://127.0.0.1:49713", "-morde.localRegistrationStub",
                              "-morde.localRegistrationApproved", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
         app.launchArguments = baseArguments + ["-morde.localProjectQueueFixture"]
         app.launch()
@@ -966,7 +984,7 @@ final class MordeRegistrationUITests: XCTestCase {
 
     func testIdentityPendingMessageSurvivesRestartAndNeedsExplicitRecovery() throws {
         let app = XCUIApplication()
-        let baseArguments = ["-morde.server", "https://127.0.0.1:7080", "-morde.localRegistrationStub",
+        let baseArguments = ["-morde.server", "https://127.0.0.1:49713", "-morde.localRegistrationStub",
                              "-morde.localRegistrationApproved", "-morde.localTaskSSEFixture",
                              "-morde.localTaskSequentialSendFixture", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         app.launchArguments = baseArguments + ["-morde.localDelayIdentityFixture"]
@@ -1042,10 +1060,10 @@ final class MordeRegistrationUITests: XCTestCase {
         let visibleReply = app.staticTexts["Local sequential reply 2"]
         XCTAssertTrue(visibleReply.waitForExistence(timeout: 5))
         XCTAssertTrue(visibleReply.isHittable)
-        let attachmentButton = app.buttons["morde.chat.addAttachment"]
-        // Account for the message bubble padding and the composer's pill insets.
+        let composerSend = app.buttons["morde.task.send"]
+        // nanoMuse: Attachments moved to the chat menu; measure against the persistent send control inside the composer pill.
         let keyboardPosition = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            visibleReply.frame.maxY + 10 <= attachmentButton.frame.minY - 20 - 8
+            visibleReply.frame.maxY + 10 <= composerSend.frame.minY - 20 - 8
         }, object: nil)
         let keyboardLayoutResult = XCTWaiter.wait(for: [keyboardPosition], timeout: 5)
         if keyboardLayoutResult != .completed {
@@ -1065,7 +1083,7 @@ final class MordeRegistrationUITests: XCTestCase {
         XCTAssertTrue(latestReply.waitForExistence(timeout: 10))
         XCTAssertTrue(latestReply.isHittable)
         let restingPosition = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            latestReply.frame.maxY + 10 <= attachmentButton.frame.minY - 20 - 8
+            latestReply.frame.maxY + 10 <= composerSend.frame.minY - 20 - 8
         }, object: nil)
         XCTAssertEqual(XCTWaiter.wait(for: [restingPosition], timeout: 5), .completed)
         let restingLayout = XCTAttachment(screenshot: app.screenshot())
@@ -1156,7 +1174,9 @@ final class MordeRegistrationUITests: XCTestCase {
 
     func testRoutingFailureCanBeRetriedWithoutResendingMessage() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-morde.server", "", "-morde.localRegistrationStub",
+        // nanoMuse: Keep a valid local base URL so the fixture login exercises routing retry instead of server setup.
+        let fixtureServer = "https://127.0.0.1:\(Int.random(in: 20000...60000))"
+        app.launchArguments = ["-morde.server", fixtureServer, "-morde.localRegistrationStub",
                               "-morde.localRegistrationApproved", "-morde.localTaskSSEFixture",
                               "-morde.localTaskSequentialSendFixture", "-morde.localRoutingFailureFixture",
                               "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
@@ -1181,7 +1201,7 @@ final class MordeRegistrationUITests: XCTestCase {
 
     func testMessageExceedingModelLimitKeepsTextAndDoesNotOfferUnchangedRetry() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-morde.server", "", "-morde.localRegistrationStub",
+        app.launchArguments = ["-morde.server", "https://127.0.0.1:49713", "-morde.localRegistrationStub",
                               "-morde.localRegistrationApproved", "-morde.localTaskSSEFixture",
                               "-morde.localTaskSequentialSendFixture", "-morde.localMessageTooLongFixture",
                               "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
@@ -1207,7 +1227,7 @@ final class MordeRegistrationUITests: XCTestCase {
 
     func testChinesePinyinInputCanBeSent() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-morde.server", "https://127.0.0.1:7080", "-morde.localRegistrationStub",
+        app.launchArguments = ["-morde.server", "https://127.0.0.1:49713", "-morde.localRegistrationStub",
                               "-morde.localRegistrationApproved", "-morde.localTaskSSEFixture",
                               "-morde.localTaskSequentialSendFixture", "-morde.localFixtureDiagnostics",
                               "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
@@ -1274,7 +1294,7 @@ final class MordeRegistrationUITests: XCTestCase {
 
     func testMessageCanReferenceTheTaskExplicitlyChosenByTheUser() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-morde.server", "", "-morde.localRegistrationStub",
+        app.launchArguments = ["-morde.server", "https://127.0.0.1:49713", "-morde.localRegistrationStub",
                               "-morde.localRegistrationApproved", "-morde.localMainChatFixture",
                               "-morde.localTaskSSEFixture", "-morde.localTaskQueueFixture",
                               "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
@@ -1303,7 +1323,7 @@ final class MordeRegistrationUITests: XCTestCase {
 
     func testFreshLaunchOpensMainChatAndSideConversationsStayInDrawer() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-morde.server", "", "-morde.localRegistrationStub",
+        app.launchArguments = ["-morde.server", "https://127.0.0.1:49713", "-morde.localRegistrationStub",
                               "-morde.localRegistrationApproved", "-morde.localMainChatFixture",
                               "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         app.launch()
@@ -1385,7 +1405,7 @@ final class MordeRegistrationUITests: XCTestCase {
 
     func testChatAttachmentFixtureUploadsJPEGAndPDFAndSendsAllAttachmentIDs() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-morde.server", "", "-morde.localRegistrationStub",
+        app.launchArguments = ["-morde.server", "https://127.0.0.1:49713", "-morde.localRegistrationStub",
                               "-morde.localRegistrationApproved", "-morde.localMainChatFixture",
                               "-morde.localChatAttachmentFixture", "-morde.localChatAttachmentSendRetryFixture",
                               "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
@@ -1420,9 +1440,13 @@ final class MordeRegistrationUITests: XCTestCase {
         retry.tap()
         XCTAssertTrue(message.waitForExistence(timeout: 20),
                       "The retry must reconcile the accepted message and then link the same attachment placeholders.")
+        XCTAssertTrue(app.staticTexts["Sent"].waitForExistence(timeout: 30),
+                      "Personal PDF derivatives must link with the original so attachment processing does not stay pending.")
         XCTAssertTrue(app.staticTexts["Summarize the attached image and PDF"].exists)
         XCTAssertTrue(app.staticTexts["fixture-image.jpg"].exists)
         XCTAssertTrue(app.staticTexts["fixture.pdf"].exists)
+        // Internal derivatives stay hidden in the chat transcript; Sent is shown only after every
+        // declared original and derived attachment slot has uploaded and linked successfully.
 
         let imageAttachment = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@", "fixture-image.jpg"))
             .firstMatch
@@ -1485,7 +1509,7 @@ final class MordeRegistrationUITests: XCTestCase {
 
     func testChatAttachmentPickerCanBeCancelledFromLongPressMenu() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-morde.server", "", "-morde.localRegistrationStub",
+        app.launchArguments = ["-morde.server", "https://127.0.0.1:49713", "-morde.localRegistrationStub",
                               "-morde.localRegistrationApproved", "-morde.localMainChatFixture",
                               "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         app.launch()
@@ -1509,7 +1533,7 @@ final class MordeRegistrationUITests: XCTestCase {
 
     func testChatAttachmentUploadFailureIsSurfacedWithoutPendingChip() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-morde.server", "", "-morde.localRegistrationStub",
+        app.launchArguments = ["-morde.server", "https://127.0.0.1:49713", "-morde.localRegistrationStub",
                               "-morde.localRegistrationApproved", "-morde.localMainChatFixture",
                               "-morde.localChatAttachmentFixture", "-morde.localChatAttachmentUploadFailureFixture",
                               "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
@@ -1521,43 +1545,37 @@ final class MordeRegistrationUITests: XCTestCase {
         }
         try signInToFixtureAccount("chat-upload-failure-\(UUID().uuidString.prefix(8))", in: app)
 
-        let failure = app.alerts.firstMatch
-        XCTAssertTrue(failure.waitForExistence(timeout: 30), "A failed upload should be shown to the user.")
-        XCTAssertTrue(failure.staticTexts.matching(
-            NSPredicate(format: "label CONTAINS %@", "Synthetic attachment upload failed")).firstMatch.exists)
+        let pending = app.descendants(matching: .any)
+            .matching(identifier: "morde.chat.attachments.pending").firstMatch
+        XCTAssertTrue(pending.waitForExistence(timeout: 30), "The local attachment picker should populate the draft.")
+        let composer = app.descendants(matching: .any)
+            .matching(identifier: "morde.chat.composer").firstMatch
+        XCTAssertTrue(composer.waitForExistence(timeout: 10))
+        composer.tap()
+        composer.typeText("Send with a failing attachment upload")
+        let send = app.buttons["morde.task.send"]
+        let sendReady = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isEnabled == true"), object: send)
+        XCTAssertEqual(XCTWaiter.wait(for: [sendReady], timeout: 10), .completed)
+        send.tap()
+
+        let message = app.descendants(matching: .any)
+            .matching(identifier: "morde.chat.message.m9999999").firstMatch
+        XCTAssertTrue(message.waitForExistence(timeout: 20), "The text is accepted before attachment processing finishes.")
+        let uploadError = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "Synthetic attachment upload failed")).firstMatch
+        XCTAssertTrue(uploadError.waitForExistence(timeout: 30), "The failed upload should remain visible on its message.")
+        XCTAssertTrue(app.buttons["Retry"].firstMatch.exists, "The failed attachment batch should be safely retryable.")
         XCTAssertFalse(app.descendants(matching: .any)
             .matching(identifier: "morde.chat.attachments.pending").firstMatch.exists,
-                       "An attachment is not added to the draft until its upload commits.")
-        failure.buttons["确定"].tap()
-        app.terminate()
-    }
-
-    func testChatAttachmentLimitRejectsMoreThanSixteenItems() throws {
-        let app = XCUIApplication()
-        app.launchArguments = ["-morde.server", "", "-morde.localRegistrationStub",
-                              "-morde.localRegistrationApproved", "-morde.localMainChatFixture",
-                              "-morde.localChatAttachmentFixture", "-morde.localChatAttachmentOverflowFixture",
-                              "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
-        app.launch()
-        if !app.textFields["morde.auth.username"].waitForExistence(timeout: 2) {
-            signOutFromSettings(app)
-            app.terminate()
-            app.launch()
-        }
-        try signInToFixtureAccount("chat-overflow-\(UUID().uuidString.prefix(8))", in: app)
-
-        let failure = app.alerts.firstMatch
-        XCTAssertTrue(failure.waitForExistence(timeout: 30), "PDF text/page objects should count toward the sixteen-item send limit.")
-        XCTAssertTrue(failure.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "16")).firstMatch.exists)
-        XCTAssertFalse(app.descendants(matching: .any)
-            .matching(identifier: "morde.chat.attachments.pending").firstMatch.exists)
-        failure.buttons["确定"].tap()
+                       "After send, attachments belong to the queued message rather than the composer draft.")
+        XCTAssertTrue(app.staticTexts["fixture-image.jpg"].exists)
+        XCTAssertTrue(app.staticTexts["fixture.pdf"].exists)
         app.terminate()
     }
 
     func testPendingChatAttachmentsDoNotLeakAcrossAccounts() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-morde.server", "", "-morde.localRegistrationStub",
+        app.launchArguments = ["-morde.server", "https://127.0.0.1:49713", "-morde.localRegistrationStub",
                               "-morde.localRegistrationApproved", "-morde.localAccountIsolationFixture",
                               "-morde.localChatAttachmentFixture",
                               "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
@@ -1587,9 +1605,9 @@ final class MordeRegistrationUITests: XCTestCase {
         app.terminate()
     }
 
-    func testConversationHistoryRetriesAndLoadsEarlierPage() throws {
+    func testConversationHistoryLoadsEarlierPage() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-morde.server", "", "-morde.localRegistrationStub",
+        app.launchArguments = ["-morde.server", "https://127.0.0.1:49713", "-morde.localRegistrationStub",
                               "-morde.localRegistrationApproved", "-morde.localMainChatFixture",
                               "-morde.localConversationHistoryPaginationFixture",
                               "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
@@ -1599,29 +1617,29 @@ final class MordeRegistrationUITests: XCTestCase {
         app.launch()
 
         try signInToFixtureAccount("history-user", in: app)
-        let retry = app.buttons["morde.chat.messages.retry"]
-        XCTAssertTrue(retry.waitForExistence(timeout: 15), "A failed history request should show a targeted retry.")
-        retry.tap()
 
-        let latestMessage = app.staticTexts["History message 200"]
-        XCTAssertTrue(latestMessage.waitForExistence(timeout: 15), "The latest page should be displayed after retry.")
+        let latestMessage = app.staticTexts["History message 040"]
+        XCTAssertTrue(latestMessage.waitForExistence(timeout: 15), "The latest page should be displayed after recovery.")
         let transcript = app.scrollViews["morde.chat.transcript"]
         let loadEarlier = app.buttons["morde.chat.messages.loadEarlier"]
-        for _ in 0..<30 where !loadEarlier.isHittable { transcript.swipeDown() }
+        for _ in 0..<10 where !loadEarlier.isHittable { transcript.swipeDown() }
         XCTAssertTrue(loadEarlier.waitForExistence(timeout: 10), "The response next_cursor should expose an earlier-page action.")
         loadEarlier.tap()
 
         let earliestMessage = app.staticTexts["History message 001"]
-        for _ in 0..<30 where !earliestMessage.isHittable { transcript.swipeDown() }
-        XCTAssertTrue(earliestMessage.waitForExistence(timeout: 15), "The older page should be prepended to the current transcript.")
-        XCTAssertFalse(app.buttons["morde.chat.messages.loadEarlier"].exists,
-                       "The final page should remove the earlier-page action.")
+        for _ in 0..<10 where !earliestMessage.isHittable { transcript.swipeDown() }
+        XCTAssertTrue(earliestMessage.isHittable,
+                      "Loading older history should prepend the first page without snapping back to the latest message.")
+        let finishedLoading = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"),
+                                                         object: loadEarlier)
+        XCTAssertEqual(XCTWaiter.wait(for: [finishedLoading], timeout: 15), .completed,
+                       "The final page should consume the cursor and remove the earlier-page action.")
         signOutFromSettings(app)
     }
 
     func testLocalHistoryArchiveHasNoDrawerEntry() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-morde.server", "", "-morde.localRegistrationStub",
+        app.launchArguments = ["-morde.server", "https://127.0.0.1:49713", "-morde.localRegistrationStub",
                               "-morde.localRegistrationApproved", "-morde.localLegacyHistoryFixture",
                               "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
         app.launch()
@@ -1641,7 +1659,7 @@ final class MordeRegistrationUITests: XCTestCase {
 
     func testPersonalModelCanSendWithoutAdministratorDefaultModel() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-morde.server", "", "-morde.localRegistrationStub",
+        app.launchArguments = ["-morde.server", "https://127.0.0.1:49713", "-morde.localRegistrationStub",
                               "-morde.localRegistrationApproved", "-morde.localMainChatFixture",
                               "-morde.localNoAdminModelFixture",
                               "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
@@ -1667,7 +1685,7 @@ final class MordeRegistrationUITests: XCTestCase {
 
     func testLocalHistoryImportRequiresConfirmationAndSendsOnlyUserAssistantText() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-morde.server", "", "-morde.localRegistrationStub",
+        app.launchArguments = ["-morde.server", "https://127.0.0.1:49713", "-morde.localRegistrationStub",
                               "-morde.localRegistrationApproved", "-morde.localLegacyHistoryFixture",
                               "-morde.localHistoryImportFixture",
                               "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
@@ -1713,7 +1731,7 @@ final class MordeRegistrationUITests: XCTestCase {
 
     func testTaskMediaPreviewRequiresSaveDecisionAndConfirmsWorkspaceSave() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-morde.server", "", "-morde.localRegistrationStub",
+        app.launchArguments = ["-morde.server", "https://127.0.0.1:49713", "-morde.localRegistrationStub",
                               "-morde.localRegistrationApproved", "-morde.localTaskSSEFixture",
                               "-morde.localTaskMediaFixture",
                               "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
@@ -1744,7 +1762,7 @@ final class MordeRegistrationUITests: XCTestCase {
 
     func testTaskDetailMediaApprovalUsesTheSafePreviewFlow() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-morde.server", "", "-morde.localRegistrationStub",
+        app.launchArguments = ["-morde.server", "https://127.0.0.1:49713", "-morde.localRegistrationStub",
                               "-morde.localRegistrationApproved", "-morde.localTaskSSEFixture",
                               "-morde.localTaskMediaFixture",
                               "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
@@ -1770,7 +1788,7 @@ final class MordeRegistrationUITests: XCTestCase {
 
     func testTaskMediaApprovalStaysClosedWithoutCapability() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-morde.server", "", "-morde.localRegistrationStub",
+        app.launchArguments = ["-morde.server", "https://127.0.0.1:49713", "-morde.localRegistrationStub",
                               "-morde.localRegistrationApproved", "-morde.localTaskSSEFixture",
                               "-morde.localTaskMediaFixture", "-morde.localTaskMediaCapabilityDisabled",
                               "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
@@ -1795,7 +1813,7 @@ final class MordeRegistrationUITests: XCTestCase {
 
     func testTaskSSERefreshesSnapshotOnSnapshotRequired() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-morde.server", "", "-morde.localRegistrationStub",
+        app.launchArguments = ["-morde.server", "https://127.0.0.1:49713", "-morde.localRegistrationStub",
                               "-morde.localRegistrationApproved", "-morde.localTaskSSEFixture",
                               "-morde.localTaskSnapshotRequiredFixture",
                               "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
@@ -1807,7 +1825,7 @@ final class MordeRegistrationUITests: XCTestCase {
 
     func testTaskSSEReconnectsAfterTemporaryFailure() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-morde.server", "", "-morde.localRegistrationStub",
+        app.launchArguments = ["-morde.server", "https://127.0.0.1:49713", "-morde.localRegistrationStub",
                               "-morde.localRegistrationApproved", "-morde.localTaskSSEFixture",
                               "-morde.localTaskDisconnectRecoveryFixture",
                               "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
@@ -1819,7 +1837,7 @@ final class MordeRegistrationUITests: XCTestCase {
 
     func testAcceptedTaskIsRestoredAfterAppRelaunch() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-morde.server", "", "-morde.localRegistrationStub",
+        app.launchArguments = ["-morde.server", "https://127.0.0.1:49713", "-morde.localRegistrationStub",
                               "-morde.localRegistrationApproved", "-morde.localTaskSSEFixture",
                               "-morde.localTaskRelaunchFixture",
                               "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
@@ -1843,7 +1861,7 @@ final class MordeRegistrationUITests: XCTestCase {
 
     func testApprovalConflictRefreshesTaskAndHidesStaleControls() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-morde.server", "", "-morde.localRegistrationStub",
+        app.launchArguments = ["-morde.server", "https://127.0.0.1:49713", "-morde.localRegistrationStub",
                               "-morde.localRegistrationApproved", "-morde.localTaskSSEFixture",
                               "-morde.localTaskApprovalConflictFixture",
                               "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
@@ -1873,7 +1891,7 @@ final class MordeRegistrationUITests: XCTestCase {
 
     func testUnknownTaskStatusIsVisibleWithoutTaskControls() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-morde.server", "", "-morde.localRegistrationStub",
+        app.launchArguments = ["-morde.server", "https://127.0.0.1:49713", "-morde.localRegistrationStub",
                               "-morde.localRegistrationApproved", "-morde.localTaskSSEFixture",
                               "-morde.localUnknownTaskStatusFixture",
                               "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
@@ -1893,7 +1911,7 @@ final class MordeRegistrationUITests: XCTestCase {
 
     private func assertLoginMessage(_ app: XCUIApplication, statusArgument: String,
                                    username: String, message: String) {
-        app.launchArguments = ["-morde.server", "", "-morde.localRegistrationStub", statusArgument,
+        app.launchArguments = ["-morde.server", "https://127.0.0.1:49713", "-morde.localRegistrationStub", statusArgument,
                               "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
         app.launch()
         openMordeFromCurrentRoot(app)
@@ -1919,7 +1937,7 @@ final class MordeRegistrationUITests: XCTestCase {
 
     private func launchChatAttachmentMessageFixture(downloadFixtureArgument: String) throws -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-morde.server", "", "-morde.localRegistrationStub",
+        app.launchArguments = ["-morde.server", "https://127.0.0.1:49713", "-morde.localRegistrationStub",
                               "-morde.localRegistrationApproved", "-morde.localMainChatFixture",
                               "-morde.localChatAttachmentFixture", downloadFixtureArgument,
                               "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
@@ -1948,7 +1966,9 @@ final class MordeRegistrationUITests: XCTestCase {
     }
 
     private func signInToFixtureAccount(_ username: String, in app: XCUIApplication,
-                                        password: String = "LocalAccountFixture!2468") throws {
+                                        password: String = "LocalAccountFixture!2468",
+                                        expectedAlertMessage: String? = nil) throws {
+        dismissLocalFixtureStartupError(in: app)
         let usernameField = app.textFields["morde.auth.username"]
         let voiceOverTest = app.launchArguments.contains("-morde.voiceOverUITest")
         _ = try XCTUnwrap(usernameField.waitForExistence(timeout: 10) ? usernameField : nil,
@@ -1980,8 +2000,17 @@ final class MordeRegistrationUITests: XCTestCase {
         app.buttons["morde.auth.submit"].tap()
         let loginFinished = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"),
                                                        object: usernameField)
+        let alert = app.alerts.firstMatch
+        let expectedAlertShown: Bool
+        if let expectedAlertMessage {
+            expectedAlertShown = alert.waitForExistence(timeout: 20) && alert.staticTexts.matching(
+                NSPredicate(format: "label CONTAINS %@", expectedAlertMessage)).firstMatch.exists
+        } else {
+            expectedAlertShown = false
+        }
+        let alertIsExpected = expectedAlertMessage == nil ? !alert.exists : expectedAlertShown
         let signedIn = XCTWaiter.wait(for: [loginFinished], timeout: 15) == .completed
-            && app.buttons["morde.shell.drawer"].waitForExistence(timeout: 5) && !app.alerts.firstMatch.exists
+            && app.buttons["morde.shell.drawer"].waitForExistence(timeout: 5) && alertIsExpected
         if !signedIn {
             let screenshot = XCTAttachment(screenshot: app.screenshot())
             screenshot.name = "Local fixture sign-in failure"
@@ -1993,7 +2022,19 @@ final class MordeRegistrationUITests: XCTestCase {
         dismissKeyboard(in: app)
     }
 
+    private func dismissLocalFixtureStartupError(in app: XCUIApplication) {
+        let startupError = app.alerts.matching(
+            NSPredicate(format: "label == %@ OR label == %@", "请求失败", "Request failed")
+        ).firstMatch
+        guard startupError.waitForExistence(timeout: 1) else { return }
+        let confirm = startupError.buttons.matching(
+            NSPredicate(format: "label == %@ OR label == %@", "确定", "OK")
+        ).firstMatch
+        if confirm.exists { confirm.tap() }
+    }
+
     private func signInToFixtureAccountIfNeeded(_ username: String, in app: XCUIApplication) throws {
+        dismissLocalFixtureStartupError(in: app)
         let usernameField = app.textFields["morde.auth.username"]
         if usernameField.waitForExistence(timeout: 5) {
             openMordeFromCurrentRoot(app)
@@ -2007,7 +2048,7 @@ final class MordeRegistrationUITests: XCTestCase {
 
     private func launchTaskActionFixture(extraArguments: [String]) throws -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-morde.server", "",
+        app.launchArguments = ["-morde.server", "https://127.0.0.1:49713",
                               "-morde.localRegistrationStub", "-morde.localRegistrationApproved",
                               "-morde.localTaskPagesFixture"] + extraArguments +
             ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]

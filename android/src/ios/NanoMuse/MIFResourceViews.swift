@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct MIFResourcePageState: Equatable {
     struct ListState: Equatable {
@@ -16,6 +17,8 @@ struct MIFResourcePageState: Equatable {
         enum Scope: Equatable {
             case owned
             case sharedReadOnly
+            case sharedControl
+            case sharedUnavailable
         }
 
         enum Status: Equatable {
@@ -57,13 +60,11 @@ struct MIFResourcePageState: Equatable {
 
         let state: State
         let lease: Lease
-        let leaseExpiresAt: String?
-        let transitionSummary: String?
+        let isTransitioning: Bool
         let isLoading: Bool
         let isActionInFlight: Bool
         let canTakeOver: Bool
         let canReturnToAI: Bool
-        let canRenewLease: Bool
         let error: String?
     }
 
@@ -80,8 +81,18 @@ struct MIFResourcePageState: Equatable {
         let name: String
         let status: Status
         let hostName: String?
+        let usedBytes: Int64
+        let quotaBytes: Int64
         let isReadOnly: Bool
-        let canOpenFiles: Bool
+        let canOpen: Bool
+
+        var capacitySummary: String? {
+            guard usedBytes >= 0, quotaBytes > 0 else { return nil }
+            let percentage = Int(min(100, max(0, (Double(usedBytes) * 100 / Double(quotaBytes)).rounded())))
+            let formatter = ByteCountFormatter()
+            formatter.countStyle = .memory
+            return "\(formatter.string(fromByteCount: quotaBytes)) · \(AppLocalized("Used")) \(percentage)%"
+        }
     }
 
     let isLoading: Bool
@@ -96,7 +107,6 @@ struct MIFResourcePageState: Equatable {
 enum MIFResourceControlAction: String, Hashable {
     case takeOver
     case returnToAI
-    case renewLease
 }
 
 enum MIFResourcePageSection: CaseIterable, Hashable {
@@ -158,7 +168,7 @@ enum MIFResourcePageRules {
     static func controlActions(for host: MIFResourcePageState.Host) -> [MIFResourceControlAction] {
         guard host.scope == .owned, host.status == .running, let control = host.control,
               !control.isLoading, !control.isActionInFlight,
-              control.transitionSummary == nil, control.state == .user,
+              !control.isTransitioning, control.state == .user,
               control.canReturnToAI,
               control.lease == .active || control.lease == .expired else { return [] }
 
@@ -177,6 +187,56 @@ struct MIFResourcePageActions {
     let openWorkspaceFiles: (String) -> Void
 }
 
+private struct MIFResourceHostGlyph: Shape {
+    func path(in rect: CGRect) -> Path {
+        let scaleX = rect.width / 24
+        let scaleY = rect.height / 24
+        let radius = 2 * min(scaleX, scaleY)
+        var path = Path()
+        path.addRoundedRect(
+            in: CGRect(x: rect.minX + 3 * scaleX,
+                       y: rect.minY + 4.5 * scaleY,
+                       width: 18 * scaleX,
+                       height: 12 * scaleY),
+            cornerSize: CGSize(width: radius, height: radius)
+        )
+        path.move(to: CGPoint(x: rect.minX + 9.5 * scaleX, y: rect.minY + 20.5 * scaleY))
+        path.addLine(to: CGPoint(x: rect.minX + 14.5 * scaleX, y: rect.minY + 20.5 * scaleY))
+        path.move(to: CGPoint(x: rect.minX + 12 * scaleX, y: rect.minY + 16.5 * scaleY))
+        path.addLine(to: CGPoint(x: rect.minX + 12 * scaleX, y: rect.minY + 20.5 * scaleY))
+        return path
+    }
+}
+
+private struct MIFResourceWorkspaceGlyph: View {
+    let color: Color
+
+    var body: some View {
+        GeometryReader { geometry in
+            let scale = min(geometry.size.width, geometry.size.height) / 24
+            ZStack(alignment: .topLeading) {
+                Path { path in
+                    path.addRoundedRect(
+                        in: CGRect(x: 3 * scale, y: 7 * scale,
+                                   width: 18 * scale, height: 10.5 * scale),
+                        cornerSize: CGSize(width: 2.5 * scale, height: 2.5 * scale)
+                    )
+                    path.move(to: CGPoint(x: 6.8 * scale, y: 12.2 * scale))
+                    path.addLine(to: CGPoint(x: 10.8 * scale, y: 12.2 * scale))
+                }
+                .stroke(color, style: StrokeStyle(lineWidth: 1.8 * scale,
+                                                  lineCap: .round, lineJoin: .round))
+                Circle()
+                    .fill(color)
+                    .frame(width: 2.2 * scale, height: 2.2 * scale)
+                    .position(x: 16.8 * scale, y: 12.2 * scale)
+            }
+        }
+        .frame(width: 21, height: 21)
+        .accessibilityHidden(true)
+    }
+}
+
 @MainActor
 struct MIFResourceRoom: View {
     var chrome: NanoMuseRoomChrome? = nil
@@ -184,8 +244,39 @@ struct MIFResourceRoom: View {
     let state: MIFResourcePageState
     let actions: MIFResourcePageActions
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     @State private var resourceToast: String?
     @State private var resourceToastID = UUID()
+
+    private var rowIconFill: Color {
+        colorScheme == .dark
+            ? NanoMuseTones.fill
+            : Color(red: 236.0 / 255.0, green: 236.0 / 255.0, blue: 240.0 / 255.0)
+    }
+
+    private var rowIconStrokeColor: Color {
+        colorScheme == .dark
+            ? NanoMuseTones.ink
+            : Color(red: 58.0 / 255.0, green: 58.0 / 255.0, blue: 60.0 / 255.0)
+    }
+
+    private var rowSummaryColor: Color {
+        colorScheme == .dark
+            ? NanoMuseTones.secondaryText
+            : Color(red: 115.0 / 255.0, green: 115.0 / 255.0, blue: 120.0 / 255.0)
+    }
+
+    private var rowStatusColor: Color {
+        Color(uiColor: colorScheme == .dark
+              ? UIColor.tertiaryLabel
+              : UIColor(red: 172.0 / 255.0, green: 172.0 / 255.0, blue: 177.0 / 255.0, alpha: 1))
+    }
+
+    private var resourceCanvasColor: Color {
+        colorScheme == .dark
+            ? .black
+            : Color(red: 250.0 / 255.0, green: 250.0 / 255.0, blue: 250.0 / 255.0)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -223,7 +314,9 @@ struct MIFResourceRoom: View {
                 }
                 .padding(.horizontal, 22)
                 .padding(.top, 2)
-                .padding(.bottom, 24)
+                // The resource empty-state row already includes 13pt bottom padding;
+                // 95pt more leaves the HTML's 30pt gap to the floating TabBar capsule.
+                .padding(.bottom, onMenu != nil ? 95 : 22)
                 .mordeVerticalScrollBounceProbe()
             }
             .refreshable {
@@ -234,17 +327,18 @@ struct MIFResourceRoom: View {
             .mordeAlwaysBounceVertically()
             .accessibilityIdentifier("morde.resources.scroll")
         }
-        .background(NanoMuseTones.canvas.ignoresSafeArea())
+        .background(resourceCanvasColor.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
-        .overlay(alignment: .bottom) {
+        .overlay(alignment: .top) {
             if let resourceToast {
                 Text(resourceToast)
-                    .font(.subheadline)
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.white)
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, 15)
                     .padding(.vertical, 10)
-                    .background(Color.black.opacity(0.82), in: Capsule())
-                    .padding(.bottom, 24)
+                    .background(Color.black.opacity(0.95), in: Capsule())
+                    .shadow(color: .black.opacity(0.25), radius: 14, x: 0, y: 10)
+                    .allowsHitTesting(false)
                     .accessibilityIdentifier("morde.resources.add.unavailable")
                     .transition(.opacity)
             }
@@ -291,13 +385,13 @@ struct MIFResourceRoom: View {
                 resourceToastID = id
                 withAnimation { resourceToast = AppLocalized("Not implemented yet") }
                 Task { @MainActor in
-                    try? await Task.sleep(nanoseconds: 1_600_000_000)
+                    try? await Task.sleep(nanoseconds: 2_200_000_000)
                     guard resourceToastID == id else { return }
                     withAnimation { resourceToast = nil }
                 }
             }
         } label: {
-            Image(systemName: "plus")
+            Text("＋")
                 .font(.system(size: 19, weight: .regular))
                 .foregroundStyle(NanoMuseTones.ink)
                 .frame(width: 38, height: 38)
@@ -315,7 +409,7 @@ struct MIFResourceRoom: View {
         switch section {
         case .cloudComputers:
             if state.hosts.isEmpty, MIFResourcePageRules.showsEmptyState(for: section, state: state) {
-                statusRow(section.emptyMessage, symbol: section.emptySymbol)
+                resourceEmptyStateRow(section.emptyMessage, symbol: section.emptySymbol)
                     .accessibilityIdentifier(section.emptyStateIdentifier)
             } else if state.hosts.isEmpty {
                 EmptyView()
@@ -325,11 +419,11 @@ struct MIFResourceRoom: View {
                 }
             }
         case .cloudPhones, .aiTools:
-            statusRow(section.emptyMessage, symbol: section.emptySymbol)
+            resourceEmptyStateRow(section.emptyMessage, symbol: section.emptySymbol)
                 .accessibilityIdentifier(section.emptyStateIdentifier)
         case .workspaces:
             if state.workspaces.isEmpty, MIFResourcePageRules.showsEmptyState(for: section, state: state) {
-                statusRow(section.emptyMessage, symbol: section.emptySymbol)
+                resourceEmptyStateRow(section.emptyMessage, symbol: section.emptySymbol)
                     .accessibilityIdentifier(section.emptyStateIdentifier)
             } else if state.workspaces.isEmpty {
                 EmptyView()
@@ -347,20 +441,24 @@ struct MIFResourceRoom: View {
                 actions.openHost(host)
             } label: {
                 HStack(alignment: .top, spacing: 13) {
-                    Image(systemName: "desktopcomputer")
-                        .font(.system(size: 20))
-                        .foregroundStyle(NanoMuseTones.ink)
+                    MIFResourceHostGlyph()
+                        .stroke(rowIconStrokeColor,
+                                style: StrokeStyle(lineWidth: 1.8, lineCap: .round, lineJoin: .round))
+                        .frame(width: 21, height: 21)
                         .frame(width: 44, height: 44)
-                        .background(NanoMuseTones.fill, in: Circle())
+                        .background(rowIconFill, in: Circle())
                         .accessibilityHidden(true)
-                    VStack(alignment: .leading, spacing: 3) {
+                    VStack(alignment: .leading, spacing: 2) {
                         Text(host.name)
                             .font(.system(size: 16, weight: .semibold))
+                            .tracking(-0.16)
+                            .lineSpacing(1.5)
                             .fixedSize(horizontal: false, vertical: true)
                         if let workspaceSummary = host.workspaceSummary, !workspaceSummary.isEmpty {
                             Text(workspaceSummary)
                                 .font(.system(size: 14))
-                                .foregroundStyle(NanoMuseTones.secondaryText)
+                                .lineSpacing(3.5)
+                                .foregroundStyle(rowSummaryColor)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         HStack(spacing: 6) {
@@ -369,29 +467,40 @@ struct MIFResourceRoom: View {
                             if host.scope == .sharedReadOnly {
                                 Text("·")
                                 Text(AppLocalized("Shared read-only"))
+                            } else if host.scope == .sharedControl {
+                                Text("·")
+                                Text(AppLocalized("Shared"))
                             }
                         }
                         .font(.footnote)
-                        .foregroundStyle(NanoMuseTones.secondaryText)
+                        .foregroundStyle(rowStatusColor)
+                        .padding(.top, 1)
 
-                        if host.scope == .owned { controlStatus(host) }
+                        if host.scope == .owned {
+                            controlStatus(host)
+                                .padding(.top, 1)
+                        }
                         if host.status == .running && !host.canOpen && host.scope == .owned {
                             Text(AppLocalized("A ready Workspace binding is required to open this computer."))
                                 .font(.footnote)
                                 .foregroundStyle(Color.primary)
-                        } else if host.scope == .sharedReadOnly && host.status == .running && !host.canOpen {
+                                .padding(.top, 1)
+                        } else if host.scope == .sharedUnavailable && host.status == .running {
                             Text(AppLocalized("You do not have permission to view this computer."))
                                 .font(.footnote)
                                 .foregroundStyle(NanoMuseTones.secondaryText)
+                                .padding(.top, 1)
                         }
                         if let error = host.error {
                             Text(error)
                                 .font(.footnote)
                                 .foregroundStyle(.orange)
+                                .padding(.top, 1)
                                 .accessibilityIdentifier("morde.resources.host.error.\(host.id)")
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 1)
                     if host.canOpen {
                         resourceDisclosureChevron
                     }
@@ -440,28 +549,19 @@ struct MIFResourceRoom: View {
     private func controlStatus(_ host: MIFResourcePageState.Host) -> some View {
         if let control = host.control {
             VStack(alignment: .leading, spacing: 4) {
-                Label(control.state.localizedTitle, systemImage: "lock.shield")
-                .font(.caption.weight(.medium))
-                if control.lease != .none {
-                    Text(control.lease.localizedTitle)
-                        .font(.footnote)
-                        .foregroundStyle(control.lease == .expired || control.lease == .unknown ? Color.orange : Color.secondary)
-                }
-                if let expiresAt = control.leaseExpiresAt, control.lease == .active {
-                    Text(String(format: AppLocalized("Lease expires %@"), expiresAt))
-                        .font(.caption)
-                        .foregroundStyle(NanoMuseTones.secondaryText)
-                }
-                if let transitionSummary = control.transitionSummary {
-                    Text(transitionSummary)
-                        .font(.caption)
-                        .foregroundStyle(NanoMuseTones.secondaryText)
-                        .accessibilityIdentifier("morde.resources.host.transition.\(host.id)")
+                if control.lease == .expired {
+                    Label(control.lease.localizedTitle, systemImage: "exclamationmark.lock")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.orange)
+                } else {
+                    Label(control.state.localizedTitle, systemImage: "lock.shield")
+                        .font(.caption.weight(.medium))
                 }
                 if let error = control.error {
                     Text(error)
                         .font(.caption)
                         .foregroundStyle(.orange)
+                        .accessibilityIdentifier("morde.resources.host.controlError.\(host.id)")
                 }
             }
         } else {
@@ -478,16 +578,22 @@ struct MIFResourceRoom: View {
             actions.openWorkspaceFiles(workspace.id)
         } label: {
             HStack(alignment: .top, spacing: 13) {
-                Image(systemName: "externaldrive")
-                    .font(.system(size: 21))
-                    .foregroundStyle(NanoMuseTones.ink)
+                MIFResourceWorkspaceGlyph(color: rowIconStrokeColor)
                     .frame(width: 44, height: 44)
-                    .background(NanoMuseTones.fill, in: Circle())
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 3) {
+                    .background(rowIconFill, in: Circle())
+                VStack(alignment: .leading, spacing: 2) {
                     Text(workspace.name)
                         .font(.system(size: 16, weight: .semibold))
+                        .tracking(-0.16)
+                        .lineSpacing(1.5)
                         .fixedSize(horizontal: false, vertical: true)
+                    if let capacitySummary = workspace.capacitySummary {
+                        Text(capacitySummary)
+                            .font(.system(size: 14))
+                            .lineSpacing(3.5)
+                            .foregroundStyle(rowSummaryColor)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                     HStack(spacing: 6) {
                         Text(isMounted ? AppLocalized("Mounted") : workspace.status.localizedTitle)
                         if let hostName, !hostName.isEmpty {
@@ -500,17 +606,19 @@ struct MIFResourceRoom: View {
                         }
                     }
                     .font(.footnote)
-                    .foregroundStyle(NanoMuseTones.secondaryText)
+                    .foregroundStyle(rowStatusColor)
+                    .padding(.top, 1)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                if workspace.canOpenFiles {
+                .padding(.top, 1)
+                if workspace.canOpen {
                     resourceDisclosureChevron
                 }
             }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(!workspace.canOpenFiles)
+        .disabled(!workspace.canOpen)
         .accessibilityIdentifier("morde.resources.workspace.open.\(workspace.id)")
         .padding(.vertical, 13)
     }
@@ -526,6 +634,25 @@ struct MIFResourceRoom: View {
     private func sectionTitle(_ title: String) -> some View {
         Text(title)
             .font(.system(size: 16, weight: .bold))
+    }
+
+    private func resourceEmptyStateRow(_ message: String, symbol: String) -> some View {
+        HStack(alignment: .top, spacing: 13) {
+            Image(systemName: symbol)
+                .foregroundStyle(rowIconStrokeColor)
+                .frame(width: 44, height: 44)
+                .background(rowIconFill, in: Circle())
+                .accessibilityHidden(true)
+            Text(message)
+                .font(.system(size: 14))
+                .lineSpacing(3.5)
+                .foregroundStyle(rowSummaryColor)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 1)
+        }
+        .padding(.vertical, 13)
+        .accessibilityElement(children: .combine)
     }
 
     private func statusRow(_ message: String, symbol: String) -> some View {
@@ -601,7 +728,6 @@ private extension MIFResourceControlAction {
         switch self {
         case .takeOver: return AppLocalized("Take control")
         case .returnToAI: return AppLocalized("Return control to AI")
-        case .renewLease: return AppLocalized("Renew lease")
         }
     }
 
@@ -609,7 +735,6 @@ private extension MIFResourceControlAction {
         switch self {
         case .takeOver: return "hand.raised"
         case .returnToAI: return "arrow.uturn.backward"
-        case .renewLease: return "clock.arrow.circlepath"
         }
     }
 }

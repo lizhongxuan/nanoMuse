@@ -2,21 +2,24 @@ import XCTest
 @testable import Minis
 
 final class MIFTaskViewsTests: XCTestCase {
-    func testTaskDecodesAggregationFlagsAndLegacySnapshots() throws {
-        let legacy = #"{"id":"q1234567","conversation_id":"c1234567","objective":"demo","status":"completed","updated_at":"2026-11-04T00:00:00Z"}"#
-        let pending = #"{"id":"q1234567","conversation_id":"c1234567","objective":"demo","status":"completed","updated_at":"2026-11-04T00:00:00Z","result_message_pending":true,"result_message_published":false}"#
+    func testTaskDecodesAggregationFlagsWithRequiredStepCounts() throws {
+        let legacy = #"{"id":"q1234567","conversation_id":"c1234567","objective":"demo","status":"completed","step_count":0,"completed_step_count":0,"updated_at":"2026-11-04T00:00:00Z"}"#
+        let pending = #"{"id":"q1234567","conversation_id":"c1234567","objective":"demo","status":"completed","step_count":0,"completed_step_count":0,"updated_at":"2026-11-04T00:00:00Z","result_message_pending":true,"result_message_published":false}"#
         let oldTask = try JSONDecoder().decode(MordeTask.self, from: Data(legacy.utf8))
         let newTask = try JSONDecoder().decode(MordeTask.self, from: Data(pending.utf8))
         XCTAssertNil(oldTask.result_message_pending)
         XCTAssertNil(oldTask.result_message_published)
         XCTAssertEqual(newTask.result_message_pending, true)
         XCTAssertEqual(newTask.result_message_published, false)
+        let missingCounts = #"{"id":"q1234567","conversation_id":"c1234567","objective":"demo","status":"completed","updated_at":"2026-11-04T00:00:00Z"}"#
+        XCTAssertThrowsError(try JSONDecoder().decode(MordeTask.self, from: Data(missingCounts.utf8)))
     }
 
     func testNewRevisionWaitsForItsOwnPersistedStart() throws {
         func task(started: Bool?, current: Int64, desired: Int64, status: String = "running") throws -> MordeTask {
             var payload: [String: Any] = ["id": "q1234567", "conversation_id": "c1234567", "objective": "demo",
-                "status": status, "updated_at": "2026-11-04T00:00:00Z", "current_revision": current,
+                "status": status, "step_count": 0, "completed_step_count": 0,
+                "updated_at": "2026-11-04T00:00:00Z", "current_revision": current,
                 "desired_revision": desired, "current_step": "开始处理"]
             if let started { payload["current_revision_started"] = started }
             return try JSONDecoder().decode(MordeTask.self, from: JSONSerialization.data(withJSONObject: payload))
@@ -138,7 +141,7 @@ final class MIFTaskViewsTests: XCTestCase {
     }
 
     func testProjectRecoveryWaitExplainsTheFailureInTaskAndEvent() throws {
-        let json = #"{"id":"q1234567","conversation_id":"c1234567","objective":"demo","status":"waiting_user","waiting_reason":"project_recovery_unavailable","updated_at":"2026-11-04T00:00:00Z"}"#
+        let json = #"{"id":"q1234567","conversation_id":"c1234567","objective":"demo","status":"waiting_user","waiting_reason":"project_recovery_unavailable","step_count":0,"completed_step_count":0,"updated_at":"2026-11-04T00:00:00Z"}"#
         let task = try JSONDecoder().decode(MordeTask.self, from: Data(json.utf8))
         let explanation = "原项目权限/上下文变化，未安全恢复，请重新发送。"
         XCTAssertEqual(task.statusLabel, explanation)
@@ -156,7 +159,7 @@ final class MIFTaskViewsTests: XCTestCase {
         XCTAssertEqual(statusEvent.display?.summary, explanation)
     }
 
-    func testTaskListDetailCountsVisibleSucceededStepsAndKeepsCurrentDetail() {
+    func testTaskListDetailUsesServerStepCountsAndKeepsCurrentDetail() {
         let running = MordeTask.Step(id: "s2345678", sequence: 2, kind: "agent", status: "running",
                                     title: "Second", summary: "Deploying", created_at: "2026-11-04T00:00:02Z")
         let budget = MordeTask.Step(id: "s3456789", sequence: 3, kind: "budget", status: "succeeded",
@@ -164,16 +167,17 @@ final class MIFTaskViewsTests: XCTestCase {
                                    created_at: "2026-11-04T00:00:03Z")
         let completed = MordeTask.Step(id: "s1234567", sequence: 1, kind: "agent", status: "succeeded",
                                        title: "First", summary: "Finished", created_at: "2026-11-04T00:00:01Z")
-        let task = makeTask(id: "q1234567", status: "running", currentStep: "Deploying",
+        let task = makeTask(id: "q1234567", status: "running", currentStep: "Deploying", stepCount: 2,
+                            completedStepCount: 1,
                             steps: [running, budget, completed])
 
         let detail = MIFTaskPresentation.taskListDetail(task)
 
-        XCTAssertEqual(detail, "2 \(AppLocalized("Steps")) · 1 \(AppLocalized("Completed")) · Deploying")
+        XCTAssertEqual(detail, String(format: AppLocalized("%1$d steps · %2$d done"), 2, 1) + " · Deploying")
         XCTAssertFalse(detail?.localizedCaseInsensitiveContains("budget") == true)
     }
 
-    func testTaskListDetailFallsBackWhenStepsAreMissingOrOnlyBudgetSteps() {
+    func testTaskListDetailDoesNotInferCountsFromSteps() {
         let currentStep = makeTask(id: "q1234567", status: "running", currentStep: "Checking")
         let result = makeTask(id: "q2345678", status: "completed", result: "Delivered")
         let completedWithStaleStep = makeTask(id: "q4567890", status: "completed",
@@ -181,12 +185,17 @@ final class MIFTaskViewsTests: XCTestCase {
         let budget = MordeTask.Step(id: "s3456789", sequence: 1, kind: "budget", status: "succeeded",
                                     title: "Private budget", summary: "Private usage detail",
                                     created_at: "2026-11-04T00:00:01Z")
-        let budgetOnly = makeTask(id: "q3456789", status: "completed", steps: [budget])
+        let hiddenBudget = makeTask(id: "q3456789", status: "completed", stepCount: 0,
+                                    completedStepCount: 0, steps: [budget])
+        let serverReported = makeTask(id: "q5678901", status: "running", stepCount: 7,
+                                      completedStepCount: 3, steps: [])
 
         XCTAssertEqual(MIFTaskPresentation.taskListDetail(currentStep), "Checking")
         XCTAssertEqual(MIFTaskPresentation.taskListDetail(result), "Delivered")
         XCTAssertEqual(MIFTaskPresentation.taskListDetail(completedWithStaleStep), "Delivered")
-        XCTAssertNil(MIFTaskPresentation.taskListDetail(budgetOnly))
+        XCTAssertNil(MIFTaskPresentation.taskListDetail(hiddenBudget))
+        XCTAssertEqual(MIFTaskPresentation.taskListDetail(serverReported),
+                       String(format: AppLocalized("%1$d steps · %2$d done"), 7, 3))
     }
 
     func testTimelineRowsSortDeduplicateAndSkipUndisplayableEvents() throws {
@@ -218,6 +227,7 @@ final class MIFTaskViewsTests: XCTestCase {
 
     private func makeTask(id: String, status: String, batchItems: [MordeBatchItem]? = nil,
                           currentStep: String? = nil, result: String? = nil,
+                          stepCount: Int64 = 0, completedStepCount: Int64 = 0,
                           steps: [MordeTask.Step]? = nil) -> MordeTask {
         // nanoMuse: model_id has no memberwise default, so fixture tasks provide nil explicitly.
         MordeTask(owner_id: nil, initiator_id: nil, id: id, conversation_id: "c1234567", host_id: nil,
@@ -227,7 +237,7 @@ final class MIFTaskViewsTests: XCTestCase {
                   result: result, result_message_pending: nil,
                   result_message_published: nil,
                   current_step: currentStep, waiting_reason: nil, stop_request: nil,
-                  step_count: nil, completed_step_count: nil, pending_request: nil,
+                  step_count: stepCount, completed_step_count: completedStepCount, pending_request: nil,
                   clarification_request: nil, batch_items: batchItems, steps: steps, artifacts: nil,
                   updated_at: "2026-11-04T00:00:00Z", assistant_message: nil)
     }

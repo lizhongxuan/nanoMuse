@@ -75,13 +75,17 @@ internal class MordeClient(context: Context) {
     }
 
     suspend fun request(path: String, method: String = "GET", body: JSONObject? = null,
-                        key: String? = null, authorized: Boolean = true): JSONObject = withContext(Dispatchers.IO) {
+                        key: String? = null, authorized: Boolean = true,
+                        serviceInstanceID: String? = null, actorID: String? = null): JSONObject = withContext(Dispatchers.IO) {
         val origin = URI(server)
         require(origin.scheme == "https" && origin.host != null)
         val url = origin.resolve(path)
         require(url.scheme == "https" && url.host == origin.host && url.port == origin.port) { "Invalid Morde API address" }
         val builder = Request.Builder().url(url.toString()).header("X-Request-Id", UUID.randomUUID().toString())
             .header("Cache-Control", "no-store")
+        require((serviceInstanceID == null) == (actorID == null)) { "Message identity headers must be paired" }
+        serviceInstanceID?.let { builder.header("X-Morde-Service-Instance-ID", it) }
+        actorID?.let { builder.header("X-Morde-Actor-ID", it) }
         if (authorized) {
             clearExpiredAuthorization()
             val credential = token ?: throw MordeHttpException(401, "Login expired. Sign in again.")

@@ -20,6 +20,7 @@ struct MIFApprovalInboxRoom: View {
     @State private var isSubmitting = false
     @State private var actionMessage: String?
     @State private var submissionLedger = MIFApprovalSubmissionLedger()
+    @Environment(\.colorScheme) private var colorScheme
 
     init(onConfirmedCount: ((Int?) -> Void)? = nil, chrome: NanoMuseRoomChrome? = nil,
          onMenu: (() -> Void)? = nil, onOpenEventChain: ((String) -> Void)? = nil) {
@@ -35,11 +36,23 @@ struct MIFApprovalInboxRoom: View {
                                      failedTaskIDs: failedTaskIDs, pageReadFailed: pageReadFailed)
     }
 
+    private var approvalSeparatorColor: Color {
+        colorScheme == .dark ? NanoMuseTones.hairline : Color(red: 239.0 / 255, green: 239.0 / 255, blue: 239.0 / 255)
+    }
+
+    private var approvalNeutralActionFill: Color {
+        colorScheme == .dark ? NanoMuseTones.fill : Color(red: 240.0 / 255, green: 240.0 / 255, blue: 242.0 / 255)
+    }
+
+    private var approvalCanvasColor: Color {
+        guard onMenu != nil, colorScheme != .dark else { return NanoMuseTones.canvas }
+        return Color(red: 250.0 / 255, green: 250.0 / 255, blue: 250.0 / 255)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             if let onMenu {
-                MordeDesignPageHeader(title: AppLocalized("Approvals"), onMenu: onMenu,
-                                       titleAccessory: confirmedHeaderCountText) { EmptyView() }
+                approvalDesignHeader(onMenu: onMenu)
             } else if let chrome {
                 NanoMuseRoomHeader(chrome: chrome) {
                     // nanoMuse: shared room headers need the confirmed count for the approval inbox.
@@ -86,7 +99,7 @@ struct MIFApprovalInboxRoom: View {
                                 ForEach(summary.approvals) { approval in
                                     if summary.eventChainApprovalID != approval.id {
                                         Rectangle()
-                                            .fill(NanoMuseTones.hairline)
+                                            .fill(approvalSeparatorColor)
                                             .frame(height: 1)
                                     }
                                     approvalCard(approval)
@@ -102,7 +115,7 @@ struct MIFApprovalInboxRoom: View {
             .accessibilityIdentifier("mif.approval.list")
             .refreshable { await reload(scopeKey: store.scopeKey) }
         }
-        .background(NanoMuseTones.canvas.ignoresSafeArea())
+        .background(approvalCanvasColor.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
         .task(id: store.scopeKey) { await reload(scopeKey: store.scopeKey) }
     }
@@ -111,6 +124,48 @@ struct MIFApprovalInboxRoom: View {
         guard store.isSignedIn, let scopeKey = store.scopeKey,
               hasLoaded, loadedScopeKey == scopeKey, !summary.isPartial else { return nil }
         return String(format: AppLocalized("%d approvals pending"), summary.approvals.count)
+    }
+
+    private func approvalDesignHeader(onMenu: @escaping () -> Void) -> some View {
+        HStack(spacing: 10) {
+            Button(action: onMenu) {
+                Canvas { context, size in
+                    let scale = size.width / 24
+                    var path = Path()
+                    path.move(to: CGPoint(x: 4 * scale, y: 9 * scale))
+                    path.addLine(to: CGPoint(x: 20 * scale, y: 9 * scale))
+                    path.move(to: CGPoint(x: 4 * scale, y: 15 * scale))
+                    path.addLine(to: CGPoint(x: 20 * scale, y: 15 * scale))
+                    context.stroke(path, with: .color(.primary),
+                                   style: StrokeStyle(lineWidth: 2.1 * scale, lineCap: .round))
+                }
+                .frame(width: 19, height: 19)
+                .frame(width: 38, height: 38)
+                .background(NanoMuseTones.surface, in: Circle())
+                .overlay(Circle().stroke(colorScheme == .dark ? NanoMuseTones.hairline : Color.black.opacity(0.09), lineWidth: 1))
+                .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text(AppLocalized("Chats and settings")))
+            Text(AppLocalized("Approvals"))
+                .font(.system(size: 17, weight: .semibold))
+                .tracking(-0.17)
+                .foregroundStyle(Color.primary)
+                .lineLimit(1)
+            if let confirmedHeaderCountText {
+                Text(confirmedHeaderCountText)
+                    .font(.system(size: 13.5, weight: .medium))
+                    .foregroundStyle(Color(red: 163.0 / 255, green: 163.0 / 255, blue: 168.0 / 255))
+                    .lineLimit(1)
+                    .padding(.leading, 10)
+                    .accessibilityIdentifier("mif.approval.count")
+            }
+            Spacer(minLength: 8)
+        }
+        .padding(.horizontal, 22)
+        .padding(.top, 10)
+        .padding(.bottom, 4)
+        .frame(minHeight: 48)
     }
 
     private var emptyState: some View {
@@ -139,25 +194,27 @@ struct MIFApprovalInboxRoom: View {
         let pending = approval.pending
         let canRespondInInbox = MIFApprovalInboxPolicy.canRespond(pending: pending)
         let decisionWasAccepted = submissionLedger.contains(approval.id, scopeKey: store.scopeKey)
+        let taskStateConfirmsDecision = details[task.id].map {
+            !taskStillHasPendingRequest($0, matching: approval)
+        } ?? false
+        var factLines: [String] = []
+        if let object = pending.object, !object.isEmpty { factLines.append(object) }
+        if !pending.content.isEmpty { factLines.append(pending.content) }
+        if !pending.impact.isEmpty { factLines.append(pending.impact) }
 
         return VStack(alignment: .leading, spacing: 0) {
             Text(pending.title)
                 .font(.system(size: 17.5, weight: .bold))
+                .tracking(-0.175)
+                .lineSpacing(2.5)
                 .fixedSize(horizontal: false, vertical: true)
 
-            VStack(alignment: .leading, spacing: 3) {
-                if let object = pending.object, !object.isEmpty {
-                    Text(object)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Text(pending.content)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text(pending.impact)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            Text(factLines.joined(separator: "\n"))
             .font(.system(size: 14.5))
-            .foregroundStyle(NanoMuseTones.secondaryText)
+            .lineSpacing(6)
+            .foregroundStyle(Color(red: 115.0 / 255, green: 115.0 / 255, blue: 120.0 / 255))
             .padding(.top, 7)
+            .fixedSize(horizontal: false, vertical: true)
 
             if let message = store.actionErrors[task.id] {
                 Text(message)
@@ -198,7 +255,7 @@ struct MIFApprovalInboxRoom: View {
                 .disabled(isSubmitting || store.actionInFlight)
             }
 
-            if summary.eventChainApprovalID == approval.id {
+            if summary.eventChainApprovalID == approval.id, !taskStateConfirmsDecision {
                 eventChainLink(task: task)
                     .padding(.top, 12)
             }
@@ -210,18 +267,18 @@ struct MIFApprovalInboxRoom: View {
     @ViewBuilder
     private func eventChainLink(task: MordeTask) -> some View {
         let label = Text(AppLocalized("View task event chain") + " ›")
-            .font(.subheadline.weight(.semibold))
+            .font(.system(size: 14, weight: .semibold))
             .frame(minHeight: 32, alignment: .leading)
             .contentShape(Rectangle())
         if let onOpenEventChain {
             Button { onOpenEventChain(task.id) } label: { label }
                 .buttonStyle(.plain)
-                .foregroundStyle(NanoMuseTones.actionText)
+                .foregroundStyle(NanoMuseTones.ink)
                 .accessibilityIdentifier("mif.approval.timeline.\(task.id)")
         } else {
             NavigationLink(destination: MIFTaskEventChainRoom(taskID: task.id)) { label }
                 .buttonStyle(.plain)
-                .foregroundStyle(NanoMuseTones.actionText)
+                .foregroundStyle(NanoMuseTones.ink)
                 .accessibilityIdentifier("mif.approval.timeline.\(task.id)")
         }
     }
@@ -233,7 +290,7 @@ struct MIFApprovalInboxRoom: View {
                 .font(.system(size: 14.5, weight: .semibold))
                 .foregroundStyle(isPrimary ? NanoMuseTones.onInk : (isReject ? Color(red: 0.784, green: 0.118, blue: 0.118) : Color.primary))
                 .frame(maxWidth: .infinity, minHeight: 44)
-                .background(isPrimary ? Color.primary : NanoMuseTones.fill, in: Capsule())
+                .background(isPrimary ? Color.primary : approvalNeutralActionFill, in: Capsule().inset(by: 2))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(isReject

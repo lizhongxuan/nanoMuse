@@ -44,16 +44,31 @@ enum MinisStoragePaths {
             .appendingPathComponent("browser", isDirectory: true)
     }
 
-    static var minisAppGroupRoot: URL {
-        FileManager.default.containerURL(
+    // nanoMuse: simulator builds without a signing team may not receive the App Group entitlement.
+    static var minisAppGroupContainer: URL {
+        if let container = FileManager.default.containerURL(
             forSecurityApplicationGroupIdentifier: SharedContainerStore.appGroupID
-        )!.appendingPathComponent("MinisFileProvider", isDirectory: true)
+        ) {
+            return container
+        }
+
+#if targetEnvironment(simulator)
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        let fallback = base.appendingPathComponent("MinisAppGroupFallback", isDirectory: true)
+        try? FileManager.default.createDirectory(at: fallback, withIntermediateDirectories: true)
+        return fallback
+#else
+        fatalError("Missing App Group container entitlement")
+#endif
+    }
+
+    static var minisAppGroupRoot: URL {
+        minisAppGroupContainer.appendingPathComponent("MinisFileProvider", isDirectory: true)
     }
 
     static var minisConfigRoot: URL {
-        let url = FileManager.default.containerURL(
-            forSecurityApplicationGroupIdentifier: SharedContainerStore.appGroupID
-        )!.appendingPathComponent("MinisConfig", isDirectory: true)
+        let url = minisAppGroupContainer.appendingPathComponent("MinisConfig", isDirectory: true)
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url
     }

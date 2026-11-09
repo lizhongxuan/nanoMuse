@@ -110,10 +110,10 @@ function testJpeg(width = 3, height = 2) {
   ])
 }
 
-function toolImage(bytes = testJpeg(), width = 3, height = 2) {
+function toolImage(bytes = testJpeg(), width = 3, height = 2, mediaType = 'image/jpeg') {
   return {
     attachment_id: `morde_img_${createHash('sha256').update(bytes).digest('hex')}`,
-    media_type: 'image/jpeg',
+    media_type: mediaType,
     bytes: bytes.length,
     width,
     height,
@@ -122,8 +122,17 @@ function toolImage(bytes = testJpeg(), width = 3, height = 2) {
 }
 
 const screenshotTool = {
-  name: 'screenshot', description: 'Capture the current cloud desktop screen.',
+  name: 'desktop_screenshot', description: 'Capture the current cloud desktop screen.',
   parameters: { type: 'object', properties: {}, additionalProperties: false },
+}
+
+const taskAttachmentTool = {
+  name: 'morde_read_task_attachment', description: 'Read an authorized image attachment.',
+  parameters: { type: 'object', properties: {}, additionalProperties: false },
+}
+
+function testPng() {
+  return Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==', 'base64')
 }
 
 const fileReadTool = {
@@ -220,8 +229,8 @@ test('uses Morde SOUL as the system persona across conversation turns', async ()
       const text = system[0].content.map(block => block.text ?? '').join('')
       assert.match(text, /You are Morde, the user's AI assistant\./)
       assert.match(text, /Be resourceful before asking/)
-      assert.match(text, /When the user asks for recent news, current facts, or an explicit web search/)
-      assert.match(text, /If you change it, tell the user/)
+      assert.match(text, /For current facts or an explicit search request/)
+      assert.match(text, /If you update the user's personal SOUL through an authorized tool, tell them after the update succeeds/)
       assert.doesNotMatch(text, /You are an AI agent powered by DeepSeek Harness/)
       assert.ok(frame.request.messages.some(message => message.role === 'user' &&
         message.content.some(block => block.text?.includes(personalSoul))))
@@ -232,6 +241,14 @@ test('uses Morde SOUL as the system persona across conversation turns', async ()
   assert.equal(code, 0, `frames: ${frames.map(frame => frame.type).join(', ')}`)
   assert.equal(modelCalls, 2)
   assert.equal(frames.find(frame => frame.type === 'settled')?.state, 'completed_candidate')
+})
+
+test('keeps the DSH runtime SOUL identical to the model gateway SOUL', async () => {
+  const runtimeSoul = await readFile(new URL('../src/SOUL.md', import.meta.url), 'utf8')
+  const modelGatewaySoul = await readFile(new URL('../../../../../server/internal/app/SOUL.md', import.meta.url), 'utf8')
+  assert.equal(runtimeSoul, modelGatewaySoul)
+  assert.match(runtimeSoul, /You are Morde, the user's AI assistant\./)
+  assert.match(runtimeSoul, /GPT, DeepSeek, and other model providers are implementation details/)
 })
 
 test('queues running message delivery once with its database id for the next turn', async () => {
@@ -522,6 +539,34 @@ test('starts a first attachment message once with its authorized context', async
   assert.equal(calls, 1)
   const events = frames.filter(frame => frame.type === 'checkpoint').flatMap(frame => JSON.parse(frame.payload).events)
   assert.equal(events.filter(event => event.type === 'user/message' && event.data.id === initial.message_id).length, 1)
+  assert.ok(events.some(event => event.type === 'user/message' && event.data.source?.kind === 'plugin' &&
+    event.data.source?.plugin === 'morde-context' && event.data.content?.some(block => block.text === initialStart.initial_context)))
+})
+
+test('persists trusted initial context separately from a prompt-only task', async t => {
+  const context = 'Authorized personal context.\nMORDE_MEMORY_STATE_V1:opaque-proof'
+  const promptStart = { ...start, prompt: 'Summarize my current task.', initial_context: context }
+  let calls = 0
+  const { child, frames } = launch((frame, proc) => {
+    if (frame.type === 'ready') send(proc, promptStart)
+    if (frame.type === 'checkpoint') acknowledgeCheckpoint(proc, frame)
+    if (frame.type === 'model') {
+      calls++
+      const messages = frame.request.messages
+      assert.ok(messages.some(message => message.role === 'user' && message.source?.kind === 'user' &&
+        message.content?.some(block => block.text === promptStart.prompt)))
+      assert.ok(messages.some(message => message.role === 'user' && message.source?.kind === 'plugin' &&
+        message.source?.plugin === 'morde-context' && message.content?.some(block => block.text === context)))
+      replyWithText(proc, frame, 'I found the relevant details.')
+    }
+  })
+  t.after(() => child.kill())
+  const [code] = await once(child, 'close')
+  assert.equal(code, 0, `frames: ${frames.map(frame => frame.type).join(', ')}`)
+  assert.equal(calls, 1)
+  const events = frames.filter(frame => frame.type === 'checkpoint').flatMap(frame => JSON.parse(frame.payload).events)
+  assert.ok(events.some(event => event.type === 'user/message' && event.data.source?.kind === 'plugin' &&
+    event.data.source?.plugin === 'morde-context' && event.data.content?.some(block => block.text === context)))
 })
 
 test('delivers a project attachment-only first message once', async t => {
@@ -629,6 +674,23 @@ test('rejects a start tool with an open parameter schema', async () => {
   const [code] = await once(child, 'close')
   assert.equal(code, 1)
   assert.equal(frames.some(frame => frame.type === 'checkpoint' || frame.type === 'model'), false)
+})
+
+test('accepts dynamic arguments only for the Morde selected MCP broker tool', () => {
+  const parameters = {
+    type: 'object',
+    properties: {
+      connector_id: { type: 'string' },
+      tool_name: { type: 'string' },
+      arguments: { type: 'object' },
+    },
+    required: ['connector_id', 'tool_name', 'arguments'],
+    additionalProperties: false,
+  }
+  const tool = { name: 'mcp_call', description: 'Call a selected connector tool.', parameters }
+  assert.equal(validStart({ ...start, tools: [tool] }), true)
+  assert.equal(validStart({ ...start, tools: [{ ...tool, name: 'other_tool' }] }), false)
+  assert.equal(validStart({ ...start, tools: [{ ...tool, parameters: { ...parameters, extra: true } }] }), false)
 })
 
 test('accepts strict Morde tool schemas with nullable JSON Schema types', () => {
@@ -776,16 +838,20 @@ test('runs an authorized dsh tool through the parent and persists its result bef
   assert.equal(mismatch.emitted.length, 0)
 })
 
-test('routes Morde MCP tools through the official DSH MCP adapter and reconciles its durable result', async () => {
+test('routes selected Morde MCP calls through task IPC with image results and reconciles them', async () => {
   const tool = {
-    name: 'mcp_k1234567_0123456789ab',
+    name: 'mcp_call',
     description: 'Search through a task-authorized Morde connector.',
     parameters: {
-      type: 'object', properties: { query: { type: 'string' } },
-      required: ['query'], additionalProperties: false,
+      type: 'object', properties: {
+        connector_id: { type: 'string' }, tool_name: { type: 'string' }, arguments: { type: 'object' },
+      },
+      required: ['connector_id', 'tool_name', 'arguments'], additionalProperties: false,
     },
   }
   const output = '{"is_error":false,"structured_content":{"count":1},"text":["one result"]}'
+  const image = toolImage()
+  const args = { connector_id: 'c1234567', tool_name: 'chart', arguments: { query: 'agent' } }
   let through = -1
   let modelCalls = 0
   let brokerCalls = 0
@@ -805,7 +871,7 @@ test('routes Morde MCP tools through the official DSH MCP adapter and reconciles
       assert.deepEqual(frame.request.tools, [tool])
       if (modelCalls === 1) {
         const chunks = [
-          { type: 'tool-call-delta', index: 0, id: 'call_mcp_1', name: tool.name, argumentsDelta: '{"query":"agent"}' },
+          { type: 'tool-call-delta', index: 0, id: 'call_mcp_1', name: tool.name, argumentsDelta: JSON.stringify(args) },
           { type: 'usage', usage: { inputTokens: 3, outputTokens: 2 } },
           { type: 'finish', reason: { kind: 'tool-calls' } },
         ]
@@ -814,6 +880,9 @@ test('routes Morde MCP tools through the official DSH MCP adapter and reconciles
       } else {
         const resultMessage = frame.request.messages.find(message => message.role === 'tool' && message.toolCallId === 'call_mcp_1')
         assert.equal(resultMessage?.content[0]?.text, output, 'structured MCP output remains available to the model')
+        assert.equal(resultMessage?.content[1]?.type, 'image', 'verified MCP image is present in the next model request')
+        assert.equal(resultMessage.content[1].attachment.attachmentId, image.attachment_id)
+        assert.equal(resultMessage.content[1].attachment.data_base64, image.data_base64)
         const chunks = [
           { type: 'block-start', index: 0, blockType: 'text' },
           { type: 'text-delta', index: 0, text: 'Found one result.' },
@@ -828,10 +897,10 @@ test('routes Morde MCP tools through the official DSH MCP adapter and reconciles
     if (frame.type === 'tool_call') {
       brokerCalls++
       assert.equal(frame.name, tool.name)
-      assert.deepEqual(frame.arguments, { query: 'agent' })
+      assert.deepEqual(frame.arguments, args)
       send(proc, {
         type: 'tool_result', id: frame.id, ...taskFence(frame), call_id: frame.call_id,
-        status: 'succeeded', output,
+        status: 'succeeded', output, images: [image],
       })
     }
   })
@@ -842,13 +911,16 @@ test('routes Morde MCP tools through the official DSH MCP adapter and reconciles
   const toolResult = checkpointPages.flatMap(page => JSON.parse(page.payload).events)
     .find(event => event.type === 'tool/result' && event.data.message?.toolCallId === 'call_mcp_1')
   assert.equal(toolResult?.data.message.content[0].text, output)
+  assert.equal(toolResult?.data.message.content[1].type, 'image')
+  assert.equal(toolResult.data.message.content[1].attachment.attachmentId, image.attachment_id)
 
   const resumed = await resumeSession(checkpointPages, {
     tools: [tool],
     onToolCall: frame => {
       assert.equal(frame.call_id, 'call_mcp_1')
       assert.equal(frame.name, tool.name)
-      return { status: 'succeeded', output }
+      assert.deepEqual(frame.arguments, args)
+      return { status: 'succeeded', output, images: [image] }
     },
   })
   assert.equal(resumed.code, 0, `resume frames: ${resumed.frames.map(frame => frame.type).join(', ')}`)
@@ -1687,11 +1759,12 @@ async function captureInterruptedDelegateChildSession() {
   return pagesBySession
 }
 
-async function captureScreenshotResultInterrupted(image) {
+async function captureScreenshotResultInterrupted(image, tool = screenshotTool, output = 'Screenshot captured') {
+  const images = Array.isArray(image) ? image : [image]
   const pages = []
   let modelCalls = 0
   const { child, frames } = launch((frame, proc) => {
-    if (frame.type === 'ready') send(proc, { ...start, tools: [screenshotTool] })
+    if (frame.type === 'ready') send(proc, { ...start, tools: [tool] })
     if (frame.type === 'checkpoint') {
       pages.push({ from_seq: frame.from_seq, through_seq: frame.through_seq, payload: frame.payload, sha256: frame.sha256 })
       send(proc, { type: 'checkpoint_ack', id: frame.id, ok: true, through_seq: frame.through_seq, sha256: frame.sha256 })
@@ -1703,7 +1776,7 @@ async function captureScreenshotResultInterrupted(image) {
         return
       }
       const chunks = [
-        { type: 'tool-call-delta', index: 0, id: 'call_screenshot_1', name: screenshotTool.name, argumentsDelta: '{}' },
+        { type: 'tool-call-delta', index: 0, id: 'call_screenshot_1', name: tool.name, argumentsDelta: '{}' },
         { type: 'usage', usage: { inputTokens: 3, outputTokens: 2 } },
         { type: 'finish', reason: { kind: 'tool-calls' } },
       ]
@@ -1715,7 +1788,7 @@ async function captureScreenshotResultInterrupted(image) {
       send(proc, {
         type: 'tool_result', id: frame.id, task_id: frame.task_id, owner_id: frame.owner_id,
         agent_id: frame.agent_id, generation: frame.generation, authorization_version: frame.authorization_version,
-        session_id: frame.session_id, call_id: frame.call_id, status: 'succeeded', output: 'Screenshot captured', images: [image],
+        session_id: frame.session_id, call_id: frame.call_id, status: 'succeeded', output, images,
       })
     }
   })
@@ -1844,6 +1917,79 @@ test('rehydrates a screenshot reference before recovery and sends image bytes on
   })
   const recoveryEvents = resumed.emitted.flatMap(frame => JSON.parse(frame.payload).events)
   assert.equal(JSON.stringify(recoveryEvents).includes('data_base64'), false)
+})
+
+test('rehydrates a PNG task attachment reference and sends its original format to the model', async () => {
+  const image = toolImage(testPng(), 1, 1, 'image/png')
+  const output = 'Image attachment read'
+  const { pages } = await captureScreenshotResultInterrupted(image, taskAttachmentTool, output)
+  const savedResult = pages.flatMap(page => JSON.parse(page.payload).events)
+    .find(event => event.type === 'tool/result' && event.data.message?.toolCallId === 'call_screenshot_1')
+  assert.equal(savedResult.data.message.content[0].text, output)
+  assert.equal(savedResult.data.message.content[1].attachment.mediaType, 'image/png')
+  assert.equal(JSON.stringify(savedResult).includes('data_base64'), false)
+
+  const resumed = await resumeSession(pages, {
+    tools: [taskAttachmentTool],
+    onToolCall: frame => {
+      assert.equal(frame.call_id, 'call_screenshot_1')
+      return { status: 'succeeded', output, images: [image] }
+    },
+  })
+  assert.equal(resumed.code, 0, `frames: ${resumed.frames.map(frame => frame.type).join(', ')}`)
+  assert.equal(resumed.modelCalls, 1)
+  const resultMessage = resumed.modelRequests[0].messages.find(message => message.role === 'tool' && message.toolCallId === 'call_screenshot_1')
+  assert.equal(resultMessage.content[1].attachment.mediaType, 'image/png')
+  assert.equal(resultMessage.content[1].attachment.data_base64, image.data_base64)
+})
+
+test('rehydrates four bounded PPTX image references through Task Reader checkpoint recovery', async () => {
+  const image = toolImage(testPng(), 1, 1, 'image/png')
+  const images = [image, image, image, image]
+  const output = 'PPTX text and four embedded images'
+  const { pages } = await captureScreenshotResultInterrupted(images, taskAttachmentTool, output)
+  const savedResult = pages.flatMap(page => JSON.parse(page.payload).events)
+    .find(event => event.type === 'tool/result' && event.data.message?.toolCallId === 'call_screenshot_1')
+  assert.equal(savedResult.data.message.content[0].text, output)
+  assert.equal(savedResult.data.message.content.length, 5)
+  assert.deepEqual(savedResult.data.message.content.slice(1).map(block => block.attachment.attachmentId),
+    images.map(item => item.attachment_id))
+  assert.equal(JSON.stringify(savedResult).includes('data_base64'), false, 'checkpoint stores references, not image bytes')
+
+  const resumed = await resumeSession(pages, {
+    tools: [taskAttachmentTool],
+    onToolCall: frame => {
+      assert.equal(frame.call_id, 'call_screenshot_1')
+      return { status: 'succeeded', output, images }
+    },
+  })
+  assert.equal(resumed.code, 0, `frames: ${resumed.frames.map(frame => frame.type).join(', ')}`)
+  assert.equal(resumed.modelCalls, 1)
+  const resultMessage = resumed.modelRequests[0].messages.find(message => message.role === 'tool' && message.toolCallId === 'call_screenshot_1')
+  assert.equal(resultMessage.content.length, 5)
+  assert.deepEqual(resultMessage.content.slice(1).map(block => block.attachment.data_base64),
+    images.map(item => item.data_base64))
+  const recoveryEvents = resumed.emitted.flatMap(frame => JSON.parse(frame.payload).events)
+  assert.equal(JSON.stringify(recoveryEvents).includes('data_base64'), false)
+})
+
+test('rejects more than four images from Task Reader and images from other tools', async () => {
+  const image = toolImage(testPng(), 1, 1, 'image/png')
+  const pages = await captureScreenshotResultInterrupted([image, image, image, image], taskAttachmentTool, 'four images')
+  const tooMany = await resumeSession(pages.pages, {
+    tools: [taskAttachmentTool],
+    onToolCall: () => ({ status: 'succeeded', output: 'five images', images: [image, image, image, image, image] }),
+  })
+  assert.notEqual(tooMany.code, 0)
+  assert.equal(tooMany.modelCalls, 0)
+
+  const screenshotPages = await captureScreenshotResultInterrupted(image)
+  const screenshotWithTwo = await resumeSession(screenshotPages.pages, {
+    tools: [screenshotTool],
+    onToolCall: () => ({ status: 'succeeded', output: 'invalid screenshot images', images: [image, image] }),
+  })
+  assert.notEqual(screenshotWithTwo.code, 0)
+  assert.equal(screenshotWithTwo.modelCalls, 0)
 })
 
 test('rejects oversized and tampered tool screenshot images', async () => {
@@ -2647,6 +2793,42 @@ test('account runtime rejects a same-sequence start with different content', asy
   assert.deepEqual(errors, ['runtime_sequence_conflict'])
   assert.equal(frames.filter(frame => frame.type === 'task_started' && frame.task_id === 'task_A').length, 1)
   assert.equal(frames.filter(frame => frame.type === 'settled' && frame.task_id === 'task_A').length, 1)
+})
+
+test('account runtime accepts an empty background-job restore without delegation tools', async t => {
+  const errors = []
+  const jobIDParameters = {
+    type: 'object', properties: { job_id: { type: 'string', minLength: 1, maxLength: 128 } },
+    required: ['job_id'], additionalProperties: false,
+  }
+  const jobTools = [
+    { name: 'dsh_job_list', description: 'List delegated jobs.', parameters: { type: 'object', properties: {}, required: [], additionalProperties: false } },
+    { name: 'dsh_job_get', description: 'Read a delegated job.', parameters: jobIDParameters },
+    { name: 'dsh_job_output', description: 'Read delegated job output.', parameters: {
+      type: 'object', properties: { job_id: jobIDParameters.properties.job_id, after_seq: { type: 'integer', minimum: -1 } },
+      required: ['job_id', 'after_seq'], additionalProperties: false,
+    } },
+    { name: 'dsh_job_cancel', description: 'Cancel a delegated job.', parameters: jobIDParameters },
+  ]
+  assert.equal(validStart({ ...start, tools: jobTools, background_jobs: [] }), true)
+  assert.equal(validStart({ ...start, tools: jobTools.slice(0, 1), background_jobs: [] }), false)
+  assert.equal(validStart({ ...start, tools: [], background_jobs: [{}] }), false)
+  const { child, frames } = launchAccount((frame, proc) => {
+    if (frame.type === 'runtime_ready') send(proc, { ...accountTask('task_A'), tools: jobTools, background_jobs: [] })
+    if (frame.type === 'checkpoint') acknowledgeCheckpoint(proc, frame)
+    if (frame.type === 'model') replyWithText(proc, frame, 'scheduled work completed')
+    if (frame.type === 'protocol_error') errors.push(frame.code)
+    if (frame.type === 'settled') send(proc, { ...account, type: 'runtime_shutdown' })
+    if (frame.type === 'runtime_stopped') proc.stdin.end()
+  })
+  t.after(() => child.kill())
+  const closed = once(child, 'close')
+  send(child, account)
+  const [code] = await closed
+  assert.equal(code, 0, `frames: ${frames.map(frame => frame.type).join(', ')}`)
+  assert.deepEqual(errors, [])
+  assert.equal(frames.filter(frame => frame.type === 'task_started' && frame.task_id === 'task_A').length, 1)
+  assert.equal(frames.find(frame => frame.type === 'settled' && frame.task_id === 'task_A')?.state, 'completed_candidate')
 })
 
 test('account runtime keeps only the latest retry window and rejects older sequences', async t => {

@@ -7,7 +7,10 @@ import { MAX_FRAME_BYTES } from './ipc.mjs'
 const ID = /^[A-Za-z0-9_-]{1,128}$/
 const MAX_CONCURRENT_TASKS = 16
 const SHUTDOWN_TIMEOUT_MS = 5_000
-const TASK_START_TIMEOUT_MS = 5_000
+// Startup can be delayed by concurrent tasks or a busy host. Keep a firm
+// upper bound, but avoid treating a healthy DSH child as unavailable after
+// only five seconds.
+const TASK_START_TIMEOUT_MS = 15_000
 const TASK_STOP_TIMEOUT_MS = 2_000
 const TASK_FENCE_FIELDS = ['task_id', 'owner_id', 'agent_id', 'session_id', 'generation', 'authorization_version']
 const RUNTIME_FIELDS = ['server_instance_id', 'owner_id', 'runtime_id', 'runtime_generation', 'max_concurrent_tasks']

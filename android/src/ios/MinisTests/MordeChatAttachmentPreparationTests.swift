@@ -129,6 +129,85 @@ final class MordeChatAttachmentPreparationTests: XCTestCase {
         XCTAssertLessThanOrEqual(try Data(contentsOf: prepared.files[2].url).count, 512 * 1024)
     }
 
+    func testPersonalMessagePlansPDFAndLargeImageDerivativesBeforeAcceptance() throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let pdfURL = directory.appendingPathComponent("brief.pdf")
+        let renderer = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 320, height: 200))
+        try renderer.pdfData { context in
+            context.beginPage()
+            ("Readable local PDF" as NSString).draw(at: CGPoint(x: 24, y: 32),
+                withAttributes: [.font: UIFont.systemFont(ofSize: 18)])
+        }.write(to: pdfURL)
+        let imageURL = directory.appendingPathComponent("large.png")
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 1800, height: 900)).image { context in
+            UIColor.blue.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 1800, height: 900))
+        }
+        try XCTUnwrap(image.pngData()).write(to: imageURL)
+
+        let originals = try MordeChatAttachmentPreparation.planSources([pdfURL, imageURL])
+        let plan = MordeChatAttachmentPreparation.planPersonalMessageAttachments(originals, existingAttachmentCount: 0)
+        let staged = plan.groups.flatMap { $0 }
+        defer { MordeChatAttachmentPreparation.discardStagedFiles(staged.compactMap(\.localPath)) }
+        XCTAssertFalse(plan.overflow)
+        XCTAssertNil(plan.warning)
+        XCTAssertEqual(plan.groups.map(\.count), [3, 2])
+        XCTAssertTrue(staged.allSatisfy { $0.derivedAssociationPending != true })
+        XCTAssertTrue(plan.groups.flatMap { $0.dropFirst() }.allSatisfy {
+            $0.originalFilename?.hasPrefix("morde-解析-") == true
+        }, "Internal derivatives carry the marker used to hide them from the chat transcript.")
+        let textPath = try XCTUnwrap(plan.groups[0].dropFirst().first?.localPath)
+        XCTAssertTrue(try String(contentsOfFile: textPath, encoding: .utf8).contains("Readable local PDF"))
+        XCTAssertEqual(URL(fileURLWithPath: try XCTUnwrap(plan.groups[1].last?.localPath)).pathExtension, "jpg")
+
+        let scope = try XCTUnwrap(MordeClientDataScope(serviceOrigin: "https://morde.example",
+            serviceInstanceID: "11111111-1111-4111-8111-111111111111", accountID: "user-1", installationID: "install-1"))
+        let message = try MordeMessageOutbox(root: directory.appendingPathComponent("outbox", isDirectory: true))
+            .enqueue(scope: scope, conversationID: "c1234567", content: "Read the files", modelID: nil,
+                     attachmentIDs: [], stagedAttachments: staged)
+        let ids = try XCTUnwrap(MordeConversationMessagePayload.direct(message)["client_attachment_ids"] as? [String])
+        XCTAssertEqual(ids, staged.map(\.id))
+        XCTAssertEqual(Set(ids).count, 5)
+    }
+
+    func testPersonalMessageRejectsPDFDerivativesThatExceedAttachmentLimitAtomically() throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 32, height: 32)).image { context in
+            UIColor.orange.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 32, height: 32))
+        }
+        let imageData = try XCTUnwrap(image.jpegData(compressionQuality: 0.9))
+        var urls: [URL] = []
+        for index in 0..<2 {
+            let url = directory.appendingPathComponent("overflow-\(index).jpg")
+            try imageData.write(to: url)
+            urls.append(url)
+        }
+        for index in 0..<5 {
+            let url = directory.appendingPathComponent("overflow-\(index).pdf")
+            let renderer = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 320, height: 200))
+            try renderer.pdfData { context in
+                context.beginPage()
+                ("Selectable overflow text \(index)" as NSString).draw(at: CGPoint(x: 24, y: 32),
+                    withAttributes: [.font: UIFont.systemFont(ofSize: 18)])
+            }.write(to: url)
+            urls.append(url)
+        }
+
+        let originals = try MordeChatAttachmentPreparation.planSources(urls)
+        defer { MordeChatAttachmentPreparation.discardStagedFiles(originals.compactMap(\.localPath)) }
+        let plan = MordeChatAttachmentPreparation.planPersonalMessageAttachments(originals, existingAttachmentCount: 0)
+
+        XCTAssertTrue(plan.overflow, "PDF text plus one page preview per PDF exceeds the 16-item total.")
+        XCTAssertTrue(plan.warning?.contains("16") == true)
+        XCTAssertEqual(plan.groups.count, urls.count)
+        XCTAssertTrue(plan.groups.allSatisfy { $0.count == 1 },
+                       "An overflowing plan must not partially add derived files to the message.")
+    }
+
     func testScannedPDFReportsUnreadPagesBeyondPreviewLimit() throws {
         let directory = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }

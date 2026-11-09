@@ -128,13 +128,32 @@ struct NanoMuseMenuHeader<Trailing: View>: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            NanoMuseRoundButton(symbol: "line.3.horizontal", label: AppLocalized("Chats and settings"),
-                                size: 38, accessibilityIdentifier: "morde.nav.menu", action: onMenu)
-            Text(title).font(.headline.weight(.semibold)).lineLimit(1)
+            Button(action: onMenu) {
+                ZStack {
+                    Circle()
+                        .fill(NanoMuseTones.surface)
+                        .overlay(Circle().strokeBorder(NanoMuseTones.hairline, lineWidth: 0.5))
+                        .shadow(color: .black.opacity(0.12), radius: 3, y: 1)
+                    VStack(spacing: 3.1) {
+                        Capsule().frame(width: 13, height: 1.7)
+                        Capsule().frame(width: 13, height: 1.7)
+                    }
+                    .foregroundStyle(NanoMuseTones.ink)
+                }
+                .frame(width: 38, height: 38)
+                .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text(AppLocalized("Chats and settings")))
+            .accessibilityIdentifier("morde.nav.menu")
+            Text(title)
+                .font(.system(size: 17, weight: .semibold))
+                .tracking(-0.17)
+                .lineLimit(1)
             if let titleAccessory {
                 Text(titleAccessory)
                     .font(.system(size: 13.5, weight: .medium))
-                    .foregroundStyle(NanoMuseTones.secondaryText)
+                    .foregroundStyle(Color(red: 163.0 / 255, green: 163.0 / 255, blue: 168.0 / 255))
                     .lineLimit(1)
                     .accessibilityIdentifier("mif.approval.count")
             }

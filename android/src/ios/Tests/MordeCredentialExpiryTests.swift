@@ -318,7 +318,7 @@ enum MordeCredentialExpiryTests {
         precondition(MordeCredentialExpiry.status(expiresAt: "invalid", now: now) == nil)
         precondition(MordeTaskStatusPresentation.label(status: "queued") == "排队中")
         precondition(MordeTaskStatusPresentation.label(status: "running") == "运行中")
-        precondition(MordeTaskStatusPresentation.label(status: "waiting_user", waitingReason: "approval_required") == "等待你审批")
+        precondition(MordeTaskStatusPresentation.label(status: "waiting_user", waitingReason: "approval_required") == "等你审批")
         precondition(MordeTaskStatusPresentation.label(status: "waiting_user", waitingReason: "clarification_required") == "等待你补充信息")
         precondition(MordeTaskStatusPresentation.label(status: "waiting_user", waitingReason: "mcp_result_unknown") == "操作结果待核对")
         precondition(MordeTaskStatusPresentation.label(status: "waiting_user", waitingReason: "workspace_host_sync") == "等待电脑同步")

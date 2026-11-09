@@ -1,4 +1,5 @@
 import XCTest
+import Combine
 @testable import Minis
 
 /// 0.1.38: the pure parts of the composer's native field and its fail-safe, Contract C9 on the
@@ -23,6 +24,25 @@ final class NanoMuseRound5Tests: XCTestCase {
         XCTAssertTrue(NanoMuseComposerField.returnSends(hardwareKeyboard: true, preference: 0))
         XCTAssertTrue(NanoMuseComposerField.returnSends(hardwareKeyboard: false, preference: 1))
         XCTAssertFalse(NanoMuseComposerField.returnSends(hardwareKeyboard: false, preference: 0), "on-screen Return is a newline by default")
+    }
+
+    func testKeyboardWatcherTracksSystemNotifications() {
+        let watcher = NanoMuseKeyboardWatcher()
+        var cancellables: Set<AnyCancellable> = []
+        let shown = expectation(description: "keyboard shown")
+        let hidden = expectation(description: "keyboard hidden")
+        watcher.$visible.dropFirst().sink { visible in
+            if visible { shown.fulfill() } else { hidden.fulfill() }
+        }.store(in: &cancellables)
+
+        XCTAssertFalse(watcher.visible)
+        NotificationCenter.default.post(name: UIResponder.keyboardWillShowNotification, object: nil)
+        wait(for: [shown], timeout: 2)
+        XCTAssertTrue(watcher.visible)
+
+        NotificationCenter.default.post(name: UIResponder.keyboardWillHideNotification, object: nil)
+        wait(for: [hidden], timeout: 2)
+        XCTAssertFalse(watcher.visible)
     }
 
     func testOverflowCountsLinesAndRoughWraps() {

@@ -3,7 +3,6 @@ import { readFileSync } from 'node:fs'
 import { Context } from '@deepseek-ai/cordis'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
-import { createMcpToolDefinition } from '@deepseek-ai/dsh-mcp-client'
 import LlmRuntime, { LlmAdapter, MessageId, createToolResultMessage, createUserMessage, freezeMessage } from '@deepseek-ai/dsh-llm'
 import SessionStore, { SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
 import * as checkpointPolicy from '@deepseek-ai/dsh-session-checkpoint-policy'
@@ -17,6 +16,9 @@ const MAX_CHECKPOINT_PAYLOAD_BYTES = 1024 * 1024
 const MAX_RESTORE_BYTES = 8 * 1024 * 1024
 const MAX_RESTORE_EVENTS = 100_000
 const MAX_TOOL_IMAGE_BYTES = 512 * 1024
+const MAX_TOOL_IMAGES = 1
+const MAX_TASK_ATTACHMENT_IMAGES = 4
+const MAX_TOOL_OUTPUT_BYTES = 1024 * 1024
 const ID = /^[A-Za-z0-9_-]{1,128}$/
 const TOOL_NAME = /^[A-Za-z][A-Za-z0-9_.-]{0,127}$/
 const DIGEST = /^[a-f0-9]{64}$/
@@ -87,39 +89,43 @@ function isMordeMCPTool(tool) {
   return typeof tool?.name === 'string' && tool.name.startsWith(MORDE_MCP_TOOL_PREFIX)
 }
 
-function mordeMCPToolDefinition(context, sessionDurable, tool, onError) {
-  const definition = createMcpToolDefinition(context, {
+function mordeMCPToolDefinition(sessionDurable, tool, onError) {
+  return {
     name: tool.name,
-    rawName: tool.name,
     description: tool.description,
-    inputSchema: tool.parameters,
-    async call(args, execution) {
-      const result = await sessionDurable.ipc.toolCall(
-        sessionDurable.identity, sessionDurable.through, execution.callId, tool.name, args, execution.signal,
-      )
-      if (!isObject(result) || !['succeeded', 'failed'].includes(result.status) || typeof result.output !== 'string') {
-        throw new Error('Morde MCP broker returned an invalid result')
-      }
-      return {
-        content: [{
-          type: 'text',
-          text: result.status === 'failed' ? `Tool failed: ${result.output}` : result.output,
-        }],
+    parameters: tool.parameters,
+    output: {
+      schema: TOOL_OUTPUT_SCHEMA,
+      render(_args, result) {
+        if (!validMordeMCPToolResult(result)) throw new Error('Morde MCP broker returned an invalid result')
+        return [
+          { type: 'text', text: result.status === 'failed' ? `Tool failed: ${result.output}` : result.output },
+          ...result.images.map(attachment => ({ type: 'image', attachment })),
+        ]
       }
     },
-  })
-  if (onError) {
-    const execute = definition.execute
-    definition.execute = async (args, execution) => {
+    async execute(args, execution) {
       try {
-        return await execute(args, execution)
+        if (!isObject(args)) throw new Error('Morde MCP tool arguments are invalid')
+        const result = await sessionDurable.ipc.toolCall(
+          sessionDurable.identity, sessionDurable.through, execution.callId, tool.name, args, execution.signal,
+        )
+        if (!validMordeMCPToolResult(result)) throw new Error('Morde MCP broker returned an invalid result')
+        return result
       } catch (error) {
-        onError(error, execution)
+        onError?.(error, execution)
         throw error
       }
-    }
+    },
   }
-  return definition
+}
+
+function validMordeMCPToolResult(result) {
+  return isObject(result) && Object.keys(result).sort().join(',') === 'images,output,status' &&
+    ['succeeded', 'failed'].includes(result.status) && typeof result.output === 'string' &&
+    Buffer.byteLength(result.output) <= MAX_TOOL_OUTPUT_BYTES && Array.isArray(result.images) &&
+    result.images.length <= MAX_TOOL_IMAGES && result.images.every(validImageRef) &&
+    !(result.status === 'failed' && result.images.length > 0)
 }
 
 function exactKeys(value, expected) {
@@ -181,9 +187,15 @@ function sameDeliveredMessage(message, messageID, content, attachmentIDs = []) {
 function validImageRef(ref) {
   return isObject(ref) && Object.keys(ref).sort().join(',') === 'attachmentId,bytes,height,mediaType,width' &&
     typeof ref.attachmentId === 'string' && /^morde_img_[a-f0-9]{64}$/.test(ref.attachmentId) &&
-    ref.mediaType === 'image/jpeg' && Number.isSafeInteger(ref.bytes) && ref.bytes > 0 && ref.bytes <= MAX_TOOL_IMAGE_BYTES &&
+    ['image/jpeg', 'image/png'].includes(ref.mediaType) && Number.isSafeInteger(ref.bytes) && ref.bytes > 0 && ref.bytes <= MAX_TOOL_IMAGE_BYTES &&
     Number.isSafeInteger(ref.width) && ref.width > 0 && ref.width <= 1280 &&
     Number.isSafeInteger(ref.height) && ref.height > 0 && ref.height <= 720
+}
+
+function toolImageLimit(name) {
+  if (name === 'morde_read_task_attachment') return MAX_TASK_ATTACHMENT_IMAGES
+  if (typeof name === 'string' && (name.startsWith(MORDE_MCP_TOOL_PREFIX) || name === 'desktop_screenshot' || name === 'browser_screenshot')) return 1
+  return 0
 }
 
 function sameImageRefs(left, right) {
@@ -234,17 +246,19 @@ function recoveryToolCalls(events, tools) {
     } else if (event.type === 'tool/result') {
       const message = event.data.message
       const call = calls.get(message?.source?.callId)
+      const imageContent = Array.isArray(message?.content) ? message.content.slice(1) : []
       if (!call || call.resultText !== undefined || call.callSeq === undefined || message.toolCallId !== call.id ||
           message.isError !== false || event.data.error !== undefined || event.surfaceOp !== 'append' ||
           !Array.isArray(event.sourceEventSeqs) || event.sourceEventSeqs.length !== 1 || event.sourceEventSeqs[0] !== call.callSeq ||
           event.data.turn !== call.turn || event.data.step !== call.step || openTurn !== call.turn || openStep !== call.step || !Array.isArray(message.content) ||
-          message.content.length < 1 || message.content.length > 2 || message.content[0].type !== 'text' || typeof message.content[0].text !== 'string' ||
-          (message.content.length === 2 && (!isObject(message.content[1]) || Object.keys(message.content[1]).sort().join(',') !== 'attachment,type' ||
-            message.content[1].type !== 'image' || !validImageRef(message.content[1].attachment)))) {
+          message.content.length < 1 || message.content.length > 1 + toolImageLimit(call.name) ||
+          message.content[0].type !== 'text' || typeof message.content[0].text !== 'string' ||
+          imageContent.some(block => !isObject(block) || Object.keys(block).sort().join(',') !== 'attachment,type' ||
+            block.type !== 'image' || !validImageRef(block.attachment))) {
         throw new Error('checkpointed dsh tool result is invalid')
       }
       call.resultText = message.content[0].text
-      call.resultImages = message.content.length === 2 ? [message.content[1].attachment] : []
+      call.resultImages = imageContent.map(block => block.attachment)
     }
   }
   for (const call of calls.values()) {
@@ -328,12 +342,33 @@ function validParameterSchema(root) {
   return true
 }
 
+function validMordeMCPCallParameters(schema) {
+  const rootKeys = ['additionalProperties', 'properties', 'required', 'type']
+  const properties = schema?.properties
+  const argumentsSchema = properties?.arguments
+  if (!isObject(schema) || Object.keys(schema).sort().join(',') !== rootKeys.join(',') || schema.type !== 'object' ||
+      schema.additionalProperties !== false || !isObject(properties) || Object.keys(properties).sort().join(',') !== 'arguments,connector_id,tool_name' ||
+      !Array.isArray(schema.required) || [...schema.required].sort().join(',') !== 'arguments,connector_id,tool_name' ||
+      new Set(schema.required).size !== 3 || !isObject(argumentsSchema) || argumentsSchema.type !== 'object' ||
+      Object.keys(argumentsSchema).some(key => !['type', 'description', 'title'].includes(key)) ||
+      (Object.hasOwn(argumentsSchema, 'description') && typeof argumentsSchema.description !== 'string') ||
+      (Object.hasOwn(argumentsSchema, 'title') && typeof argumentsSchema.title !== 'string')) return false
+
+  // MCP tool inputs are discovered at runtime and validated by the server
+  // against the pinned connector schema before dispatch. Keep this dynamic map
+  // exception limited to the single broker tool that owns that validation.
+  return validParameterSchema({ ...schema, properties: {
+    ...properties, arguments: { type: 'object', properties: {}, additionalProperties: false },
+  } })
+}
+
 function validToolDefinition(tool) {
   if (!tool || typeof tool !== 'object' || Array.isArray(tool) ||
       Object.keys(tool).sort().join(',') !== 'description,name,parameters' ||
       typeof tool.name !== 'string' || !TOOL_NAME.test(tool.name) ||
       typeof tool.description !== 'string' || !tool.description.trim() || Buffer.byteLength(tool.description) > 2048) return false
-  return validParameterSchema(tool.parameters) && Buffer.byteLength(JSON.stringify(tool.parameters)) <= 64 * 1024
+  const parametersValid = tool.name === 'mcp_call' ? validMordeMCPCallParameters(tool.parameters) : validParameterSchema(tool.parameters)
+  return parametersValid && Buffer.byteLength(JSON.stringify(tool.parameters)) <= 64 * 1024
 }
 
 function validTools(tools) {
@@ -441,9 +476,10 @@ export function validStart(frame) {
   const delegate = frame.tools?.find(tool => tool.name === DELEGATE_TOOL)
   if (delegate && !validDelegateTool(delegate)) return false
   const jobTools = frame.tools?.filter(tool => JOB_TOOLS.has(tool.name)) ?? []
-  if (jobTools.length !== 0 && (jobTools.length !== JOB_TOOLS.size || !delegate || jobTools.some(tool => !validJobTool(tool)))) return false
+  if (jobTools.length !== 0 && (jobTools.length !== JOB_TOOLS.size || jobTools.some(tool => !validJobTool(tool)))) return false
   if (frame.background_jobs !== undefined) {
-    if (!Array.isArray(frame.background_jobs) || frame.background_jobs.length > 16 || jobTools.length !== JOB_TOOLS.size) return false
+    if (!Array.isArray(frame.background_jobs) || frame.background_jobs.length > 16 ||
+        (frame.background_jobs.length > 0 && jobTools.length !== JOB_TOOLS.size)) return false
     const seen = new Set()
     for (const job of frame.background_jobs) {
       const identity = childIdentity(job, frame)
@@ -462,10 +498,10 @@ export function validStart(frame) {
     if (!isObject(initial) || !exactKeys(initial, ['message_id', 'content', 'attachment_ids']) ||
         !validMessageDelivery({ type: 'message_delivery', version: 2,
           ...Object.fromEntries(['task_id', 'owner_id', 'agent_id', 'generation', 'authorization_version', 'session_id'].map(key => [key, frame[key]])),
-          ...initial }, frame) || frame.prompt !== undefined || frame.resume === true ||
-        (frame.initial_context !== undefined && (typeof frame.initial_context !== 'string' || !frame.initial_context.isWellFormed() ||
-          frame.initial_context.includes('\0') || Buffer.byteLength(frame.initial_context) > MAX_CHECKPOINT_PAYLOAD_BYTES / 2))) return false
-  } else if (frame.initial_context !== undefined) return false
+          ...initial }, frame) || frame.prompt !== undefined || frame.resume === true) return false
+  }
+  if (frame.initial_context !== undefined && (typeof frame.initial_context !== 'string' || !frame.initial_context.isWellFormed() ||
+      frame.initial_context.includes('\0') || Buffer.byteLength(frame.initial_context) > MAX_CHECKPOINT_PAYLOAD_BYTES / 2 || frame.resume === true)) return false
   if (frame.revision_messages !== undefined) {
     if (!Array.isArray(frame.revision_messages) || frame.revision_messages.length < 1 || frame.revision_messages.length > 128) return false
     const seen = new Set(frame.initial_message ? [frame.initial_message.message_id] : [])
@@ -633,14 +669,17 @@ class DurableSession {
         resultText = result.status === 'failed' ? `Tool failed: ${result.output}` : result.output
         resultImages = result.images
       } else if (isMordeMCPTool(call.definition)) {
-        const definition = mordeMCPToolDefinition(context, this, call.definition)
+        const definition = mordeMCPToolDefinition(this, call.definition)
         const value = await definition.execute(call.args, { callId: call.id, signal })
         const content = definition.output.render(call.args, value)
-        if (!Array.isArray(content) || content.length !== 1 || content[0]?.type !== 'text' || typeof content[0].text !== 'string') {
+        if (!Array.isArray(content) || content.length !== 1 + value.images.length || content[0]?.type !== 'text' ||
+            typeof content[0].text !== 'string' || content.slice(1).some((block, index) =>
+              block?.type !== 'image' || !validImageRef(block.attachment) ||
+              !sameImageRefs([block.attachment], [value.images[index]]))) {
           throw new Error('Morde MCP recovery result could not be rendered')
         }
         resultText = content[0].text
-        resultImages = []
+        resultImages = value.images
       } else {
         const result = await this.ipc.toolCall(this.identity, this.through, call.id, call.name, call.args, signal)
         if (!result) throw new Error('tool recovery result is unavailable')
@@ -829,7 +868,7 @@ export async function runAgent(ipc, frame) {
           }
         }
         if (isMordeMCPTool(tool)) {
-          agentCtx.tools.register(mordeMCPToolDefinition(agentCtx, sessionDurable, tool, onError))
+          agentCtx.tools.register(mordeMCPToolDefinition(sessionDurable, tool, onError))
           continue
         }
         agentCtx.tools.register({
@@ -1146,6 +1185,9 @@ export async function runAgent(ipc, frame) {
       agent.inject(createUserMessage({ content: [{ type: 'text', text: frame.prompt }], source: { kind: 'plugin', plugin: 'morde-context' } }))
       stageRevisionMessages(revisionMessages)
     } else {
+      if (frame.initial_context) agent.inject(createUserMessage({
+        content: [{ type: 'text', text: frame.initial_context }], source: { kind: 'plugin', plugin: 'morde-context' },
+      }))
       agent.followup(createUserMessage({ content: [{ type: 'text', text: frame.prompt }], source: { kind: 'user' } }))
     }
     installMessageDeliveryHandler()

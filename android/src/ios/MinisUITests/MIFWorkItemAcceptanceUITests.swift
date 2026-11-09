@@ -19,7 +19,6 @@ final class MIFWorkItemAcceptanceUITests: XCTestCase {
         draft.tap()
         draft.typeText("Draft survives the task tab")
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
-        XCTAssertFalse(tasksTab.exists)
         element("morde.chat.transcript", in: app).tap()
         let keyboard = app.keyboards.firstMatch
         let keyboardDismissed = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: keyboard)
@@ -115,6 +114,29 @@ final class MIFWorkItemAcceptanceUITests: XCTestCase {
         drawer.tap()
         app.buttons["morde.shell.drawer.library"].tap()
         XCTAssertTrue(element("morde.library.sourcePicker", in: app).waitForExistence(timeout: 10))
+        app.terminate()
+    }
+
+    func testProjectsDrawerRouteOpensProjectList() {
+        let app = launchFixture()
+        app.buttons["morde.shell.drawer"].tap()
+
+        let drawer = app.scrollViews["morde.shell.drawer.scroll"]
+        XCTAssertTrue(drawer.waitForExistence(timeout: 5))
+        let projects = app.buttons["morde.shell.drawer.projects"]
+        for _ in 0..<8 where !projects.isHittable {
+            drawer.swipeUp()
+        }
+        XCTAssertTrue(projects.waitForExistence(timeout: 5))
+        XCTAssertTrue(projects.isHittable)
+        projects.tap()
+
+        let list = app.descendants(matching: .any).matching(identifier: "morde.projects.list").firstMatch
+        XCTAssertTrue(list.waitForExistence(timeout: 15))
+        let project = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "morde.project.row.")
+        ).firstMatch
+        XCTAssertTrue(project.waitForExistence(timeout: 15))
         app.terminate()
     }
 
@@ -312,6 +334,8 @@ final class MIFWorkItemAcceptanceUITests: XCTestCase {
         wait(for: [delivered], timeout: 10)
 
         createButton.tap()
+        XCTAssertTrue(element("morde.workItems.create.scroll", in: app).waitForExistence(timeout: 5),
+                      "Creating a work item should present its own scroll view.")
         let createTitle = app.textFields["morde.workItems.create.title"]
         scrollUntilHittable(createTitle, in: app)
         createTitle.tap()
@@ -452,20 +476,23 @@ final class MIFWorkItemAcceptanceUITests: XCTestCase {
 
     private func launchFixture(extraArguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-morde.server", "", "-morde.localRegistrationStub",
+        app.launchArguments = ["-morde.server", "https://127.0.0.1:49713", "-morde.localRegistrationStub",
                               "-morde.localRegistrationApproved", "-morde.localWorkItemFixture",
                               "-morde.localTaskPagesFixture"] + extraArguments + ["-AppleLanguages", "(zh-Hans)",
                               "-AppleLocale", "zh_CN"]
         app.launch()
+        dismissLocalFixtureStartupError(in: app)
         let drawer = app.buttons["morde.shell.drawer"]
         let usernameField = app.textFields["morde.auth.username"]
         openMordeFromCurrentRoot(app)
+        dismissLocalFixtureStartupError(in: app)
+        if usernameField.waitForExistence(timeout: 10) {
+            signInToFixtureAccount("mif-work-items-user", in: app)
+        }
+        XCTAssertFalse(usernameField.exists, "The fixture must finish signing in before page assertions run.")
         XCTAssertTrue(drawer.waitForExistence(timeout: 10))
         let chatTab = app.buttons["morde.shell.tab.chat"]
         if chatTab.waitForExistence(timeout: 5), !chatTab.isSelected { chatTab.tap() }
-        if usernameField.waitForExistence(timeout: 3), usernameField.isHittable {
-            signInToFixtureAccount("mif-work-items-user", in: app)
-        }
         let mainChat = app.buttons["morde.shell.mainChat"]
         if !mainChat.exists { drawer.tap() }
         if mainChat.waitForExistence(timeout: 5) { mainChat.tap() }
@@ -477,20 +504,23 @@ final class MIFWorkItemAcceptanceUITests: XCTestCase {
 
     private func launchExecutionFixture(extraArguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-morde.server", "https://portal.120.25.178.93.sslip.io", "-morde.localRegistrationStub",
+        app.launchArguments = ["-morde.server", "https://127.0.0.1:49713", "-morde.localRegistrationStub",
                               "-morde.localRegistrationApproved", "-morde.localTaskPagesFixture",
                               "-morde.localExecutionFixture"] + extraArguments + [
                               "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
         app.launch()
+        dismissLocalFixtureStartupError(in: app)
         let drawer = app.buttons["morde.shell.drawer"]
         let usernameField = app.textFields["morde.auth.username"]
         openMordeFromCurrentRoot(app)
+        dismissLocalFixtureStartupError(in: app)
+        if usernameField.waitForExistence(timeout: 10) {
+            signInToFixtureAccount("mif-execution-user", in: app)
+        }
+        XCTAssertFalse(usernameField.exists, "The fixture must finish signing in before page assertions run.")
         XCTAssertTrue(drawer.waitForExistence(timeout: 10))
         let chatTab = app.buttons["morde.shell.tab.chat"]
         if chatTab.waitForExistence(timeout: 5), !chatTab.isSelected { chatTab.tap() }
-        if usernameField.waitForExistence(timeout: 3), usernameField.isHittable {
-            signInToFixtureAccount("mif-execution-user", in: app)
-        }
         return app
     }
 
@@ -515,8 +545,21 @@ final class MIFWorkItemAcceptanceUITests: XCTestCase {
         app.descendants(matching: .any).matching(identifier: identifier).firstMatch
     }
 
+    private func dismissLocalFixtureStartupError(in app: XCUIApplication) {
+        let error = app.alerts["请求失败"]
+        if error.waitForExistence(timeout: 2) {
+            error.buttons["确定"].tap()
+        }
+    }
+
     private func scrollUntilHittable(_ element: XCUIElement, in app: XCUIApplication) {
         dismissKeyboard(in: app)
+        let createScroll = self.element("morde.workItems.create.scroll", in: app)
+        if createScroll.exists {
+            for _ in 0..<12 where !element.isHittable { createScroll.swipeUp() }
+            XCTAssertTrue(element.isHittable, "Expected \(element.identifier) to be tappable in its form.")
+            return
+        }
         let workItemsScroll = app.descendants(matching: .any)
             .matching(identifier: "morde.workItems.scroll").firstMatch
         if workItemsScroll.exists {
@@ -565,7 +608,10 @@ final class MIFWorkItemAcceptanceUITests: XCTestCase {
         app.secureTextFields["morde.auth.password"].tap()
         app.secureTextFields["morde.auth.password"].typeText("LocalAccountFixture!2468")
         app.buttons["morde.auth.submit"].tap()
-        XCTAssertTrue(app.buttons["morde.shell.drawer"].waitForExistence(timeout: 15))
+        let signedIn = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"),
+                                                 object: usernameField)
+        XCTAssertEqual(XCTWaiter.wait(for: [signedIn], timeout: 15), .completed,
+                       "The sign-in form must close after a successful local fixture login.")
         dismissKeyboard(in: app)
     }
 

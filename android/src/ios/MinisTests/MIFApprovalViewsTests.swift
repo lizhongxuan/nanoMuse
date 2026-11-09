@@ -192,7 +192,7 @@ final class MIFApprovalViewsTests: XCTestCase {
 
     private func task(id: String, status: String = "waiting_user", pending: String,
                       clarification: String) throws -> MordeTask {
-        let json = #"{"id":"\#(id)","conversation_id":"c1234567","objective":"Review the requested change","status":"\#(status)","updated_at":"2026-11-04T00:00:00Z","pending_request":\#(pending),"clarification_request":\#(clarification)}"#
+        let json = #"{"id":"\#(id)","conversation_id":"c1234567","objective":"Review the requested change","status":"\#(status)","step_count":0,"completed_step_count":0,"updated_at":"2026-11-04T00:00:00Z","pending_request":\#(pending),"clarification_request":\#(clarification)}"#
         return try JSONDecoder().decode(MordeTask.self, from: Data(json.utf8))
     }
 }

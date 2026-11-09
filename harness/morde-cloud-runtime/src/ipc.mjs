@@ -7,7 +7,8 @@ export const MAX_FRAME_BYTES = 4 * 1024 * 1024
 const MAX_MODEL_QUEUE_BYTES = 1024 * 1024
 const MAX_TOOL_OUTPUT_BYTES = 1024 * 1024
 const MAX_TOOL_IMAGE_BYTES = 512 * 1024
-const MAX_TOOL_IMAGES = 1
+const MAX_TOOL_IMAGES = 4
+const MAX_TASK_ATTACHMENT_IMAGE_BYTES = 2 * 1024 * 1024
 // shortcut: retain at most 8 MiB for task recovery; use durable bounded attachments if tasks need longer image histories.
 const MAX_TOOL_IMAGE_CACHE_BYTES = 8 * 1024 * 1024
 const CHECKPOINT_TIMEOUT_MS = 30_000
@@ -51,11 +52,32 @@ function jpegDimensions(bytes) {
   return undefined
 }
 
-function decodeToolImages(images) {
-  if (!Array.isArray(images) || images.length > MAX_TOOL_IMAGES) throw new Error('invalid tool images')
-  return images.map(image => {
+function pngDimensions(bytes) {
+  const signature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+  if (bytes.length < 33 || !bytes.subarray(0, 8).equals(signature) || bytes.readUInt32BE(8) !== 13 ||
+      bytes.toString('ascii', 12, 16) !== 'IHDR') return undefined
+  return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) }
+}
+
+function imageDimensions(mediaType, bytes) {
+  if (mediaType === 'image/jpeg') return jpegDimensions(bytes)
+  if (mediaType === 'image/png') return pngDimensions(bytes)
+  return undefined
+}
+
+function toolImageLimit(name) {
+  if (name === 'morde_read_task_attachment') return MAX_TOOL_IMAGES
+  if (typeof name === 'string' && (name.startsWith('mcp_') || name === 'desktop_screenshot' || name === 'browser_screenshot')) return 1
+  return 0
+}
+
+function decodeToolImages(images, toolName) {
+  const limit = toolImageLimit(toolName)
+  if (!Array.isArray(images) || images.length > limit) throw new Error('invalid tool images')
+  let totalBytes = 0
+  const decoded = images.map(image => {
     if (!isObject(image) || Object.keys(image).sort().join(',') !== 'attachment_id,bytes,data_base64,height,media_type,width' ||
-        image.media_type !== 'image/jpeg' || !Number.isSafeInteger(image.bytes) || image.bytes < 1 || image.bytes > MAX_TOOL_IMAGE_BYTES ||
+        !['image/jpeg', 'image/png'].includes(image.media_type) || !Number.isSafeInteger(image.bytes) || image.bytes < 1 || image.bytes > MAX_TOOL_IMAGE_BYTES ||
         !Number.isSafeInteger(image.width) || image.width < 1 || image.width > 1280 ||
         !Number.isSafeInteger(image.height) || image.height < 1 || image.height > 720 ||
         typeof image.data_base64 !== 'string' || image.data_base64.length !== Math.ceil(image.bytes / 3) * 4 ||
@@ -63,8 +85,9 @@ function decodeToolImages(images) {
     const bytes = Buffer.from(image.data_base64, 'base64')
     if (bytes.length !== image.bytes || bytes.toString('base64') !== image.data_base64 ||
         image.attachment_id !== `morde_img_${createHash('sha256').update(bytes).digest('hex')}`) throw new Error('invalid tool image bytes')
-    const dimensions = jpegDimensions(bytes)
+    const dimensions = imageDimensions(image.media_type, bytes)
     if (!dimensions || dimensions.width !== image.width || dimensions.height !== image.height) throw new Error('invalid tool image dimensions')
+    totalBytes += bytes.length
     const attachment = {
       attachmentId: image.attachment_id,
       mediaType: image.media_type,
@@ -74,6 +97,10 @@ function decodeToolImages(images) {
     }
     return { attachment, bytes }
   })
+  if (toolName === 'morde_read_task_attachment' && totalBytes > MAX_TASK_ATTACHMENT_IMAGE_BYTES) {
+    throw new Error('task attachment images exceed the aggregate size limit')
+  }
+  return decoded
 }
 
 function modelRequestWithImages(request, images) {
@@ -85,7 +112,7 @@ function modelRequestWithImages(request, images) {
       const ref = block.attachment
       if (!isObject(ref) || Object.keys(ref).sort().join(',') !== 'attachmentId,bytes,height,mediaType,width' ||
           typeof ref.attachmentId !== 'string' || !/^morde_img_[a-f0-9]{64}$/.test(ref.attachmentId) ||
-          ref.mediaType !== 'image/jpeg' || !Number.isSafeInteger(ref.bytes) || ref.bytes < 1 || ref.bytes > MAX_TOOL_IMAGE_BYTES ||
+          !['image/jpeg', 'image/png'].includes(ref.mediaType) || !Number.isSafeInteger(ref.bytes) || ref.bytes < 1 || ref.bytes > MAX_TOOL_IMAGE_BYTES ||
           !Number.isSafeInteger(ref.width) || ref.width < 1 || ref.width > 1280 ||
           !Number.isSafeInteger(ref.height) || ref.height < 1 || ref.height > 720) throw new Error('invalid model image reference')
       if (block.offloaded === true) return { type: 'text', text: textOnlyImageText(ref) }
@@ -245,7 +272,7 @@ export class WorkerIPC {
       const expectedKeys = ['agent_id', 'authorization_version', 'call_id', 'generation', 'id', 'output', 'owner_id', 'session_id', 'status', 'task_id', 'type']
       const actualKeys = Object.keys(frame).sort()
       let images
-      try { images = decodeToolImages(Object.hasOwn(frame, 'images') ? frame.images : []) } catch {}
+      try { images = decodeToolImages(Object.hasOwn(frame, 'images') ? frame.images : [], pending.name) } catch {}
       const actualKeyList = actualKeys.join(',')
       const validKeys = actualKeyList === expectedKeys.join(',') || actualKeyList === [...expectedKeys, 'images'].sort().join(',')
       const addedBytes = images?.reduce((total, item) => total + (this.images.has(item.attachment.attachmentId) ? 0 : item.bytes.length), 0)
@@ -389,7 +416,7 @@ export class WorkerIPC {
       clearTimeout(timer)
       result.reject(abortError())
     }
-    this.pending.set(id, { ...result, timer, kind: 'tool_result', identity, callID })
+    this.pending.set(id, { ...result, timer, kind: 'tool_result', identity, callID, name })
     signal?.addEventListener('abort', abort, { once: true })
     try {
       await this.send({ type: 'tool_call', id, ...identity, through_seq: through, call_id: callID, name, arguments: args })

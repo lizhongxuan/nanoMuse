@@ -786,6 +786,23 @@
         }
       }
     },
+    "Automatic conversation processing is unconfirmed; sending will still be attempted." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Automatic conversation processing is unconfirmed; sending will still be attempted."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "服务端尚未确认对话自动处理能力；仍会尝试发送。"
+          }
+        }
+      }
+    },
     "Sent" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1081,65 +1098,6 @@
         }
       }
     },
-    "Update the service to send this message" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dienst aktualisieren, um diese Nachricht zu senden"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Update the service to send this message"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Actualiza el servicio para enviar este mensaje"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mettez à jour le service pour envoyer ce message"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "このメッセージを送信するにはサービスを更新してください"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "이 메시지를 보내려면 서비스를 업데이트하세요"
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Обновите службу, чтобы отправить сообщение"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "请更新服务后发送此消息"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "請更新服務後傳送此訊息"
-          }
-        }
-      }
-    },
     " · %@" : {
 
     },
@@ -1318,6 +1276,20 @@
             "value" : "聊天附件支援圖片、PDF、DOCX 和 XLSX。"
           }
         }
+      }
+    },
+    "Personal chat attachments support images and PDF." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Persönliche Chat-Anhänge unterstützen Bilder und PDF." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Personal chat attachments support images and PDF." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Los archivos adjuntos del chat personal admiten imágenes y PDF." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Les pièces jointes du chat personnel acceptent les images et les PDF." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "個人チャットの添付ファイルは画像とPDFに対応しています。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "개인 채팅 첨부 파일은 이미지와 PDF를 지원합니다." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "В личный чат можно прикрепить изображения и PDF." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "个人聊天附件仅支持图片和 PDF。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "個人聊天附件僅支援圖片和 PDF。" } }
       }
     },
     "—" : {
@@ -5081,55 +5053,55 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%d ausstehende Freigaben"
+            "value" : "%d offen"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%d approvals pending"
+            "value" : "%d pending"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%d aprobaciones pendientes"
+            "value" : "%d pendientes"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%d approbations en attente"
+            "value" : "%d en attente"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%d 件の承認待ち"
+            "value" : "%d 件"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "승인 대기 %d건"
+            "value" : "대기 %d건"
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%d ожидающих подтверждений"
+            "value" : "%d ожидают"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%d 项待审批"
+            "value" : "%d 件"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%d 項待審批"
+            "value" : "%d 件"
           }
         }
       }
@@ -15850,7 +15822,18 @@
       }
     },
     "Add resource" : {
-
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Ressource hinzufügen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Add resource" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Añadir recurso" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Ajouter une ressource" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "リソースを追加" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "리소스 추가" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Добавить ресурс" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "添加资源" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "新增資源" } }
+      }
     },
     "Add Rule" : {
       "extractionState" : "manual",
@@ -21747,7 +21730,63 @@
       }
     },
     "API Keys" : {
-
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "API-Schlüssel"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "API keys"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Claves de API"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clés API"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "APIキー"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "API 키"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ключи API"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "API 密钥"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "API 金鑰"
+          }
+        }
+      }
     },
     "API keys and tokens are stored only in the iOS Keychain on your device and are never sent to us" : {
       "extractionState" : "stale",
@@ -23269,13 +23308,62 @@
     },
     "Ask %@ to open %@. The link is sent only after you confirm; success requires that device’s confirmation." : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bitte %1$@, %2$@ zu öffnen. Der Link wird erst nach deiner Bestätigung gesendet; erfolgreich ist der Vorgang nur mit Bestätigung dieses Geräts."
+          }
+        },
         "en" : {
           "stringUnit" : {
-            "state" : "new",
+            "state" : "translated",
             "value" : "Ask %1$@ to open %2$@. The link is sent only after you confirm; success requires that device’s confirmation."
           }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pedir a %1$@ que abra %2$@. El enlace solo se envía después de que lo confirmes; el éxito requiere la confirmación de ese dispositivo."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Demander à %1$@ d’ouvrir %2$@. Le lien n’est envoyé qu’après votre confirmation ; la réussite nécessite la confirmation de cet appareil."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ に %2$@ を開くよう依頼します。リンクは確認後にのみ送信され、成功にはそのデバイスからの確認が必要です。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@에 %2$@을(를) 열도록 요청합니다. 확인한 후에만 링크가 전송되며, 성공하려면 해당 기기의 확인이 필요합니다."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Попросить %1$@ открыть %2$@. Ссылка будет отправлена только после вашего подтверждения; для успеха требуется подтверждение этого устройства."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请求 %1$@ 打开 %2$@。只有你确认后才会发送链接；操作成功还需要该设备确认。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要求 %1$@ 開啟 %2$@。只有在你確認後才會傳送連結；操作成功還需要該裝置確認。"
+          }
         }
-      }
+      },
+      "extractionState" : "manual"
     },
     "Ask morde" : {
       "extractionState" : "stale",
@@ -24649,7 +24737,63 @@
       }
     },
     "Authorize remote open?" : {
-
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Öffnen auf einem anderen Gerät autorisieren?"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Authorize remote open?"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "¿Autorizar la apertura remota?"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autoriser l’ouverture à distance ?"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "リモートで開くことを許可しますか？"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "원격 열기를 승인할까요?"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Разрешить удаленное открытие?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "授权远程打开？"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "授權遠端開啟？"
+          }
+        }
+      }
     },
     "Authorize…" : {
       "localizations" : {
@@ -35750,6 +35894,20 @@
         }
       }
     },
+    "Collaboration" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Zusammenarbeit" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Collaboration" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Colaboración" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Collaboration" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "コラボレーション" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "협업" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Совместная работа" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "协作" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "協作" } }
+      }
+    },
     "Close" : {
       "localizations" : {
         "de" : {
@@ -45043,15 +45201,29 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "创建·团队可见"
+            "value" : "创建 · 团队可见"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "建立·團隊可見"
+            "value" : "建立 · 團隊可見"
           }
         }
+      }
+    },
+    "Created · visible to team" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Erstellt · für das Team sichtbar" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Created · visible to team" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Creado · visible para el equipo" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Créé · visible par l’équipe" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "作成済み · チームに公開" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "생성됨 · 팀에 공개" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Создано · видно команде" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已创建 · 团队可见" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "已建立 · 團隊可見" } }
       }
     },
     "Created" : {
@@ -51861,7 +52033,63 @@
       }
     },
     "Device relay" : {
-
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Geräterelay"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Device relay"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retransmisión entre dispositivos"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Relais entre appareils"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "デバイス中継"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "기기 릴레이"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ретрансляция на устройство"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设备中继"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "裝置中繼"
+          }
+        }
+      }
     },
     "Devices" : {
       "localizations" : {
@@ -69046,7 +69274,63 @@
       }
     },
     "Host members" : {
-
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Host-Mitglieder"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Host members"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Miembros del Host"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Membres du Host"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Host メンバー"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Host 구성원"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Участники Host"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Host 成员"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Host 成員"
+          }
+        }
+      }
     },
     "How big the face is on the home header. Hidden keeps the name only." : {
       "extractionState" : "manual",
@@ -69586,7 +69870,63 @@
       }
     },
     "HTTP or HTTPS link" : {
-
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "HTTP- oder HTTPS-Link"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "HTTP or HTTPS link"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enlace HTTP o HTTPS"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lien HTTP ou HTTPS"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "HTTP または HTTPS のリンク"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "HTTP 또는 HTTPS 링크"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ссылка HTTP или HTTPS"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "HTTP 或 HTTPS 链接"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "HTTP 或 HTTPS 連結"
+          }
+        }
+      }
     },
     "HTTP proxy for own providers" : {
       "extractionState" : "manual",
@@ -80224,7 +80564,63 @@
       }
     },
     "Loading devices…" : {
-
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Geräte werden geladen …"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loading devices…"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cargando dispositivos…"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chargement des appareils…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "デバイスを読み込み中…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "기기를 불러오는 중…"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Загрузка устройств…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在加载设备…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在載入裝置…"
+          }
+        }
+      }
     },
     "Loading models..." : {
       "localizations" : {
@@ -86061,7 +86457,63 @@
       }
     },
     "Model connections" : {
-
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modellverbindungen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Model connections"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Conexiones de modelos"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connexions de modèles"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "モデル接続"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모델 연결"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Подключения моделей"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型连接"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型連線"
+          }
+        }
+      }
     },
     "Model Details" : {
       "localizations" : {
@@ -88460,7 +88912,63 @@
 
     },
     "Morde iOS" : {
-
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Morde iOS"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Morde for iOS"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Morde para iOS"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Morde pour iOS"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Morde iOS"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Morde iOS"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Morde для iOS"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Morde iOS"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Morde iOS"
+          }
+        }
+      }
     },
     "morde is a non-profit open-source community project, free, forever. Nothing is sold; what the relay keeps is in the privacy policy, and Settings → Data controls is yours." : {
 
@@ -95068,7 +95576,63 @@
       }
     },
     "No client devices are registered." : {
-
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Es sind keine Client-Geräte registriert."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No client devices are registered."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No hay dispositivos cliente registrados."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aucun appareil client n’est enregistré."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "登録済みのクライアントデバイスはありません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "등록된 클라이언트 기기가 없습니다."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Клиентские устройства не зарегистрированы."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "尚未注册客户端设备。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "尚未註冊用戶端裝置。"
+          }
+        }
+      }
     },
     "No client installations are registered." : {
       "extractionState" : "manual",
@@ -96200,6 +96764,65 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "暫無事件歷史"
+          }
+        }
+      }
+    },
+    "No files in this category" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Dateien in dieser Kategorie"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No files in this category"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No hay archivos en esta categoría"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aucun fichier dans cette catégorie"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このカテゴリにはファイルがありません"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 범주에 파일이 없습니다"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "В этой категории нет файлов"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这一类暂时没有"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此類別暫時沒有"
           }
         }
       }
@@ -99524,13 +100147,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "没有符合此筛选条件的工作项。"
+            "value" : "这一类暂时没有"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "沒有符合此篩選條件的工作項。"
+            "value" : "這一類暫時沒有"
           }
         }
       }
@@ -104850,10 +105473,122 @@
       }
     },
     "Online is advisory Hub presence. The target confirms the open request; no confirmation means the result is unknown." : {
-
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Online-Status ist eine unverbindliche Hub-Präsenzmeldung. Das Zielgerät bestätigt den Öffnungsauftrag; ohne Bestätigung ist das Ergebnis unbekannt."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Online is advisory Hub presence. The target confirms the open request; no confirmation means the result is unknown."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El estado en línea solo indica presencia en Hub. El dispositivo de destino confirma la solicitud de apertura; sin confirmación, el resultado es desconocido."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L’état en ligne indique uniquement la présence sur Hub. L’appareil cible confirme la demande d’ouverture ; sans confirmation, le résultat est inconnu."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "オンライン表示は Hub の参考情報です。リンクを開く要求は対象デバイスが確認します。確認がない場合、結果は不明です。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "온라인 상태는 Hub의 참고용 연결 정보입니다. 열기 요청은 대상 기기가 확인하며, 확인이 없으면 결과를 알 수 없습니다."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Статус «в сети» — лишь справочная информация о присутствии в Hub. Запрос на открытие подтверждает целевое устройство; без подтверждения результат неизвестен."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在线状态仅表示 Hub 提供的参考信息。打开请求由目标设备确认；没有确认时，结果未知。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在線狀態僅代表 Hub 提供的參考資訊。開啟要求由目標裝置確認；沒有確認時，結果未知。"
+          }
+        }
+      }
     },
     "Only an explicit open-link request is sent. This screen does not send files, screenshots, commands, or notifications." : {
-
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Es wird nur nach ausdrücklicher Bestätigung eine Anfrage zum Öffnen eines Links gesendet. Über diese Ansicht werden keine Dateien, Screenshots, Befehle oder Benachrichtigungen gesendet."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Only an explicit open-link request is sent. This screen does not send files, screenshots, commands, or notifications."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Solo se envía una solicitud para abrir un enlace cuando la confirmas explícitamente. Esta pantalla no envía archivos, capturas de pantalla, comandos ni notificaciones."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Seule une demande explicite d’ouverture de lien est envoyée. Cet écran n’envoie ni fichiers, ni captures d’écran, ni commandes, ni notifications."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "明示的に確認した場合にのみリンクを開く要求を送信します。この画面からファイル、スクリーンショット、コマンド、通知は送信されません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "명시적으로 확인한 경우에만 링크 열기 요청을 보냅니다. 이 화면은 파일, 스크린샷, 명령 또는 알림을 보내지 않습니다."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Отправляется только явно подтвержденный запрос на открытие ссылки. С этого экрана не отправляются файлы, снимки экрана, команды или уведомления."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只有明确确认后才会发送打开链接的请求。此页面不会发送文件、截图、命令或通知。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只有明確確認後才會傳送開啟連結的要求。此頁面不會傳送檔案、螢幕截圖、指令或通知。"
+          }
+        }
+      }
     },
     "Only approval requests in task details appear here." : {
       "extractionState" : "manual",
@@ -105976,10 +106711,122 @@
       }
     },
     "Open link" : {
-
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Link öffnen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open link"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abrir enlace"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ouvrir le lien"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "リンクを開く"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "링크 열기"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Открыть ссылку"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开链接"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "開啟連結"
+          }
+        }
+      }
     },
     "Open link on this device" : {
-
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Link auf diesem Gerät öffnen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open link on this device"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abrir enlace en este dispositivo"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ouvrir le lien sur cet appareil"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このデバイスでリンクを開く"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 기기에서 링크 열기"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Открыть ссылку на этом устройстве"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在此设备上打开链接"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在此裝置上開啟連結"
+          }
+        }
+      }
     },
     "Open morde to run it. The phone cannot run the agent while the app is asleep." : {
       "extractionState" : "manual",
@@ -107147,7 +107994,63 @@
       }
     },
     "Opening secure settings…" : {
-
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sichere Einstellungen werden geöffnet …"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opening secure settings…"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abriendo los ajustes seguros…"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ouverture des réglages sécurisés…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "安全な設定を開いています…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "보안 설정을 여는 중…"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Открываются защищенные настройки…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在打开安全设置…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在開啟安全設定…"
+          }
+        }
+      }
     },
     "OpenRouter or OpenAI first: one key, most models, pay as you go. Each provider below says what it covers." : {
       "extractionState" : "manual",
@@ -115020,6 +115923,20 @@
     },
     "Profile change queued for Morde sync." : {
 
+    },
+    "Previous device sign-outs still need server confirmation. Sign in to the same Morde service to retry them." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Frühere Geräteabmeldungen müssen noch vom Server bestätigt werden. Melde dich beim selben Morde-Dienst an, um sie erneut zu versuchen." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Previous device sign-outs still need server confirmation. Sign in to the same Morde service to retry them." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "El servidor aún debe confirmar los cierres de sesión anteriores. Inicia sesión en el mismo servicio de Morde para volver a intentarlo." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Le serveur doit encore confirmer les déconnexions précédentes. Connectez-vous au même service Morde pour réessayer." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "以前のデバイスのサインアウトはサーバー未確認です。同じ Morde サービスにサインインすると再試行します。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "이전 기기의 로그아웃이 아직 서버에서 확인되지 않았습니다. 같은 Morde 서비스에 로그인하면 다시 시도합니다." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сервер ещё не подтвердил выход с предыдущих устройств. Войдите в тот же сервис Morde, чтобы повторить попытку." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "之前的设备退出尚未得到服务器确认。登录同一个 Morde 服务后会重试。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "先前的裝置登出尚未獲伺服器確認。登入相同的 Morde 服務後會重試。" } }
+      }
     },
     "Project" : {
       "extractionState" : "manual",
@@ -126091,7 +127008,63 @@
       }
     },
     "Retry devices" : {
-
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Geräte erneut laden"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retry devices"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reintentar carga de dispositivos"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Réessayer le chargement des appareils"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "デバイスを再読み込み"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "기기 다시 불러오기"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Повторить загрузку устройств"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重试加载设备"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重試載入裝置"
+          }
+        }
+      }
     },
     "Retry idea sync" : {
       "extractionState" : "manual",
@@ -149530,6 +150503,65 @@
         }
       }
     },
+    "%1$d steps · %2$d done" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$d Schritte · %2$d erledigt"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$d steps · %2$d done"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$d pasos · %2$d completados"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$d étapes · %2$d terminées"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$d ステップ · %2$d 完了"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$d단계 · %2$d 완료"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$d шагов · выполнено: %2$d"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$d 步 · %2$d 步完成"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$d 步 · %2$d 步完成"
+          }
+        }
+      }
+    },
     "Task step updated" : {
 
     },
@@ -157254,7 +158286,63 @@
       }
     },
     "The target device and link could not be verified." : {
-
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das Zielgerät und der Link konnten nicht überprüft werden."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The target device and link could not be verified."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudieron verificar el dispositivo de destino ni el enlace."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de vérifier l’appareil cible et le lien."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "対象デバイスとリンクを確認できませんでした。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "대상 기기와 링크를 확인할 수 없습니다."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не удалось проверить целевое устройство и ссылку."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法验证目标设备和链接。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法驗證目標裝置與連結。"
+          }
+        }
+      }
     },
     "The task list or some task details could not be fully read; the approval count is unknown. Only confirmed approvals are shown below." : {
       "extractionState" : "manual",
@@ -158354,7 +159442,63 @@
       }
     },
     "These pages use a short-lived user session for this installation. Server permissions still apply; no client credential is given to the web page." : {
-
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Seiten verwenden eine kurzlebige Benutzersitzung für diese Installation. Die Serverberechtigungen gelten weiterhin; die Webseite erhält keine Client-Anmeldedaten."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "These pages use a short-lived user session for this installation. Server permissions still apply; no client credential is given to the web page."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Estas páginas usan una sesión de usuario de corta duración para esta instalación. Siguen aplicándose los permisos del servidor; la página web no recibe credenciales del cliente."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ces pages utilisent une session utilisateur de courte durée pour cette installation. Les autorisations du serveur restent applicables ; la page web ne reçoit aucun identifiant du client."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "これらのページでは、このインストール用の短期ユーザーセッションを使用します。サーバーの権限は引き続き適用され、Webページにクライアント資格情報は渡されません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 페이지는 이 설치에 대한 단기 사용자 세션을 사용합니다. 서버 권한은 계속 적용되며 웹 페이지에 클라이언트 자격 증명을 전달하지 않습니다."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "На этих страницах используется краткосрочный сеанс пользователя для этой установки. Разрешения сервера продолжают действовать; веб-странице не передаются учетные данные клиента."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这些页面使用本安装的短期用户会话。服务器权限仍然生效；网页不会获得客户端凭据。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這些頁面使用此安裝項目的短期使用者工作階段。伺服器權限仍然適用；網頁不會取得用戶端憑證。"
+          }
+        }
+      }
     },
     "Thinking" : {
       "localizations" : {
@@ -160434,7 +161578,63 @@
       }
     },
     "This Morde service has not confirmed Hub v1 support; device relay is unavailable." : {
-
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieser Morde-Dienst hat die Unterstützung für Hub v1 nicht bestätigt; das Geräterelay ist nicht verfügbar."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This Morde service has not confirmed Hub v1 support; device relay is unavailable."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este servicio de Morde no ha confirmado la compatibilidad con Hub v1; la retransmisión entre dispositivos no está disponible."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce service Morde n’a pas confirmé la prise en charge de Hub v1 ; le relais entre appareils est indisponible."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この Morde サービスでは Hub v1 のサポートが確認されていないため、デバイス中継は利用できません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 Morde 서비스는 Hub v1 지원을 확인하지 않아 기기 릴레이를 사용할 수 없습니다."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сервис Morde не подтвердил поддержку Hub v1; ретрансляция на устройство недоступна."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Morde 服务尚未确认支持 Hub v1；设备中继不可用。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Morde 服務尚未確認支援 Hub v1；裝置中繼無法使用。"
+          }
+        }
+      }
     },
     "This mount is exposed as read-only to protect it from accidental edits." : {
       "localizations" : {
@@ -161141,13 +162341,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "此项目目前没有工作项。"
+            "value" : "这一类暂时没有"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "此專案目前沒有工作項。"
+            "value" : "這一類暫時沒有"
           }
         }
       }
@@ -161452,6 +162652,65 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "仅从列表中移除此记录。已保存到目的地的备份文件不会被删除。"
+          }
+        }
+      }
+    },
+    "This service does not support the current work item features." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieser Dienst unterstützt die aktuellen Funktionen für Arbeitselemente nicht."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This service does not support the current work item features."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este servicio no admite las funciones actuales de los elementos de trabajo."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce service ne prend pas en charge les fonctionnalités actuelles des éléments de travail."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このサービスは現在の作業項目機能に対応していません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 서비스는 현재 작업 항목 기능을 지원하지 않습니다."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Этот сервис не поддерживает текущие функции рабочих элементов."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前服务不支持新版工作项功能。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "目前的服務不支援新版工作項功能。"
           }
         }
       }
@@ -168774,6 +170033,20 @@
         }
       }
     },
+    "Used" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Genutzt" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Used" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Usado" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Utilisé" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "使用済み" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "사용됨" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Использовано" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已用" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "已用" } }
+      }
+    },
     "Use /v1/responses format with a custom API base" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -173899,13 +175172,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "等待你审批"
+            "value" : "等你审批"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "等待你核准"
+            "value" : "等你核准"
           }
         }
       }
@@ -177138,7 +178411,63 @@
 
     },
     "Workspace and account settings" : {
-
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Workspace- und Kontoeinstellungen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Workspace and account settings"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ajustes del Workspace y de la cuenta"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paramètres du Workspace et du compte"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Workspace とアカウントの設定"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Workspace 및 계정 설정"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Настройки Workspace и аккаунта"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Workspace 与账号设置"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Workspace 與帳號設定"
+          }
+        }
+      }
     },
     "Workspace changed; awaiting confirmation" : {
       "extractionState" : "manual",
@@ -180458,6 +181787,20 @@
         }
       }
     },
+    "Your session expired. Sign in again to continue." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Deine Sitzung ist abgelaufen. Melde dich erneut an, um fortzufahren." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Your session expired. Sign in again to continue." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Tu sesión ha caducado. Inicia sesión de nuevo para continuar." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Votre session a expiré. Reconnectez-vous pour continuer." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "セッションの有効期限が切れました。続けるには再度サインインしてください。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "세션이 만료되었습니다. 계속하려면 다시 로그인하세요." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Срок действия сеанса истёк. Войдите снова, чтобы продолжить." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "登录状态已失效，请重新登录后继续。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "登入狀態已失效，請重新登入後繼續。" } }
+      }
+    },
     "Your sign-in on this phone was ended. Sign in again to continue; your chats are kept on this device until then." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -182008,13 +183351,181 @@
 
     },
     "急停会停止当前账号下的云端任务。状态由服务端确认后更新。" : {
-
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dadurch werden die Cloud-Aufgaben des aktuellen Kontos gestoppt. Der Status wird nach Bestätigung durch den Server aktualisiert."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This stops the cloud tasks for the current account. The status updates after the server confirms it."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esto detiene las tareas en la nube de la cuenta actual. El estado se actualizará cuando lo confirme el servidor."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cela arrête les tâches cloud du compte actuel. L’état sera mis à jour après confirmation du serveur."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "現在のアカウントのクラウドタスクを停止します。サーバーの確認後に状態が更新されます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "현재 계정의 클라우드 작업을 중지합니다. 서버가 확인한 후 상태가 업데이트됩니다."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Это остановит облачные задачи текущей учетной записи. Состояние обновится после подтверждения сервера."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这会停止当前账号下的云端任务。服务器确认后才会更新状态。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這會停止目前帳號的雲端任務。伺服器確認後才會更新狀態。"
+          }
+        }
+      }
     },
     "急停全部云端任务？" : {
-
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle Cloud-Aufgaben sofort stoppen?"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Emergency stop all cloud tasks?"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "¿Detener de inmediato todas las tareas en la nube?"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Arrêter immédiatement toutes les tâches cloud ?"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "すべてのクラウドタスクを緊急停止しますか？"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모든 클라우드 작업을 긴급 중지할까요?"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Экстренно остановить все облачные задачи?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "急停全部云端任务？"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "緊急停止所有雲端任務？"
+          }
+        }
+      }
     },
     "急停全部任务" : {
-
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle Aufgaben sofort stoppen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Emergency stop all tasks"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Detener todas las tareas de inmediato"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Arrêter immédiatement toutes les tâches"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "すべてのタスクを緊急停止"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모든 작업 긴급 중지"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Экстренно остановить все задачи"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "急停全部任务"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "緊急停止所有任務"
+          }
+        }
+      }
     },
     "恢复会保留当前电脑 ID、Workspace 和运行数据，并轮换运行凭据。只有服务端确认成功后，状态才会更新。" : {
 
@@ -183052,7 +184563,63 @@
       }
     },
     "暂未实现" : {
-
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noch nicht implementiert"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not implemented yet"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aún no está implementado"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pas encore implémenté"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未実装です"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "아직 구현되지 않았습니다"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Пока не реализовано"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂未实现"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "尚未實作"
+          }
+        }
+      }
     },
     "更新项目预算" : {
 
@@ -184242,7 +185809,63 @@
 
     },
     "重新启用全部任务" : {
-
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle Aufgaben wieder aktivieren"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Re-enable all tasks"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Volver a habilitar todas las tareas"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Réactiver toutes les tâches"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "すべてのタスクを再度有効にする"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모든 작업 다시 활성화"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Повторно включить все задачи"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新启用全部任务"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新啟用所有任務"
+          }
+        }
+      }
     },
     "重试" : {
 
@@ -184430,6 +186053,1481 @@
     },
     "默认电脑与 Workspace 选择尚未接入。此页只读账号资源列表；会话目标只影响之后提交的消息，不会更改已受理任务。" : {
 
+    },
+    "设置" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einstellungen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Settings"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ajustes"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Réglages"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "設定"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "설정"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Настройки"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设置"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "設定"
+          }
+        }
+      }
+    },
+    "账号与连接" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Konto & Verbindungen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Account & connections"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cuenta y conexiones"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Compte et connexions"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アカウントと接続"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "계정 및 연결"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Аккаунт и подключения"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "账号与连接"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "帳號與連線"
+          }
+        }
+      }
+    },
+    "账号" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Konto"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Account"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cuenta"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Compte"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アカウント"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "계정"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Аккаунт"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "账号"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "帳號"
+          }
+        }
+      }
+    },
+    "连接器" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Konnektoren"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connectors"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Conectores"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connecteurs"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "コネクタ"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "커넥터"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Коннекторы"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接器"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "連接器"
+          }
+        }
+      }
+    },
+    "设备" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Geräte"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Devices"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dispositivos"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Appareils"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "デバイス"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "기기"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Устройства"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设备"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "裝置"
+          }
+        }
+      }
+    },
+    "安全凭证" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sicherheitsanmeldedaten"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Security credentials"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Credenciales de seguridad"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Identifiants de sécurité"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "セキュリティ認証情報"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "보안 자격 증명"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Учетные данные безопасности"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "安全凭证"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "安全憑證"
+          }
+        }
+      }
+    },
+    "权限与审批" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Berechtigungen & Genehmigungen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Permissions & approvals"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Permisos y aprobaciones"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autorisations et approbations"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "権限と承認"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "권한 및 승인"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Разрешения и подтверждения"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "权限与审批"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "權限與核准"
+          }
+        }
+      }
+    },
+    "权限" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Berechtigungen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Permissions"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Permisos"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autorisations"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "権限"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "권한"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Разрешения"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "权限"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "權限"
+          }
+        }
+      }
+    },
+    "审批规则" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Genehmigungsregeln"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Approval rules"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reglas de aprobación"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Règles d’approbation"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "承認ルール"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "승인 규칙"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Правила подтверждения"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "审批规则"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "核准規則"
+          }
+        }
+      }
+    },
+    "通用" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allgemein"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "General"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "General"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Général"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一般"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "일반"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Общие"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通用"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一般"
+          }
+        }
+      }
+    },
+    "外观" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Darstellung"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Appearance"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apariencia"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apparence"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "外観"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모양"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Внешний вид"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "外观"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "外觀"
+          }
+        }
+      }
+    },
+    "关于" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Über"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "About"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Acerca de"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "À propos"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "情報"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "정보"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "О приложении"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关于"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "關於"
+          }
+        }
+      }
+    },
+    "设置项不可用" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einstellung nicht verfügbar"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Settings item unavailable"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opción de ajustes no disponible"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Option de réglage indisponible"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "設定項目を利用できません"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "설정 항목을 사용할 수 없습니다"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Настройка недоступна"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设置项不可用"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "設定項目無法使用"
+          }
+        }
+      }
+    },
+    "Sign in to Morde to open this page." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Melde dich bei Morde an, um diese Seite zu öffnen."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sign in to Morde to open this page."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Inicia sesión en Morde para abrir esta página."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connectez-vous à Morde pour ouvrir cette page."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このページを開くには Morde にサインインしてください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 페이지를 열려면 Morde에 로그인하세요."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Войдите в Morde, чтобы открыть эту страницу."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "登录 Morde 后即可打开此页面。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "登入 Morde 後即可開啟此頁面。"
+          }
+        }
+      }
+    },
+    "Hub presence online" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hub-Präsenz online"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hub presence online"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Presencia de Hub en línea"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Présence Hub en ligne"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hub のオンライン状態"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hub 온라인 상태"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Присутствие в Hub: онлайн"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hub 在线状态"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hub 在線狀態"
+          }
+        }
+      }
+    },
+    "This device" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieses Gerät"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This device"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este dispositivo"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cet appareil"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このデバイス"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 기기"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Это устройство"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此设备"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此裝置"
+          }
+        }
+      }
+    },
+    "目标设备已确认打开链接。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das Zielgerät hat das Öffnen des Links bestätigt."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The target device confirmed opening the link."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El dispositivo de destino confirmó que abrió el enlace."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L’appareil cible a confirmé l’ouverture du lien."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "対象デバイスがリンクを開いたことを確認しました。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "대상 기기가 링크를 열었다고 확인했습니다."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Целевое устройство подтвердило открытие ссылки."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "目标设备已确认打开链接。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "目標裝置已確認開啟連結。"
+          }
+        }
+      }
+    },
+    "未收到目标设备确认；实际打开状态未知：%@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Bestätigung vom Zielgerät erhalten; der tatsächliche Öffnungsstatus ist unbekannt: %1$@"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No confirmation was received from the target device; the actual open status is unknown: %1$@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se recibió confirmación del dispositivo de destino; se desconoce si abrió el enlace: %1$@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aucune confirmation de l’appareil cible ; l’ouverture effective est inconnue : %1$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "対象デバイスから確認が届かず、実際にリンクが開いたか不明です: %1$@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "대상 기기의 확인을 받지 못해 실제로 링크가 열렸는지 알 수 없습니다: %1$@"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Подтверждение от целевого устройства не получено; неизвестно, открылся ли адрес: %1$@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未收到目标设备确认；实际打开状态未知：%1$@"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未收到目標裝置確認；實際開啟狀態未知：%1$@"
+          }
+        }
+      }
+    },
+    "目标设备当前离线，接力未确认。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das Zielgerät ist derzeit offline; die Weiterleitung wurde nicht bestätigt."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The target device is currently offline; the relay was not confirmed."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El dispositivo de destino está desconectado; no se confirmó la solicitud."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L’appareil cible est hors ligne ; le relais n’a pas été confirmé."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "対象デバイスは現在オフラインのため、中継は確認されていません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "대상 기기가 현재 오프라인이어서 릴레이가 확인되지 않았습니다."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Целевое устройство сейчас не в сети; передача не подтверждена."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "目标设备当前离线，中继请求未获确认。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "目標裝置目前離線，中繼要求未獲確認。"
+          }
+        }
+      }
+    },
+    "未收到目标设备确认；实际打开状态未知，请在目标设备检查。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Bestätigung vom Zielgerät erhalten; der tatsächliche Öffnungsstatus ist unbekannt. Bitte prüfe das Zielgerät."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No confirmation was received from the target device; the actual open status is unknown. Check the target device."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se recibió confirmación del dispositivo de destino; se desconoce si abrió el enlace. Comprueba ese dispositivo."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aucune confirmation de l’appareil cible ; l’ouverture effective est inconnue. Vérifiez l’appareil cible."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "対象デバイスから確認が届かず、実際にリンクが開いたか不明です。対象デバイスを確認してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "대상 기기의 확인을 받지 못해 실제로 링크가 열렸는지 알 수 없습니다. 대상 기기를 확인하세요."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Подтверждение от целевого устройства не получено; неизвестно, открылся ли адрес. Проверьте целевое устройство."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未收到目标设备确认；实际打开状态未知，请检查目标设备。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未收到目標裝置確認；實際開啟狀態未知，請檢查目標裝置。"
+          }
+        }
+      }
+    },
+    "目标设备未确认打开链接（%@）。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das Zielgerät hat das Öffnen des Links nicht bestätigt (%1$@)."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The target device did not confirm opening the link (%1$@)."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El dispositivo de destino no confirmó que abrió el enlace (%1$@)."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L’appareil cible n’a pas confirmé l’ouverture du lien (%1$@)."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "対象デバイスはリンクを開いたことを確認しませんでした（%1$@）。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "대상 기기가 링크 열기를 확인하지 않았습니다(%1$@)."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Целевое устройство не подтвердило открытие ссылки (%1$@)."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "目标设备未确认打开链接（%1$@）。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "目標裝置未確認開啟連結（%1$@）。"
+          }
+        }
+      }
+    },
+    "Morde 登录凭证不可用，请重新登录。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Morde-Anmeldeinformationen sind nicht verfügbar. Bitte melde dich erneut an."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The Morde sign-in credential is unavailable. Please sign in again."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La credencial de inicio de sesión de Morde no está disponible. Inicia sesión de nuevo."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Les identifiants de connexion Morde sont indisponibles. Veuillez vous reconnecter."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Morde のログイン資格情報を利用できません。もう一度サインインしてください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Morde 로그인 자격 증명을 사용할 수 없습니다. 다시 로그인하세요."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Учетные данные Morde недоступны. Войдите снова."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Morde 登录凭据不可用，请重新登录。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Morde 登入憑證無法使用，請重新登入。"
+          }
+        }
+      }
+    },
+    "请输入有效的 HTTP 或 HTTPS 链接。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gib einen gültigen HTTP- oder HTTPS-Link ein."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter a valid HTTP or HTTPS link."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Introduce un enlace HTTP o HTTPS válido."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saisissez un lien HTTP ou HTTPS valide."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "有効な HTTP または HTTPS のリンクを入力してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "유효한 HTTP 또는 HTTPS 링크를 입력하세요."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Введите действительную ссылку HTTP или HTTPS."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请输入有效的 HTTP 或 HTTPS 链接。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "請輸入有效的 HTTP 或 HTTPS 連結。"
+          }
+        }
+      }
+    },
+    "不能将链接接力到当前设备。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ein Link kann nicht an dieses Gerät weitergeleitet werden."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A link cannot be relayed to the current device."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se puede retransmitir un enlace al dispositivo actual."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un lien ne peut pas être relayé vers l’appareil actuel."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "現在のデバイスにはリンクを中継できません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "현재 기기로는 링크를 릴레이할 수 없습니다."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Нельзя передать ссылку на текущее устройство."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不能将链接中继到当前设备。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不能將連結中繼到目前裝置。"
+          }
+        }
+      }
+    },
+    "Hub 响应无法验证；接力结果未知。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Hub-Antwort konnte nicht überprüft werden; das Ergebnis der Weiterleitung ist unbekannt."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The Hub response could not be verified; the relay result is unknown."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo verificar la respuesta de Hub; se desconoce el resultado de la retransmisión."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La réponse de Hub n’a pas pu être vérifiée ; le résultat du relais est inconnu."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hub の応答を検証できませんでした。中継の結果は不明です。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hub 응답을 확인할 수 없어 릴레이 결과를 알 수 없습니다."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не удалось проверить ответ Hub; результат передачи неизвестен."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法验证 Hub 响应；中继结果未知。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法驗證 Hub 回應；中繼結果未知。"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

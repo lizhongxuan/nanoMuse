@@ -430,6 +430,7 @@ struct NanoMuseHomeView: View {
     @State private var showNanoMuseSettings = false
     @State private var showSharedFolders = false
     @State private var showDevices = false
+    @State private var showProjects = false
     @State private var showWorkspaceNotConnected = false
     @State private var agentName = NanoMuseHomeView.currentAgentName()
     /// Reduce Motion on: the bottom bar fades out for the keyboard instead of sliding down.
@@ -535,6 +536,9 @@ struct NanoMuseHomeView: View {
         }
         .sheet(isPresented: $showDevices) {
             NanoMusePageSheet(title: AppLocalized("Computers")) { NanoMuseComputersView() }
+        }
+        .sheet(isPresented: $showProjects) {
+            MordeProjectsEntryView()
         }
         .alert(AppLocalized("Default"), isPresented: $showWorkspaceNotConnected) {
             Button(AppLocalized("OK"), role: .cancel) {}
@@ -646,6 +650,8 @@ struct NanoMuseHomeView: View {
         case .workItems:
             taskHomeDestination = .workItems
             tab = .tasks
+        case .projects:
+            showProjects = true
         case .friends, .toolChats:
             placeholderDestination = destination
         }
@@ -1464,7 +1470,7 @@ private struct NanoMuseReadOnlyFileBrowser: View {
 // MARK: - Drawer
 
 enum MIFDrawerDestination: String, CaseIterable, Identifiable {
-    case chat, tasks, approvals, eventChain, resources, library, workItems, friends, toolChats
+    case chat, tasks, approvals, eventChain, resources, library, workItems, friends, projects, toolChats
 
     var id: String { rawValue }
 
@@ -1478,6 +1484,7 @@ enum MIFDrawerDestination: String, CaseIterable, Identifiable {
         case .library: AppLocalized("Library")
         case .workItems: AppLocalized("Work items")
         case .friends: AppLocalized("Friends")
+        case .projects: AppLocalized("Project")
         case .toolChats: AppLocalized("AI tool conversations")
         }
     }
@@ -1492,11 +1499,13 @@ enum MIFDrawerDestination: String, CaseIterable, Identifiable {
         case .library: "folder"
         case .workItems: "list.bullet.rectangle"
         case .friends: "person.2"
+        case .projects: "person.3"
         case .toolChats: "terminal"
         }
     }
 
     static let tabItems: [Self] = [.chat, .tasks, .approvals, .eventChain, .resources, .library, .workItems, .friends]
+    static let collaborationItems: [Self] = [.projects]
 }
 
 /// The Morde drawer follows the approved design destinations and keeps cloud chats separate
@@ -1584,6 +1593,12 @@ struct NanoMuseDrawer: View {
                         destinationRow(destination)
                     }
 
+                    sectionLabel(AppLocalized("Collaboration"))
+                        .padding(.top, 12)
+                    ForEach(MIFDrawerDestination.collaborationItems) { destination in
+                        destinationRow(destination)
+                    }
+
                     sectionLabel(AppLocalized("Side chats"))
                         .padding(.top, 12)
                     if cloudChats.isLoading && cloudChats.conversations.isEmpty {
@@ -1654,6 +1669,7 @@ struct NanoMuseDrawer: View {
                 }
                 .padding(.bottom, 12)
             }
+            .accessibilityIdentifier("morde.shell.drawer.scroll")
 
             Divider()
             HStack(spacing: 6) {

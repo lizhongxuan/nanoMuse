@@ -58,7 +58,7 @@ final class MIFResourceViewsTests: XCTestCase {
         let host = MIFResourcePageState.Host(
             id: "h1234567", name: "Shared", scope: .sharedReadOnly, status: .running,
             workspaceSummary: nil, canOpen: true,
-            control: control(canTakeOver: true, canReturnToAI: true, canRenewLease: true),
+            control: control(canTakeOver: true, canReturnToAI: true),
             error: nil)
 
         XCTAssertTrue(MIFResourcePageRules.controlActions(for: host).isEmpty)
@@ -67,7 +67,7 @@ final class MIFResourceViewsTests: XCTestCase {
     func testUnknownOrTransitioningControlOffersNoActions() {
         let unknown = ownedHost(control: control(state: .unknown, canTakeOver: true))
         let unknownLease = ownedHost(control: control(lease: .unknown, canTakeOver: true))
-        let transitioning = ownedHost(control: control(canTakeOver: true, transitionSummary: "handoff"))
+        let transitioning = ownedHost(control: control(canTakeOver: true, isTransitioning: true))
         let returning = ownedHost(control: control(state: .returning, canReturnToAI: true))
         // nanoMuse: offline hosts now report their concrete failed or stopped state.
         let failed = ownedHost(status: .failed, control: control(canTakeOver: true))
@@ -96,22 +96,22 @@ final class MIFResourceViewsTests: XCTestCase {
     }
 
     func testLoadingOrInFlightControlSuppressesActions() {
-        let loading = ownedHost(control: control(canReturnToAI: true, canRenewLease: true, isLoading: true))
-        let inFlight = ownedHost(control: control(canReturnToAI: true, canRenewLease: true, isActionInFlight: true))
+        let loading = ownedHost(control: control(canReturnToAI: true, isLoading: true))
+        let inFlight = ownedHost(control: control(canReturnToAI: true, isActionInFlight: true))
 
         XCTAssertTrue(MIFResourcePageRules.controlActions(for: loading).isEmpty)
         XCTAssertTrue(MIFResourcePageRules.controlActions(for: inFlight).isEmpty)
     }
 
     func testOwnedStableControlUsesOnlyClientApprovedActions() {
-        let host = ownedHost(control: control(canReturnToAI: true, canRenewLease: true))
+        let host = ownedHost(control: control(canReturnToAI: true))
 
         XCTAssertEqual(MIFResourcePageRules.controlActions(for: host), [.returnToAI])
     }
 
     func testExpiredLeaseOffersOnlyOwnerApprovedReturnAction() {
         let host = ownedHost(control: control(
-            lease: .expired, canTakeOver: true, canReturnToAI: true, canRenewLease: true))
+            lease: .expired, canTakeOver: true, canReturnToAI: true))
 
         XCTAssertEqual(MIFResourcePageRules.controlActions(for: host), [.returnToAI])
     }
@@ -119,7 +119,7 @@ final class MIFResourceViewsTests: XCTestCase {
     func testUserControlWithoutActiveLeaseOnlyReturnsWhenOwnerPolicyAllowsIt() {
         for lease in [MIFResourcePageState.Control.Lease.none, .unknown] {
             let host = ownedHost(control: control(
-                state: .user, lease: lease, canReturnToAI: true, canRenewLease: true))
+                state: .user, lease: lease, canReturnToAI: true))
 
             XCTAssertTrue(MIFResourcePageRules.controlActions(for: host).isEmpty, "lease: \(lease)")
         }
@@ -149,15 +149,14 @@ final class MIFResourceViewsTests: XCTestCase {
         lease: MIFResourcePageState.Control.Lease = .active,
         canTakeOver: Bool = false,
         canReturnToAI: Bool = false,
-        canRenewLease: Bool = false,
-        transitionSummary: String? = nil,
+        isTransitioning: Bool = false,
         isLoading: Bool = false,
         isActionInFlight: Bool = false
     ) -> MIFResourcePageState.Control {
         MIFResourcePageState.Control(
-            state: state, lease: lease, leaseExpiresAt: nil,
-            transitionSummary: transitionSummary, isLoading: isLoading, isActionInFlight: isActionInFlight,
+            state: state, lease: lease, isTransitioning: isTransitioning,
+            isLoading: isLoading, isActionInFlight: isActionInFlight,
             canTakeOver: canTakeOver, canReturnToAI: canReturnToAI,
-            canRenewLease: canRenewLease, error: nil)
+            error: nil)
     }
 }

@@ -41,7 +41,6 @@ struct MIFTaskActionOption: Identifiable {
     let id: String
     let kind: MIFTaskActionKind
     let title: String
-    let systemImage: String
     let action: MordeTaskPageAction
 }
 
@@ -51,21 +50,21 @@ enum MIFTaskActionRules {
         case "queued", "running":
             return [
                 MIFTaskActionOption(id: "pause", kind: .pause, title: AppLocalized("Pause"),
-                                    systemImage: "pause.fill", action: .pause(expectedStatus: task.status)),
+                                    action: .pause(expectedStatus: task.status)),
                 MIFTaskActionOption(id: "cancel", kind: .cancel, title: AppLocalized("Cancel task"),
-                                    systemImage: "xmark", action: .cancel(expectedStatus: task.status)),
+                                    action: .cancel(expectedStatus: task.status)),
             ]
         case "paused":
             return [
                 MIFTaskActionOption(id: "resume", kind: .resume, title: AppLocalized("Resume"),
-                                    systemImage: "play.fill", action: .resume),
+                                    action: .resume),
                 MIFTaskActionOption(id: "cancel", kind: .cancel, title: AppLocalized("Cancel task"),
-                                    systemImage: "xmark", action: .cancel(expectedStatus: task.status)),
+                                    action: .cancel(expectedStatus: task.status)),
             ]
         case "waiting_user":
             return [
                 MIFTaskActionOption(id: "cancel", kind: .cancel, title: AppLocalized("Cancel task"),
-                                    systemImage: "xmark", action: .cancel(expectedStatus: task.status)),
+                                    action: .cancel(expectedStatus: task.status)),
             ]
         // nanoMuse: Resolve dynamic labels through catalog format keys, not runtime-built lookup keys.
         case "failed":
@@ -73,7 +72,7 @@ enum MIFTaskActionRules {
                 canRetryMordeBatchItem(taskStatus: task.status, itemStatus: $0.status)
             }.map {
                 MIFTaskActionOption(id: "retry:\($0.id)", kind: .retryBatchItem,
-                                    title: String(format: AppLocalized("Retry batch item: %@"), $0.key), systemImage: "arrow.clockwise",
+                                    title: String(format: AppLocalized("Retry batch item: %@"), $0.key),
                                     action: .retryBatchItem(id: $0.id))
             }
         default:
@@ -100,11 +99,9 @@ enum MIFTaskPresentation {
     }
 
     static func taskListDetail(_ task: MordeTask) -> String? {
-        let steps = visibleSteps(task.steps, waitingForRevisionStart: task.isWaitingForRevisionStart)
-        let stepCount = task.step_count ?? Int64(steps.count)
-        let completedStepCount = task.completed_step_count ?? Int64(steps.filter { $0.status == "succeeded" }.count)
-        let stepSummary = stepCount == 0 ? nil :
-            "\(stepCount) \(AppLocalized("Steps")) · \(completedStepCount) \(AppLocalized("Completed"))"
+        let stepSummary = task.step_count == 0 ? nil :
+            String(format: AppLocalized("%1$d steps · %2$d done"),
+                   task.step_count, task.completed_step_count)
         let currentStep = task.displayedCurrentStep
         let candidates = task.status == "completed"
             ? [task.result, currentStep]
@@ -289,7 +286,7 @@ struct MIFTaskEventChainRoom: View {
                 VStack(alignment: .leading, spacing: 14) {
                     if let task {
                         Text(task.objective)
-                            .font(.subheadline)
+                            .font(.system(size: 14.5))
                             .foregroundStyle(NanoMuseTones.secondaryText)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .accessibilityIdentifier("morde.eventChain.taskTitle")
@@ -373,13 +370,15 @@ struct MIFTaskEventChainRoom: View {
                         MIFTaskTimelineMarkerView(marker: marker)
                             .accessibilityElement(children: .ignore)
                             .accessibilityLabel(MIFTaskPresentation.timelineMarkerLabel(marker))
-                        VStack(alignment: .leading, spacing: 4) {
+                        VStack(alignment: .leading, spacing: 2) {
                             Text(event.title)
                                 .font(.system(size: 15.5, weight: .semibold))
+                                .lineSpacing(2.5)
                                 .fixedSize(horizontal: false, vertical: true)
                             if let summary = event.summary, !summary.isEmpty {
                                 Text(summary)
-                                    .font(.subheadline)
+                                    .font(.system(size: 14))
+                                    .lineSpacing(4)
                                     .foregroundStyle(NanoMuseTones.secondaryText)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
@@ -468,8 +467,8 @@ struct MIFTaskListRoom: View {
             if let onMenu {
                 MordeDesignPageHeader(title: AppLocalized("Tasks"), onMenu: onMenu) {
                     Button(action: { onNewConversation?() }) {
-                        Image(systemName: "plus")
-                            .font(.system(size: 16, weight: .medium))
+                        Text("＋")
+                            .font(.system(size: 19, weight: .regular))
                             .foregroundStyle(Color.primary)
                             .frame(width: 38, height: 38)
                             .background(NanoMuseTones.surface, in: Circle())
@@ -511,7 +510,7 @@ struct MIFTaskListRoom: View {
                 }
                 .padding(.horizontal, 22)
                 .padding(.top, 2)
-                .padding(.bottom, onMenu == nil && chrome != nil ? NanoMuseBottomBar.height : 0)
+                .padding(.bottom, onMenu != nil ? 108 : (chrome != nil ? NanoMuseBottomBar.height : 0))
                 .mordeVerticalScrollBounceProbe()
             }
             .background(NanoMuseTones.canvas)
@@ -560,13 +559,21 @@ struct MIFTaskListRoom: View {
                     .accessibilityIdentifier("morde.tasks.loadError")
             }
             ForEach(tasks) { task in
-                NavigationLink {
-                    MIFTaskDetailView(taskID: task.id)
-                } label: {
-                    MIFTaskListRow(task: store.details[task.id] ?? task)
+                    Group {
+                        if onMenu != nil {
+                            NavigationLink(value: MordeDesignRoute.task(task.id)) {
+                                MIFTaskListRow(task: store.details[task.id] ?? task)
+                            }
+                        } else {
+                            NavigationLink {
+                                MIFTaskDetailView(taskID: task.id)
+                            } label: {
+                                MIFTaskListRow(task: store.details[task.id] ?? task)
+                            }
+                        }
                 }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("morde.tasks.row.\(task.id)")
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("morde.tasks.row.\(task.id)")
             }
         }
     }
@@ -655,9 +662,17 @@ struct MIFTaskListRoom: View {
 typealias MIFTaskRoom = MIFTaskListRoom
 
 extension View {
+    private var mordeForcesLegacyScrollBounceFixture: Bool {
+#if DEBUG
+        ProcessInfo.processInfo.arguments.contains("-morde.forceLegacyScrollBounceFixture")
+#else
+        false
+#endif
+    }
+
     @ViewBuilder
     func mordeAlwaysBounceVertically() -> some View {
-        if #available(iOS 16.4, *) {
+        if #available(iOS 16.4, *), !mordeForcesLegacyScrollBounceFixture {
             scrollBounceBehavior(.always, axes: .vertical)
         } else {
             self
@@ -666,7 +681,7 @@ extension View {
 
     @ViewBuilder
     func mordeVerticalScrollBounceProbe() -> some View {
-        if #available(iOS 16.4, *) {
+        if #available(iOS 16.4, *), !mordeForcesLegacyScrollBounceFixture {
             self
         } else {
             background(MordeVerticalScrollBounceProbe())
@@ -728,6 +743,24 @@ struct MIFTaskDetailView: View {
     @State private var clarificationAnswer = ""
     @FocusState private var isClarificationFocused: Bool
 
+    private var taskSecondaryText: Color {
+        Color(uiColor: UIColor { traits in
+            if traits.userInterfaceStyle == .dark {
+                return UIColor(red: 0.73, green: 0.73, blue: 0.77, alpha: 1)
+            }
+            return UIColor(red: 115.0 / 255, green: 115.0 / 255, blue: 120.0 / 255, alpha: 1)
+        })
+    }
+
+    private var taskStepConnector: Color {
+        Color(uiColor: UIColor { traits in
+            if traits.userInterfaceStyle == .dark {
+                return UIColor(red: 0.227, green: 0.227, blue: 0.235, alpha: 1)
+            }
+            return UIColor(red: 217.0 / 255, green: 217.0 / 255, blue: 222.0 / 255, alpha: 1)
+        })
+    }
+
     private var task: MordeTask? {
         guard loadedScopeKey == store.scopeKey else { return nil }
         return store.details[taskID]
@@ -742,6 +775,7 @@ struct MIFTaskDetailView: View {
                 .accessibilityIdentifier("morde.task.back")
                 Text(task?.objective ?? AppLocalized("Task"))
                     .font(.headline.weight(.semibold))
+                    .tracking(-0.17)
                     .lineLimit(1)
                     .accessibilityIdentifier("morde.task.objective")
                 Spacer(minLength: 0)
@@ -751,7 +785,7 @@ struct MIFTaskDetailView: View {
             .background(NanoMuseTones.canvas)
             ScrollViewReader { proxy in
                 ScrollView {
-                    VStack(spacing: 16) {
+                    VStack(spacing: 14) {
                         detailContent
                     }
                     .padding(.top, 2)
@@ -842,12 +876,11 @@ struct MIFTaskDetailView: View {
             .filter { !$0.isEmpty }
         return Text(details.joined(separator: " · "))
             .font(.system(size: 14.5))
-            .foregroundStyle(NanoMuseTones.secondaryText)
+            .foregroundStyle(taskSecondaryText)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 22)
             .padding(.top, 2)
-            .padding(.bottom, 14)
             .accessibilityIdentifier("morde.task.status")
     }
 
@@ -983,17 +1016,15 @@ struct MIFTaskDetailView: View {
             .padding(.top, 10)
             .padding(.bottom, 10)
             .background(NanoMuseTones.canvas)
-            .overlay(alignment: .top) {
-                Rectangle()
-                    .fill(NanoMuseTones.hairline)
-                    .frame(height: 1)
-                    .accessibilityHidden(true)
-            }
         }
     }
 
     private func taskActionButton(_ option: MIFTaskActionOption, taskID: String) -> some View {
-        Button {
+        let actionColor = option.kind == .cancel
+            ? Color(red: 0.78, green: 0.12, blue: 0.12)
+            : NanoMuseTones.action
+        let isDisabled = isPerformingAction || store.actionInFlight || isLoadingDetail || detailError != nil
+        return Button {
             if option.kind == .cancel {
                 confirmsCancel = true
             } else {
@@ -1002,22 +1033,22 @@ struct MIFTaskDetailView: View {
         } label: {
             HStack(spacing: 8) {
                 if isPerformingAction {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Image(systemName: option.systemImage)
-                        .frame(width: 18)
+                    ProgressView().controlSize(.small).tint(.white)
                 }
                 Text(option.title)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 13)
+            .frame(height: 44)
+            .font(.system(size: 15.5, weight: .semibold))
+            .foregroundStyle(.white)
+            .background(actionColor, in: Capsule())
             .contentShape(Capsule())
         }
-        .buttonStyle(.borderedProminent)
-        .tint(option.kind == .cancel ? .red : NanoMuseTones.action)
-        .disabled(isPerformingAction || store.actionInFlight || isLoadingDetail || detailError != nil)
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
+        .opacity(isDisabled ? 0.55 : 1)
         .accessibilityIdentifier("morde.task.action.\(option.id)")
     }
 
@@ -1039,10 +1070,12 @@ struct MIFTaskDetailView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(MordeTaskStepPresentation.title(step.title))
                                 .font(.system(size: 15.5, weight: .semibold))
+                                .lineSpacing(2.5)
                                 .fixedSize(horizontal: false, vertical: true)
                             Text(MIFTaskPresentation.stepSummary(step))
                                 .font(.system(size: 14))
-                                .foregroundStyle(NanoMuseTones.secondaryText)
+                                .lineSpacing(4)
+                                .foregroundStyle(taskSecondaryText)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         .padding(.top, 1)
@@ -1057,8 +1090,8 @@ struct MIFTaskDetailView: View {
                                     path.move(to: CGPoint(x: 11.5, y: 26))
                                     path.addLine(to: CGPoint(x: 11.5, y: geometry.size.height))
                                 }
-                                .stroke(NanoMuseTones.hairline,
-                                        style: StrokeStyle(lineWidth: 1.5, dash: [2, 4]))
+                                .stroke(taskStepConnector,
+                                        style: StrokeStyle(lineWidth: 2, dash: [2, 4]))
                             }
                             .frame(width: 24)
                             .padding(.leading, 22)
@@ -1080,6 +1113,7 @@ struct MIFTaskDetailView: View {
         case "cancelled": .unconfirmed
         case "running", "waiting_user": .current
         case "failed": .failed
+        case "queued": .upcoming
         default: .unconfirmed
         }
         MIFTaskTimelineMarkerView(marker: marker)
@@ -1140,11 +1174,13 @@ struct MIFTaskDetailView: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(event.title)
                                     .font(.system(size: 15.5, weight: .semibold))
+                                    .lineSpacing(2.5)
                                     .fixedSize(horizontal: false, vertical: true)
                                 if let summary = event.summary, !summary.isEmpty {
                                     Text(summary)
                                         .font(.system(size: 14))
-                                        .foregroundStyle(NanoMuseTones.secondaryText)
+                                        .lineSpacing(4)
+                                        .foregroundStyle(taskSecondaryText)
                                         .fixedSize(horizontal: false, vertical: true)
                                 }
                             }
@@ -1278,72 +1314,109 @@ struct MIFTaskDetailView: View {
 private struct MIFTaskListRow: View {
     let task: MordeTask
 
+    private var hasListDetail: Bool {
+        MIFTaskPresentation.taskListDetail(task) != nil
+    }
+
+    private enum IconPalette {
+        static let activeStart = Color(red: 183.0 / 255, green: 186.0 / 255, blue: 201.0 / 255)
+        static let activeEnd = Color(red: 142.0 / 255, green: 147.0 / 255, blue: 168.0 / 255)
+        static let completed = Color(red: 52.0 / 255, green: 199.0 / 255, blue: 89.0 / 255)
+        static let failed = Color(red: 200.0 / 255, green: 30.0 / 255, blue: 30.0 / 255)
+        static let detailText = Color(red: 115.0 / 255, green: 115.0 / 255, blue: 120.0 / 255)
+        static let tertiaryText = Color(red: 172.0 / 255, green: 172.0 / 255, blue: 177.0 / 255)
+        static let plainBackground = Color(red: 236.0 / 255, green: 236.0 / 255, blue: 240.0 / 255)
+        static let failedBackground = Color(red: 253.0 / 255, green: 236.0 / 255, blue: 236.0 / 255)
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: 13) {
             statusIcon
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 0) {
                 Text(task.objective)
                     .font(.system(size: 16, weight: .semibold))
+                    .tracking(-0.16)
+                    .lineSpacing(1.5)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.bottom, hasListDetail ? 2 : 3)
                 if let detail = MIFTaskPresentation.taskListDetail(task) {
                     Text(detail)
-                        .font(.subheadline)
-                        .foregroundStyle(NanoMuseTones.secondaryText)
+                        .font(.system(size: 14))
+                        .lineSpacing(3.5)
+                        .foregroundStyle(IconPalette.detailText)
                         .fixedSize(horizontal: false, vertical: true)
+                        .padding(.bottom, 3)
                         .accessibilityIdentifier("morde.tasks.row.detail.\(task.id)")
                 }
                 Text(task.statusLabel)
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .font(.system(size: 13))
+                    .foregroundStyle(IconPalette.tertiaryText)
                     .accessibilityIdentifier("morde.tasks.row.status.\(task.id)")
             }
+            .padding(.top, 1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 13)
+        .frame(minHeight: hasListDetail ? 91.6 : 0, alignment: .topLeading)
         .contentShape(Rectangle())
     }
 
     @ViewBuilder
     private var statusIcon: some View {
         if task.status == "completed" {
-            Image(systemName: "checkmark")
-                .font(.system(size: 20, weight: .semibold))
-                .foregroundStyle(.green)
-                .frame(width: 44, height: 44)
-                .background(NanoMuseTones.fill, in: Circle())
+            Canvas { context, size in
+                let scale = min(size.width, size.height) / 24
+                var checkmark = Path()
+                checkmark.move(to: CGPoint(x: 4.5 * scale, y: 12.5 * scale))
+                checkmark.addLine(to: CGPoint(x: 10 * scale, y: 18 * scale))
+                checkmark.addLine(to: CGPoint(x: 19.5 * scale, y: 6.5 * scale))
+                context.stroke(
+                    checkmark,
+                    with: .color(IconPalette.completed),
+                    style: StrokeStyle(lineWidth: 2.4 * scale, lineCap: .round, lineJoin: .round)
+                )
+            }
+            .frame(width: 20, height: 20)
+            .frame(width: 44, height: 44)
+            .background(IconPalette.plainBackground, in: Circle())
         } else if task.status == "failed" {
             Image(systemName: "xmark")
                 .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(.red)
+                .foregroundStyle(IconPalette.failed)
                 .frame(width: 44, height: 44)
-                .background(Color.red.opacity(0.1), in: Circle())
+                .background(IconPalette.failedBackground, in: Circle())
         } else {
             Canvas { context, size in
+                let scale = min(size.width, size.height) / 24
                 let nodes = [
-                    CGPoint(x: size.width * 0.25, y: size.height * 0.25),
-                    CGPoint(x: size.width * 0.75, y: size.height * 0.33),
-                    CGPoint(x: size.width * 0.42, y: size.height * 0.75),
+                    CGPoint(x: 6 * scale, y: 6 * scale),
+                    CGPoint(x: 18 * scale, y: 8 * scale),
+                    CGPoint(x: 10 * scale, y: 18 * scale),
                 ]
-                var edges = Path()
-                edges.move(to: nodes[0])
-                edges.addLine(to: nodes[1])
-                edges.move(to: nodes[0])
-                edges.addLine(to: nodes[2])
-                edges.move(to: nodes[1])
-                edges.addLine(to: nodes[2])
-                context.stroke(edges, with: .color(.white), lineWidth: 1.7)
+
+                var nodeOutlines = Path()
                 for node in nodes {
-                    let dot = CGRect(x: node.x - 2.3, y: node.y - 2.3, width: 4.6, height: 4.6)
-                    context.fill(Path(ellipseIn: dot), with: .color(.white))
+                    let radius = 2.3 * scale
+                    nodeOutlines.addEllipse(in: CGRect(x: node.x - radius, y: node.y - radius,
+                                                       width: radius * 2, height: radius * 2))
                 }
+                context.stroke(nodeOutlines, with: .color(.white), lineWidth: 1.7 * scale)
+
+                var edges = Path()
+                edges.move(to: CGPoint(x: 8.2 * scale, y: 6.8 * scale))
+                edges.addLine(to: CGPoint(x: 15.7 * scale, y: 7.7 * scale))
+                edges.move(to: CGPoint(x: 7 * scale, y: 8.2 * scale))
+                edges.addLine(to: CGPoint(x: 8.9 * scale, y: 15.6 * scale))
+                edges.move(to: CGPoint(x: 16.7 * scale, y: 9.9 * scale))
+                edges.addLine(to: CGPoint(x: 11.5 * scale, y: 15.8 * scale))
+                context.stroke(edges, with: .color(.white), lineWidth: 1.7 * scale)
             }
             .frame(width: 22, height: 22)
             .frame(width: 44, height: 44)
             .background(
-                LinearGradient(colors: [NanoMuseTones.secondaryText.opacity(0.68),
-                                        NanoMuseTones.secondaryText.opacity(0.95)],
+                LinearGradient(colors: [IconPalette.activeStart, IconPalette.activeEnd],
                                startPoint: .topLeading, endPoint: .bottomTrailing),
                 in: Circle()
             )

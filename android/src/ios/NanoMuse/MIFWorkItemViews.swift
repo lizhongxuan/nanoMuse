@@ -1,4 +1,40 @@
 import SwiftUI
+import UIKit
+
+private enum MIFWorkItemInputField: Hashable {
+    case description
+    case blockReason
+}
+
+private struct MIFWorkItemTitleInput: View {
+    @Binding var title: String
+    let ink: Color
+    let placeholderColor: Color
+    let border: Color
+    let isDisabled: Bool
+    let focusRequest: Int
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        TextField(
+            AppLocalized("Describe the issue or request in one sentence"),
+            text: $title,
+            prompt: Text(AppLocalized("Describe the issue or request in one sentence"))
+                .foregroundColor(placeholderColor)
+        )
+        .textFieldStyle(.plain)
+        .font(.system(size: 15))
+        .foregroundStyle(ink)
+        .focused($isFocused)
+        .onChange(of: focusRequest) { _ in isFocused = true }
+        .disabled(isDisabled)
+        .padding(.horizontal, 15)
+        .frame(minHeight: 44)
+        .background(NanoMuseTones.surface, in: Capsule())
+        .overlay(Capsule().strokeBorder(border))
+        .accessibilityIdentifier("morde.workItems.create.title")
+    }
+}
 
 enum MIFWorkItemFilter: String, CaseIterable, Identifiable {
     case all
@@ -68,17 +104,12 @@ enum MIFWorkItemPresentation {
         }
     }
 
-    static func categoryForCreation(_ category: String, supportsV2: Bool) -> String? {
-        supportsV2 ? category : nil
+    static func canCreate(supportsV2: Bool, role: String?) -> Bool {
+        supportsV2 && canManage(role: role)
     }
 
-    static func createsUnassigned(supportsV2: Bool) -> Bool {
-        supportsV2
-    }
-
-    static func canClaim(item: MordeProjectWorkItem, supportsV2: Bool,
-                         canClaim: Bool, role: String?) -> Bool {
-        supportsV2 && canClaim && role != "viewer" && item.assignee_id == nil && item.state != "delivered"
+    static func canClaim(item: MordeProjectWorkItem, canClaim: Bool, role: String?) -> Bool {
+        canClaim && role != "viewer" && item.assignee_id == nil && item.state != "delivered"
     }
 
     static func canBlock(item: MordeProjectWorkItem, canManage: Bool) -> Bool {
@@ -117,9 +148,11 @@ struct MIFWorkItemRoom: View {
     var workItemSection: Binding<MIFTaskWorkItemSection>? = nil
     @StateObject private var store = MIFWorkItemPageStore.shared
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     @State private var title = ""
     @State private var description = ""
-    @FocusState private var isWorkItemInputFocused: Bool
+    @FocusState private var focusedInput: MIFWorkItemInputField?
+    @State private var titleFocusRequest = 0
     @State private var createCategory = "bug"
     @State private var isCreatePresented = false
     @State private var selectedFilter: MIFWorkItemFilter = .all
@@ -130,9 +163,77 @@ struct MIFWorkItemRoom: View {
     @State private var loadedScopeKey: String?
     @State private var localFailure: String?
     @State private var createFailure: String?
+    @State private var createSuccessToast: String?
+    @State private var createSuccessToastID = UUID()
+
+    private var workItemSecondaryText: Color {
+        colorScheme == .dark
+            ? NanoMuseTones.secondaryText
+            : Color(red: 115.0 / 255.0, green: 115.0 / 255.0, blue: 120.0 / 255.0)
+    }
+
+    private var workItemInk: Color {
+        colorScheme == .dark
+            ? .white
+            : Color(red: 17.0 / 255.0, green: 17.0 / 255.0, blue: 17.0 / 255.0)
+    }
+
+    private var workItemSheetBackground: Color {
+        colorScheme == .dark
+            ? NanoMuseTones.canvas
+            : Color(red: 250.0 / 255.0, green: 250.0 / 255.0, blue: 250.0 / 255.0)
+    }
+
+    private var workItemInputBorder: Color {
+        colorScheme == .dark
+            ? NanoMuseTones.hairline
+            : Color(red: 232.0 / 255.0, green: 232.0 / 255.0, blue: 232.0 / 255.0)
+    }
+
+    private var workItemStatusText: Color {
+        colorScheme == .dark
+            ? Color(uiColor: UIColor.tertiaryLabel)
+            : Color(red: 172.0 / 255.0, green: 172.0 / 255.0, blue: 177.0 / 255.0)
+    }
+
+    private var workItemNeutralFill: Color {
+        colorScheme == .dark
+            ? NanoMuseTones.fill
+            : Color(red: 236.0 / 255.0, green: 236.0 / 255.0, blue: 240.0 / 255.0)
+    }
+
+    private var workItemBugFill: Color {
+        colorScheme == .dark
+            ? Color.red.opacity(0.1)
+            : Color(red: 253.0 / 255.0, green: 236.0 / 255.0, blue: 236.0 / 255.0)
+    }
+
+    private var workItemBugText: Color {
+        colorScheme == .dark
+            ? Color.red
+            : Color(red: 200.0 / 255.0, green: 30.0 / 255.0, blue: 30.0 / 255.0)
+    }
+
+    private var workItemFilterFill: Color {
+        colorScheme == .dark
+            ? NanoMuseTones.fill
+            : Color(red: 239.0 / 255.0, green: 239.0 / 255.0, blue: 239.0 / 255.0)
+    }
+
+    private var workItemTypeToggleFill: Color {
+        colorScheme == .dark
+            ? NanoMuseTones.fill
+            : Color(red: 240.0 / 255.0, green: 240.0 / 255.0, blue: 242.0 / 255.0)
+    }
 
     private var selectedProject: MordeProject? {
         store.projects.first { $0.id == store.selectedProjectID }
+    }
+
+    private var workItemsUnsupportedNotice: some View {
+        notice(AppLocalized("This service does not support the current work item features."),
+               symbol: "exclamationmark.triangle")
+            .accessibilityIdentifier("morde.workItems.unsupported")
     }
 
     var body: some View {
@@ -153,8 +254,9 @@ struct MIFWorkItemRoom: View {
                 VStack(spacing: 14) {
                     content
                 }
-                .padding(.vertical, 14)
-                .padding(.bottom, onMenu == nil && chrome != nil ? NanoMuseBottomBar.height : 0)
+                .padding(.top, 2)
+                .padding(.bottom, onMenu != nil ? 95 : 14)
+                .padding(.bottom, onMenu == nil && chrome != nil ? NanoMuseBottomBar.height + 8 : 0)
                 .frame(maxWidth: 680)
                 .frame(maxWidth: .infinity)
             }
@@ -170,7 +272,7 @@ struct MIFWorkItemRoom: View {
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
-                Button(AppLocalized("Done")) { isWorkItemInputFocused = false }
+                Button(AppLocalized("Done")) { focusedInput = nil }
                     .accessibilityIdentifier("morde.workItems.keyboardDone")
             }
         }
@@ -180,13 +282,14 @@ struct MIFWorkItemRoom: View {
                 ScrollView {
                     createForm(projectID: project.id)
                 }
-                .background(NanoMuseTones.canvas.ignoresSafeArea())
+                .accessibilityIdentifier("morde.workItems.create.scroll")
+                .background(workItemSheetBackground.ignoresSafeArea())
                 .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
+                .presentationDragIndicator(.hidden)
                 .toolbar {
                     ToolbarItemGroup(placement: .keyboard) {
                         Spacer()
-                        Button(AppLocalized("Done")) { isWorkItemInputFocused = false }
+                        Button(AppLocalized("Done")) { focusedInput = nil }
                             .accessibilityIdentifier("morde.workItems.keyboardDone")
                     }
                 }
@@ -204,6 +307,8 @@ struct MIFWorkItemRoom: View {
             localFailure = nil
             createFailure = nil
             isCreatePresented = false
+            createSuccessToastID = UUID()
+            createSuccessToast = nil
         }
         .onChange(of: store.selectedConversationID) { _ in deliveryConfirmation = nil }
         .confirmationDialog(AppLocalized("Record work item delivery?"), isPresented: deliveryConfirmationIsPresented,
@@ -222,6 +327,19 @@ struct MIFWorkItemRoom: View {
             if let request = deliveryConfirmation {
                 Text(String(format: AppLocalized("%1$@ · Task %2$@ · %3$@ v%4$lld. Only version metadata will be recorded; no files will be sent."),
                             request.item.title, request.taskID, request.target.workspaceName, request.target.revision))
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if let createSuccessToast {
+                Text(createSuccessToast)
+                    .font(.subheadline)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(Color.black.opacity(0.82), in: Capsule())
+                    .padding(.bottom, (onMenu != nil || chrome != nil) ? NanoMuseBottomBar.height + 24 : 24)
+                    .accessibilityIdentifier("morde.workItems.create.successToast")
+                    .transition(.opacity)
             }
         }
     }
@@ -264,17 +382,18 @@ struct MIFWorkItemRoom: View {
         guard store.isSignedIn, let scopeKey = store.scopeKey, loadedScopeKey == scopeKey,
               store.projectsState.isLoaded, store.projectsState.failureMessage == nil,
               let project = selectedProject else { return false }
-        return store.canManage(in: project.id)
+        return MIFWorkItemPresentation.canCreate(
+            supportsV2: store.supportsWorkItemsV2, role: store.role(in: project.id))
     }
 
     private var newWorkItemButton: some View {
         Button { presentCreateForm() } label: {
             Image(systemName: "plus")
-                .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(Color.primary)
+                .font(.system(size: 19, weight: .regular))
+                .foregroundStyle(workItemInk)
                 .frame(width: 38, height: 38)
                 .background(NanoMuseTones.surface, in: Circle())
-                .overlay(Circle().strokeBorder(NanoMuseTones.hairline))
+                .overlay(Circle().strokeBorder(workItemInputBorder))
                 .contentShape(Circle())
         }
         .disabled(!canCreateWorkItem)
@@ -466,30 +585,27 @@ struct MIFWorkItemRoom: View {
 
     @ViewBuilder
     private func createForm(projectID: String) -> some View {
-        if store.canManage(in: projectID) {
+        if !store.supportsWorkItemsV2 {
+            workItemsUnsupportedNotice
+        } else if store.canManage(in: projectID) {
             VStack(alignment: .leading, spacing: 14) {
                 Text(AppLocalized("New work item"))
-                    .font(.system(size: 19, weight: .bold))
+                    .font(.system(size: 17.5, weight: .bold))
+                    .tracking(-0.175)
+                    .foregroundStyle(workItemInk)
                     .accessibilityIdentifier("morde.workItems.create.heading")
-                if store.supportsWorkItemsV2 {
+                VStack(spacing: 12) {
                     HStack(spacing: 8) {
                         createCategoryButton("bug", title: AppLocalized("Bug"))
                         createCategoryButton("request", title: AppLocalized("Request"))
                     }
+                    workItemTitleInput
                 }
-                TextField(AppLocalized("Describe the issue or request in one sentence"), text: $title)
-                    .textFieldStyle(.plain)
-                    .focused($isWorkItemInputFocused)
-                    .disabled(store.actionInFlight)
-                    .padding(.horizontal, 15)
-                    .frame(minHeight: 46)
-                    .background(NanoMuseTones.surface, in: Capsule())
-                    .overlay(Capsule().strokeBorder(NanoMuseTones.hairline))
-                    .accessibilityIdentifier("morde.workItems.create.title")
+                .frame(maxWidth: .infinity, alignment: .leading)
                 TextField(AppLocalized("Description (optional)"), text: $description, axis: .vertical)
                     .lineLimit(3...6)
                     .textFieldStyle(.plain)
-                    .focused($isWorkItemInputFocused)
+                    .focused($focusedInput, equals: .description)
                     .disabled(store.actionInFlight)
                     .padding(14)
                     .frame(maxWidth: .infinity, minHeight: 84, alignment: .topLeading)
@@ -505,6 +621,10 @@ struct MIFWorkItemRoom: View {
                         .accessibilityIdentifier("morde.workItems.create.error")
                 }
                 Button {
+                    if title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        titleFocusRequest += 1
+                        return
+                    }
                     create(projectID: projectID)
                 } label: {
                     HStack {
@@ -513,17 +633,17 @@ struct MIFWorkItemRoom: View {
                     }
                     .font(.system(size: 15.5, weight: .semibold))
                     .foregroundStyle(NanoMuseTones.onInk)
-                    .frame(maxWidth: .infinity, minHeight: 48)
-                    .background(Color.primary, in: Capsule())
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .background(workItemInk, in: Capsule())
                 }
                 .buttonStyle(.plain)
-                .disabled(store.actionInFlight || title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                .opacity(store.actionInFlight || title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.55 : 1)
+                .disabled(store.actionInFlight)
                 .accessibilityIdentifier("morde.workItems.create.submit")
             }
             .padding(22)
+            .padding(.bottom, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(NanoMuseTones.canvas)
+            .background(workItemSheetBackground)
         } else {
             inlineMessage(AppLocalized("You can view work items. Only project owners and members can create or change them."),
                           isError: false)
@@ -531,33 +651,42 @@ struct MIFWorkItemRoom: View {
         }
     }
 
+    private var workItemTitleInput: some View {
+        MIFWorkItemTitleInput(title: $title, ink: workItemInk,
+                              placeholderColor: workItemStatusText,
+                              border: workItemInputBorder,
+                              isDisabled: store.actionInFlight,
+                              focusRequest: titleFocusRequest)
+    }
+
     @ViewBuilder
     private func workItemList(project: MordeProject) -> some View {
         VStack(spacing: 0) {
-            if store.supportsWorkItemsV2 {
-                filterPicker
-            }
-
-            if let failure = store.workItemsState.failureMessage {
-                errorCard(failure)
-                    .accessibilityIdentifier("morde.workItems.list.loadError")
-            } else if !store.workItemsState.isLoaded {
-                ProgressView(AppLocalized("Loading work items…"))
-                    .frame(maxWidth: .infinity, minHeight: 120)
-            } else if store.workItems.isEmpty {
-                notice(AppLocalized("This project has no work items yet."), symbol: "checklist")
-            } else if visibleWorkItems.isEmpty {
-                notice(AppLocalized("No work items match this filter."), symbol: "line.3.horizontal.decrease.circle")
+            if !store.supportsWorkItemsV2 {
+                workItemsUnsupportedNotice
             } else {
-                ForEach(Array(visibleWorkItems.indices), id: \.self) { index in
-                    workItemCard(visibleWorkItems[index], projectID: project.id)
+                filterPicker
+
+                if let failure = store.workItemsState.failureMessage {
+                    errorCard(failure)
+                        .accessibilityIdentifier("morde.workItems.list.loadError")
+                } else if !store.workItemsState.isLoaded {
+                    ProgressView(AppLocalized("Loading work items…"))
+                        .frame(maxWidth: .infinity, minHeight: 120)
+                } else if store.workItems.isEmpty {
+                    workItemEmptyState(AppLocalized("This project has no work items yet."))
+                } else if visibleWorkItems.isEmpty {
+                    workItemEmptyState(AppLocalized("No work items match this filter."))
+                } else {
+                    ForEach(Array(visibleWorkItems.indices), id: \.self) { index in
+                        workItemCard(visibleWorkItems[index], projectID: project.id)
+                    }
                 }
             }
         }
     }
 
     private var visibleWorkItems: [MordeProjectWorkItem] {
-        guard store.supportsWorkItemsV2 else { return store.workItems }
         return store.workItems.filter { MIFWorkItemPresentation.matches($0, filter: selectedFilter) }
     }
 
@@ -569,12 +698,12 @@ struct MIFWorkItemRoom: View {
                 } label: {
                     Text(filter.label)
                         .font(.system(size: 14.5, weight: .semibold))
-                        .foregroundStyle(selectedFilter == filter ? Color.primary : NanoMuseTones.secondaryText)
+                        .foregroundStyle(selectedFilter == filter ? workItemInk : workItemSecondaryText)
                         .padding(.horizontal, 13)
                         .padding(.vertical, 7)
                         .background {
                             if selectedFilter == filter {
-                                Capsule().fill(NanoMuseTones.fill)
+                                Capsule().fill(workItemFilterFill)
                             }
                         }
                         .contentShape(Capsule())
@@ -586,7 +715,18 @@ struct MIFWorkItemRoom: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 22)
-        .padding(.vertical, 8)
+        .padding(.top, 8)
+        .padding(.bottom, 2)
+    }
+
+    private func workItemEmptyState(_ message: String) -> some View {
+        Text(message)
+            .font(.system(size: 14.5))
+            .foregroundStyle(workItemSecondaryText)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 22)
+            .padding(.top, 7)
     }
 
     private func workItemCard(_ item: MordeProjectWorkItem, projectID: String) -> some View {
@@ -595,24 +735,32 @@ struct MIFWorkItemRoom: View {
         let task = store.currentTask
 
         return VStack(alignment: .leading, spacing: 11) {
-            HStack(alignment: .top, spacing: 13) {
-                workItemIcon(item)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(item.title)
-                        .font(.system(size: 16, weight: .semibold))
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityIdentifier("morde.workItems.row.title.\(item.id)")
-                    Text("\(MIFWorkItemPresentation.categoryLabel(item.category)) · \(MIFWorkItemPresentation.assigneeLabel(item.assignee_id))")
-                        .font(.system(size: 14))
-                        .foregroundStyle(NanoMuseTones.secondaryText)
-                        .accessibilityIdentifier("morde.workItems.row.metadata.\(item.id)")
-                    Text(MIFWorkItemPresentation.stateLabel(item.state))
-                        .font(.system(size: 13))
-                        .foregroundStyle(.tertiary)
-                        .accessibilityIdentifier("morde.workItems.row.state.\(item.id)")
+            HStack(alignment: .center, spacing: 13) {
+                HStack(alignment: .top, spacing: 13) {
+                    workItemIcon(item)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(item.title)
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(workItemInk)
+                            .tracking(-0.16)
+                            .lineSpacing(1.5)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("morde.workItems.row.title.\(item.id)")
+                        Text("\(MIFWorkItemPresentation.categoryLabel(item.category)) · \(MIFWorkItemPresentation.assigneeLabel(item.assignee_id))")
+                            .font(.system(size: 14))
+                            .lineSpacing(3.5)
+                            .foregroundStyle(workItemSecondaryText)
+                            .accessibilityIdentifier("morde.workItems.row.metadata.\(item.id)")
+                        Text(MIFWorkItemPresentation.stateLabel(item.state))
+                            .font(.system(size: 13))
+                            .foregroundStyle(workItemStatusText)
+                            .padding(.top, 1)
+                            .accessibilityIdentifier("morde.workItems.row.state.\(item.id)")
+                    }
+                    .padding(.top, 1)
                 }
                 Spacer(minLength: 0)
-                if MIFWorkItemPresentation.canClaim(item: item, supportsV2: store.supportsWorkItemsV2,
+                if MIFWorkItemPresentation.canClaim(item: item,
                                                     canClaim: store.canClaim(in: projectID), role: role) {
                     Button {
                         Task { await claim(projectID: projectID, item: item) }
@@ -622,7 +770,7 @@ struct MIFWorkItemRoom: View {
                             .foregroundStyle(NanoMuseTones.onInk)
                             .padding(.horizontal, 15)
                             .padding(.vertical, 8)
-                            .background(Color.primary, in: Capsule())
+                            .background(workItemInk, in: Capsule())
                     }
                     .buttonStyle(.plain)
                     .disabled(store.actionInFlight)
@@ -716,7 +864,7 @@ struct MIFWorkItemRoom: View {
                     TextField(AppLocalized("Reason for blocking"), text: $blockedReason, axis: .vertical)
                         .lineLimit(2...5)
                         .textFieldStyle(.roundedBorder)
-                        .focused($isWorkItemInputFocused)
+                        .focused($focusedInput, equals: .blockReason)
                         .disabled(store.actionInFlight)
                         .accessibilityIdentifier("morde.workItems.blockReason.\(item.id)")
                     Button(AppLocalized("Confirm block")) { block(projectID: projectID, item: item) }
@@ -745,8 +893,8 @@ struct MIFWorkItemRoom: View {
 
     private func workItemIcon(_ item: MordeProjectWorkItem) -> some View {
         let isBug = item.category == "bug"
-        let foreground = isBug ? Color.red : Color.primary
-        let background = isBug ? Color.red.opacity(0.1) : NanoMuseTones.fill
+        let foreground = isBug ? workItemBugText : workItemInk
+        let background = isBug ? workItemBugFill : workItemNeutralFill
         return Group {
             if let marker = MIFWorkItemPresentation.categoryMarkerLabel(item.category) {
                 Text(marker).font(.system(size: 15, weight: .bold))
@@ -766,9 +914,9 @@ struct MIFWorkItemRoom: View {
         } label: {
             Text(title)
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(createCategory == category ? NanoMuseTones.onInk : NanoMuseTones.secondaryText)
+                .foregroundStyle(createCategory == category ? NanoMuseTones.onInk : workItemSecondaryText)
                 .frame(maxWidth: .infinity, minHeight: 40)
-                .background(createCategory == category ? Color.primary : NanoMuseTones.fill, in: Capsule())
+                .background(createCategory == category ? workItemInk : workItemTypeToggleFill, in: Capsule())
         }
         .buttonStyle(.plain)
         .disabled(store.actionInFlight)
@@ -803,20 +951,17 @@ struct MIFWorkItemRoom: View {
     }
 
     private func create(projectID: String) {
+        guard store.supportsWorkItemsV2 else { return }
         let submittedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let submittedDescription = description
-        let submittedCategory = MIFWorkItemPresentation.categoryForCreation(
-            createCategory, supportsV2: store.supportsWorkItemsV2)
-        let submittedUnassigned = MIFWorkItemPresentation.createsUnassigned(
-            supportsV2: store.supportsWorkItemsV2)
+        let submittedCategory = createCategory
         guard !submittedTitle.isEmpty else { return }
         Task {
             localFailure = nil
             createFailure = nil
             guard await store.create(projectID: projectID, title: submittedTitle,
                                      description: submittedDescription,
-                                     category: submittedCategory,
-                                     unassigned: submittedUnassigned) else {
+                                     category: submittedCategory, unassigned: true) else {
                 createFailure = store.actionError
                     ?? AppLocalized("The action did not complete. Check the current state and try again.")
                 return
@@ -825,10 +970,25 @@ struct MIFWorkItemRoom: View {
             if description == submittedDescription { description = "" }
             createFailure = nil
             isCreatePresented = false
+            selectedFilter = .all
+            store.clearNotice()
+            showCreateSuccessToast()
+        }
+    }
+
+    private func showCreateSuccessToast() {
+        let toastID = UUID()
+        createSuccessToastID = toastID
+        withAnimation { createSuccessToast = AppLocalized("Created · visible to team") }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            guard createSuccessToastID == toastID else { return }
+            withAnimation { createSuccessToast = nil }
         }
     }
 
     private func presentCreateForm() {
+        guard canCreateWorkItem else { return }
         createFailure = nil
         isCreatePresented = true
     }

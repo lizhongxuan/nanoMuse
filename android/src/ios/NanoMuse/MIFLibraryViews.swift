@@ -221,6 +221,73 @@ enum MIFLibraryPreviewPolicy {
     }
 }
 
+private enum MIFLibraryDesignPalette {
+    #if MORDE_STANDALONE
+    static let secondaryText = Color(uiColor: UIColor {
+        $0.userInterfaceStyle == .dark
+            ? UIColor(red: 0.73, green: 0.73, blue: 0.77, alpha: 1)
+            : UIColor(red: 0.45098, green: 0.45098, blue: 0.470588, alpha: 1)
+    })
+    static let selectedSourceFill = Color(uiColor: UIColor {
+        $0.userInterfaceStyle == .dark
+            ? UIColor(red: 0.165, green: 0.165, blue: 0.18, alpha: 1)
+            : UIColor(red: 0.937255, green: 0.937255, blue: 0.937255, alpha: 1)
+    })
+    static let defaultTypeFill = Color(uiColor: UIColor {
+        $0.userInterfaceStyle == .dark
+            ? UIColor(red: 0.165, green: 0.165, blue: 0.18, alpha: 1)
+            : UIColor(red: 0.92549, green: 0.92549, blue: 0.941176, alpha: 1)
+    })
+    static let defaultTypeText = Color(uiColor: UIColor {
+        $0.userInterfaceStyle == .dark
+            ? UIColor(red: 0.73, green: 0.73, blue: 0.77, alpha: 1)
+            : UIColor(red: 0.333333, green: 0.333333, blue: 0.360784, alpha: 1)
+    })
+    #else
+    static let secondaryText = NanoMuseTones.secondaryText
+    static let selectedSourceFill = NanoMuseTones.fill
+    static let defaultTypeFill = NanoMuseTones.fill
+    static let defaultTypeText = NanoMuseTones.secondaryText
+    #endif
+}
+
+private struct MIFLibraryDesignHeader: View {
+    let onMenu: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Button(action: onMenu) {
+                Circle()
+                    .fill(NanoMuseTones.surface)
+                    .overlay(Circle().strokeBorder(NanoMuseTones.hairline, lineWidth: 0.5))
+                    .overlay {
+                        VStack(spacing: 3.1) {
+                            Capsule().frame(width: 13, height: 1.7)
+                            Capsule().frame(width: 13, height: 1.7)
+                        }
+                        .foregroundStyle(NanoMuseTones.ink)
+                    }
+                    .shadow(color: .black.opacity(0.12), radius: 3, y: 1)
+                    .frame(width: 38, height: 38)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(AppLocalized("Chats and settings"))
+            .accessibilityIdentifier("morde.nav.menu")
+
+            Text(AppLocalized("Library"))
+                .font(.system(size: 17, weight: .semibold))
+                .tracking(-0.17)
+                .lineLimit(1)
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 22)
+        .padding(.top, 10)
+        .padding(.bottom, 4)
+        .frame(minHeight: 52)
+    }
+}
+
 struct MIFLibraryPage: View {
     var chrome: NanoMuseRoomChrome? = nil
     var onMenu: (() -> Void)? = nil
@@ -251,7 +318,7 @@ struct MIFLibraryPage: View {
     var body: some View {
         VStack(spacing: 0) {
             if let onMenu {
-                MordeDesignPageHeader(title: AppLocalized("Library"), onMenu: onMenu) { EmptyView() }
+                MIFLibraryDesignHeader(onMenu: onMenu)
             } else if let chrome {
                 NanoMuseMenuHeader(title: AppLocalized("Library"), onMenu: chrome.onMenu)
             }
@@ -264,12 +331,12 @@ struct MIFLibraryPage: View {
                             } label: {
                                 Text(option.title)
                                     .font(.system(size: 14.5, weight: .semibold))
-                                    .foregroundStyle(option == source ? Color.primary : NanoMuseTones.secondaryText)
+                                    .foregroundStyle(option == source ? Color.primary : MIFLibraryDesignPalette.secondaryText)
                                     .padding(.horizontal, 13)
                                     .padding(.vertical, 7)
                                     .background {
                                         if option == source {
-                                            Capsule().fill(NanoMuseTones.fill)
+                                            Capsule().fill(MIFLibraryDesignPalette.selectedSourceFill)
                                         }
                                     }
                             }
@@ -286,6 +353,9 @@ struct MIFLibraryPage: View {
                     if source == .all { localRows }
                     if source == .all || source == .aiOutputs { taskRows }
                     if source == .all || source == .myUploads { accountRows }
+                    if source == .all && allSourcesConfirmedEmpty {
+                        emptyRow(AppLocalized("No files in this category"))
+                    }
                 }
                 .padding(.horizontal, 22)
                 .padding(.top, 2)
@@ -306,7 +376,7 @@ struct MIFLibraryPage: View {
         case .denied, .unavailable:
             emptyRow(AppLocalized("Unavailable"))
         case .available where localItems.isEmpty:
-            emptyRow(AppLocalized("Nothing created yet"))
+            if source != .all { emptyRow(AppLocalized("Nothing created yet")) }
         case .available:
             ForEach(localItems) { item in localRow(item) }
         }
@@ -322,7 +392,7 @@ struct MIFLibraryPage: View {
         case .unavailable:
             emptyRow(AppLocalized("Artifact details unavailable"))
         case .available where taskArtifacts.isEmpty:
-            emptyRow(AppLocalized("No delivered artifacts"))
+            if source != .all { emptyRow(AppLocalized("No delivered artifacts")) }
         case .available:
             ForEach(taskArtifacts) { artifact in taskArtifactRow(artifact) }
         }
@@ -330,6 +400,12 @@ struct MIFLibraryPage: View {
 
     private var visibleAccountItems: [MIFLibraryAccountItem] {
         accountItems.filter { source.includes($0) }
+    }
+
+    private var allSourcesConfirmedEmpty: Bool {
+        localAccess == .available && localItems.isEmpty &&
+            taskAccess == .available && taskArtifacts.isEmpty &&
+            accountAccess == .available && visibleAccountItems.isEmpty
     }
 
     @ViewBuilder
@@ -342,7 +418,7 @@ struct MIFLibraryPage: View {
         case .unavailable:
             emptyRow(AppLocalized("Unavailable"))
         case .available where visibleAccountItems.isEmpty:
-            emptyRow(AppLocalized("No cloud files yet"))
+            if source != .all { emptyRow(AppLocalized("No cloud files yet")) }
         case .available:
             ForEach(visibleAccountItems) { item in accountRow(item) }
         }
@@ -350,10 +426,10 @@ struct MIFLibraryPage: View {
 
     private func emptyRow(_ title: String) -> some View {
         Text(title)
-            .font(.body)
-            .foregroundStyle(NanoMuseTones.secondaryText)
+            .font(.system(size: 14.5))
+            .foregroundStyle(MIFLibraryDesignPalette.secondaryText)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, 13)
+            .padding(.top, 7)
     }
 
     @ViewBuilder
@@ -362,15 +438,19 @@ struct MIFLibraryPage: View {
         let row = HStack(alignment: .top, spacing: 13) {
             fileTypeTile(fileTypeLabel(name: item.name, mediaType: nil,
                                       defaultLabel: item.kind == .media ? "图片" : "文件"))
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(item.name)
                     .font(.system(size: 16, weight: .semibold))
+                    .tracking(-0.16)
+                    .lineSpacing(1.5)
                     .fixedSize(horizontal: false, vertical: true)
                 Text(localDetail(item, metadataOnly: handle == nil))
                     .font(.system(size: 14))
-                    .foregroundStyle(NanoMuseTones.secondaryText)
+                    .lineSpacing(3.5)
+                    .foregroundStyle(MIFLibraryDesignPalette.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            .padding(.top, 1)
             Spacer(minLength: 8)
         }
         .padding(.vertical, 13)
@@ -395,15 +475,19 @@ struct MIFLibraryPage: View {
         let row = HStack(alignment: .top, spacing: 13) {
             fileTypeTile(fileTypeLabel(name: artifact.label, mediaType: artifact.mediaType,
                                       defaultLabel: "构件"))
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(artifact.label)
                     .font(.system(size: 16, weight: .semibold))
+                    .tracking(-0.16)
+                    .lineSpacing(1.5)
                     .fixedSize(horizontal: false, vertical: true)
                 Text(taskDetail(artifact))
                     .font(.system(size: 14))
-                    .foregroundStyle(NanoMuseTones.secondaryText)
+                    .lineSpacing(3.5)
+                    .foregroundStyle(MIFLibraryDesignPalette.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            .padding(.top, 1)
             Spacer(minLength: 8)
         }
         .padding(.vertical, 13)
@@ -425,15 +509,19 @@ struct MIFLibraryPage: View {
         let row = HStack(alignment: .top, spacing: 13) {
             fileTypeTile(fileTypeLabel(name: item.name, mediaType: item.mediaType,
                                       defaultLabel: item.kind == .media ? "图片" : "文件"))
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(item.name)
                     .font(.system(size: 16, weight: .semibold))
+                    .tracking(-0.16)
+                    .lineSpacing(1.5)
                     .fixedSize(horizontal: false, vertical: true)
                 Text(accountDetail(item, metadataOnly: handle == nil))
                     .font(.system(size: 14))
-                    .foregroundStyle(NanoMuseTones.secondaryText)
+                    .lineSpacing(3.5)
+                    .foregroundStyle(MIFLibraryDesignPalette.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            .padding(.top, 1)
             Spacer(minLength: 8)
         }
         .padding(.vertical, 13)
@@ -521,24 +609,39 @@ struct MIFLibraryPage: View {
         let foreground: Color
         switch normalized {
         case "PDF":
+            #if MORDE_STANDALONE
+            fill = Color(red: 253.0 / 255.0, green: 236.0 / 255.0, blue: 236.0 / 255.0)
+            foreground = Color(red: 200.0 / 255.0, green: 30.0 / 255.0, blue: 30.0 / 255.0)
+            #else
             fill = Color(red: 0.992, green: 0.925, blue: 0.925)
             foreground = Color(red: 0.78, green: 0.12, blue: 0.12)
+            #endif
         case "DOC", "DOCX":
+            #if MORDE_STANDALONE
+            fill = Color(red: 232.0 / 255.0, green: 240.0 / 255.0, blue: 254.0 / 255.0)
+            foreground = Color(red: 26.0 / 255.0, green: 86.0 / 255.0, blue: 219.0 / 255.0)
+            #else
             fill = Color(red: 0.91, green: 0.94, blue: 0.99)
             foreground = Color(red: 0.10, green: 0.34, blue: 0.86)
+            #endif
         case "图片", "IMAGE":
+            #if MORDE_STANDALONE
+            fill = Color(red: 230.0 / 255.0, green: 247.0 / 255.0, blue: 236.0 / 255.0)
+            foreground = Color(red: 30.0 / 255.0, green: 142.0 / 255.0, blue: 62.0 / 255.0)
+            #else
             fill = Color(red: 0.90, green: 0.97, blue: 0.92)
             foreground = Color(red: 0.12, green: 0.55, blue: 0.24)
+            #endif
         case "构件", "ART":
             fill = .black
             foreground = .white
         default:
-            fill = NanoMuseTones.fill
-            foreground = NanoMuseTones.secondaryText
+            fill = MIFLibraryDesignPalette.defaultTypeFill
+            foreground = MIFLibraryDesignPalette.defaultTypeText
         }
         return Text(label)
             .font(.system(size: 8.5, weight: .heavy))
-            .tracking(0.02)
+            .tracking(0.17)
             .lineLimit(1)
             .minimumScaleFactor(0.7)
             .foregroundStyle(foreground)
@@ -584,13 +687,16 @@ struct MIFLibraryRoot: View {
     private struct MIFLibraryPreviewItem: Identifiable {
         let id: UUID
         let url: URL?
+        let fileName: String?
         var attachmentName: String? = nil
         var attachmentMediaType: String? = nil
 
         init(id: UUID = UUID(), url: URL? = nil,
+             fileName: String? = nil,
              attachmentName: String? = nil, attachmentMediaType: String? = nil) {
             self.id = id
             self.url = url
+            self.fileName = fileName ?? attachmentName
             self.attachmentName = attachmentName
             self.attachmentMediaType = attachmentMediaType
         }
@@ -687,9 +793,13 @@ struct MIFLibraryRoot: View {
                         .foregroundStyle(NanoMuseTones.secondaryText)
                 }
             }
-            .sheet(item: nonPersonalPreviewBinding, onDismiss: previewDismissed) { item in
+            .fullScreenCover(item: nonPersonalPreviewBinding, onDismiss: previewDismissed) { item in
                 if let url = item.url {
-                    NanoMuseQuickLook(url: url).ignoresSafeArea()
+                    MIFQuickLookFilePreview(
+                        url: url,
+                        title: item.fileName ?? url.lastPathComponent,
+                        navigation: previewNavigation,
+                        onClose: { previewItem = nil })
                 } else {
                     ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
@@ -842,7 +952,7 @@ struct MIFLibraryRoot: View {
                     guard authorization.personalDataScopeKey == scope else {
                         throw CancellationError()
                     }
-                    previewItem = MIFLibraryPreviewItem(url: url)
+                    previewItem = MIFLibraryPreviewItem(url: url, fileName: current.name)
                 } catch is CancellationError {
                     return
                 } catch {
@@ -870,7 +980,7 @@ struct MIFLibraryRoot: View {
                         taskMediaGenerationAvailable: taskStore.taskMediaGenerationAvailable) == handle else {
                     throw CancellationError()
                 }
-                previewItem = MIFLibraryPreviewItem(url: url)
+                previewItem = MIFLibraryPreviewItem(url: url, fileName: target.artifact.label)
             } catch is CancellationError {
                 return
             } catch {
@@ -1161,18 +1271,21 @@ struct MIFPersonalAttachmentPreview: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 14) {
+            HStack(spacing: 10) {
                 NanoMuseRoundButton(symbol: "chevron.left", label: AppLocalized("Back"), size: 38,
                                     action: onClose)
                 .accessibilityIdentifier("morde.attachment.preview.back")
 
                 Text(item.name)
                     .font(.headline)
+                    .tracking(-0.17)
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("morde.attachment.preview.title")
             }
             .padding(.horizontal, 22)
-            .padding(.vertical, 8)
+            .padding(.top, 10)
+            .padding(.bottom, 4)
             .background(ChatColors.background)
 
             ScrollView {
@@ -1226,7 +1339,6 @@ struct MIFPersonalAttachmentPreview: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
                 .padding(.bottom, 16)
-                .accessibilityIdentifier("morde.attachment.preview.tabBar")
             }
         }
         .background(ChatColors.background.ignoresSafeArea())
@@ -1251,6 +1363,58 @@ struct MIFPersonalAttachmentPreview: View {
             .font(.body)
             .foregroundStyle(NanoMuseTones.secondaryText)
             .frame(maxWidth: .infinity, minHeight: 440)
+    }
+}
+
+private struct MIFQuickLookFilePreview: View {
+    let url: URL
+    let title: String
+    var navigation: MordeFilePreviewNavigation? = nil
+    let onClose: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                NanoMuseRoundButton(symbol: "chevron.left", label: AppLocalized("Back"), size: 38,
+                                    action: onClose)
+                .accessibilityIdentifier("morde.attachment.preview.back")
+
+                Text(title)
+                    .font(.headline)
+                    .tracking(-0.17)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("morde.attachment.preview.title")
+            }
+            .padding(.horizontal, 22)
+            .padding(.top, 10)
+            .padding(.bottom, 4)
+            .background(ChatColors.background)
+
+            GeometryReader { geometry in
+                let shape = RoundedRectangle(cornerRadius: 18, style: .continuous)
+                NanoMuseQuickLook(url: url)
+                    .frame(width: geometry.size.width - 44, height: geometry.size.height - 2)
+                    .background(NanoMuseTones.surface, in: shape)
+                    .clipShape(shape)
+                    .overlay { shape.stroke(NanoMuseTones.hairline, lineWidth: 0.5) }
+                    .padding(.horizontal, 22)
+                    .padding(.top, 2)
+                    .accessibilityIdentifier("morde.attachment.preview.quickLook")
+            }
+
+            if let navigation {
+                MordeDesignTabBar(selectedTab: navigation.selectedTab,
+                                  approvalCount: navigation.approvalCount) { tab in
+                    onClose()
+                    navigation.onSelectTab(tab)
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+                .padding(.bottom, 16)
+            }
+        }
+        .background(ChatColors.background.ignoresSafeArea())
     }
 }
 

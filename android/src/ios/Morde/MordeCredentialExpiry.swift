@@ -693,6 +693,9 @@ enum MordeResourceLoadState: Equatable {
         return false
     }
 
+    // nanoMuse: A failed model lookup is unknown, not an active loading gate; queued chat must resume after it settles.
+    var isResolved: Bool { isLoaded || isFailed }
+
     var failureMessage: String? {
         if case .failed(let message) = self { return message }
         return nil
@@ -1306,6 +1309,46 @@ enum MordeTaskSnapshotCursor {
     }
 }
 
+/// Each task event stream owns one cursor value; task IDs prevent one stream from advancing another.
+struct MordeTaskEventCursor: Equatable, Sendable {
+    let taskID: String
+    private(set) var afterSequence: Int64
+
+    init(taskID: String, afterSequence: Int64) {
+        self.taskID = taskID
+        self.afterSequence = max(0, afterSequence)
+    }
+
+    var queryValue: String? { afterSequence > 0 ? String(afterSequence) : nil }
+
+    mutating func advance(eventID: String, for taskID: String) -> Bool {
+        guard taskID == self.taskID, let sequence = Int64(eventID), sequence > 0 else { return false }
+        afterSequence = max(afterSequence, sequence)
+        return true
+    }
+
+    mutating func resume(eventID: String, snapshotSequence: Int64) -> Bool {
+        guard let value = MordeTaskSnapshotCursor.resumeCursor(eventID: eventID,
+                                                               snapshotSequence: snapshotSequence),
+              let sequence = Int64(value), sequence >= afterSequence else { return false }
+        afterSequence = sequence
+        return true
+    }
+}
+
+enum MordeConversationTaskStopPolicy {
+    private static let stoppableStatuses: Set<String> = ["queued", "running", "paused", "waiting_user"]
+
+    static func targetTaskID(taskID: String, taskConversationID: String,
+                             currentConversationID: String?, trackedTaskIDs: Set<String>,
+                             status: String) -> String? {
+        guard MordeTaskResponsePolicy.hasValidTaskID(taskID),
+              taskConversationID == currentConversationID,
+              trackedTaskIDs.contains(taskID), stoppableStatuses.contains(status) else { return nil }
+        return taskID
+    }
+}
+
 struct MordeClientMessageSource: Decodable, Equatable {
     let user_message_id: String
     let task_id: String
@@ -1375,6 +1418,36 @@ struct MordeClientMessage: Decodable, Equatable, Identifiable {
     }
 }
 
+struct MordeConversationMessageSourceLine: Equatable, Identifiable {
+    let source: MordeClientMessageSource
+    let originatingMessageContent: String?
+
+    var id: String {
+        "\(source.user_message_id):\(source.task_id):\(source.task_revision):\(source.event_sequence)"
+    }
+
+    var originLabel: String {
+        guard let originatingMessageContent else { return "关联消息 \(source.user_message_id)" }
+        let normalized = originatingMessageContent.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        let excerpt = String(normalized.prefix(72))
+        return "关联消息：\(excerpt)\(normalized.count > excerpt.count ? "…" : "")"
+    }
+}
+
+enum MordeConversationMessageSourcePresentation {
+    static func lines(_ sources: [MordeClientMessageSource]?, userMessages: [MordeClientMessage]) -> [MordeConversationMessageSourceLine] {
+        (sources ?? []).map { source in
+            let originatingMessage = userMessages.first {
+                $0.id == source.user_message_id && $0.role == "user"
+            }
+            return MordeConversationMessageSourceLine(
+                source: source,
+                originatingMessageContent: originatingMessage?.content
+            )
+        }
+    }
+}
+
 struct MordeConversationMessageReceipt: Decodable {
     let message: MordeClientMessage
     // Text-upload commits may omit this field; a replay has the same message semantics.
@@ -1433,6 +1506,37 @@ enum MordeConversationMessageOrder {
 }
 
 enum MordeTaskSnapshotMessageMerge {
+    /// Reconcile a task's assistant snapshot with its current task state before presenting it.
+    /// A late snapshot can still say `streaming` after the task has already reached a terminal
+    /// state; keeping that status would make the chat claim that generation is still in progress.
+    static func reconcilingStreamingSnapshot(_ snapshot: MordeClientMessage?, taskStatus: String) -> MordeClientMessage? {
+        guard let snapshot, snapshot.role == "assistant", snapshot.displayStatus == "streaming" else {
+            return snapshot
+        }
+        let resolvedStatus: String
+        switch taskStatus {
+        case "running":
+            return snapshot
+        case "completed":
+            resolvedStatus = "completed"
+        case "failed", "cancelled":
+            resolvedStatus = "interrupted"
+        default:
+            return snapshot
+        }
+        return MordeClientMessage(
+            id: snapshot.id, conversation_id: snapshot.conversation_id, sequence: snapshot.sequence,
+            task_id: snapshot.task_id, role: snapshot.role, content: snapshot.content,
+            attachment_ids: snapshot.attachment_ids, status: resolvedStatus,
+            delivery_status: snapshot.delivery_status, created_at: snapshot.created_at,
+            client_message_id: snapshot.client_message_id, routing_status: snapshot.routing_status,
+            routing_failure_reason: snapshot.routing_failure_reason, local_send_status: snapshot.local_send_status,
+            owner_id: snapshot.owner_id, actor_id: snapshot.actor_id, task_revision: snapshot.task_revision,
+            result_event_sequence: snapshot.result_event_sequence, sources: snapshot.sources,
+            output_status: nil, output_task_revision: snapshot.output_task_revision,
+            output_result_event_sequence: snapshot.output_result_event_sequence)
+    }
+
     static func shouldIncludeSnapshot(resultMessagePending: Bool?, resultMessagePublished: Bool?, status: String?) -> Bool {
         if status == "interrupted" { return true }
         return resultMessagePublished != true && (resultMessagePending != true || status == "streaming")
@@ -1617,7 +1721,7 @@ enum MordeTaskStatusPresentation {
         switch label(status: status, waitingReason: waitingReason, stopRequestStatus: stopRequestStatus) {
         case "排队中": return "Queued"
         case "运行中": return "Running"
-        case "等待你审批": return "Waiting for approval"
+        case "等你审批": return "Waiting for approval"
         case "等待你补充信息": return "Waiting for your input"
         case "等待电脑同步": return "Waiting for computer sync"
         case "工作区已变化，等待确认": return "Workspace changed; awaiting confirmation"
@@ -1666,7 +1770,7 @@ enum MordeTaskStatusPresentation {
         case "queued": return "排队中"
         case "running": return "运行中"
         case "waiting_user":
-            if waitingReason == "approval_required" { return "等待你审批" }
+            if waitingReason == "approval_required" { return "等你审批" }
             if waitingReason == "clarification_required" { return "等待你补充信息" }
             switch waitingReason {
             case "workspace_host_sync": return "等待电脑同步"
@@ -1777,6 +1881,10 @@ enum MordeCloudModelConfiguration {
         guard status == "not_configured", loaded, let checkedAt else { return false }
         let age = now.timeIntervalSince(checkedAt)
         return age >= 0 && age < 300
+    }
+
+    static func allowsSubmission(status: String, loaded: Bool, checkedAt: Date?, now: Date = Date()) -> Bool {
+        !isConfirmedAbsent(status: status, loaded: loaded, checkedAt: checkedAt, now: now)
     }
 }
 
@@ -2057,7 +2165,7 @@ enum MordeOutboxScheduling {
     }
 
     static func readyIDs(_ messages: [MordeOutboxMessage], scope: MordeClientDataScope,
-                         inFlight: Set<String>) -> [String] {
+                         inFlight: Set<String>, allowsNewSubmissions: Bool = true) -> [String] {
         let scoped = messages.filter { $0.scope.hasSameAccount(as: scope) }
         let required = dependencies(scoped)
         let independentBlocks = independentRetryBlocks(scoped)
@@ -2066,6 +2174,9 @@ enum MordeOutboxScheduling {
         var ready: [String] = []
         for message in scoped {
             let conversation = conversation(message)
+            // nanoMuse: Unknown prior deliveries still need reconciliation; callers may hold untouched sends only on confirmed absence.
+            guard allowsNewSubmissions || message.serverMessageID != nil || message.state != .pending ||
+                    message.submissionStarted != false else { continue }
             if message.serverMessageID == nil {
                 if independentBlocks.contains(Dependency(conversation: conversation, predecessorID: message.id)) { continue }
                 if message.state == .failed && !required.contains(Dependency(conversation: conversation, predecessorID: message.id)) {
@@ -2267,6 +2378,22 @@ final class MordeMessageOutbox {
         return try read(scope: scope).messages
     }
 
+    // nanoMuse: A process restart invalidates in-flight UI work; reconcile old sends by their original client message IDs.
+    func recoverInterruptedMessages(scope: MordeClientDataScope,
+                                    excludingInFlight: Set<String> = []) throws -> [MordeOutboxMessage] {
+        Self.lock.lock()
+        defer { Self.lock.unlock() }
+        var snapshot = try read(scope: scope)
+        var changed = false
+        for index in snapshot.messages.indices where snapshot.messages[index].state == .sending &&
+                !excludingInFlight.contains(snapshot.messages[index].id) {
+            snapshot.messages[index].state = snapshot.messages[index].serverMessageID == nil ? .unknown : .accepted
+            changed = true
+        }
+        if changed { try write(snapshot, scope: scope) }
+        return snapshot.messages
+    }
+
     func resolvedConversationID(_ id: String, scope: MordeClientDataScope) throws -> String {
         Self.lock.lock()
         defer { Self.lock.unlock() }
@@ -2448,6 +2575,12 @@ final class MordeRevocationStore {
         defaults.set(try JSONEncoder().encode(snapshot), forKey: Self.defaultsKey)
     }
 
+    func confirm(_ revocation: MordeRevocationRecord) throws {
+        try record(MordeRevocationRecord(scope: revocation.scope,
+                                         clientInstanceID: revocation.clientInstanceID,
+                                         confirmed: true))
+    }
+
     func pending() -> [MordeRevocationRecord] {
         Self.lock.lock()
         defer { Self.lock.unlock() }
@@ -2460,6 +2593,20 @@ final class MordeRevocationStore {
             return MordeRevocationSnapshot()
         }
         return snapshot
+    }
+}
+
+enum MordeRevocationRetryPolicy {
+    static func candidates(_ pending: [MordeRevocationRecord], currentScope: MordeClientDataScope,
+                           currentInstallationID: String?, accountName: String) -> [MordeRevocationRecord] {
+        pending.filter { record in
+            !record.confirmed &&
+                record.scope.serviceOrigin == currentScope.serviceOrigin &&
+                record.scope.serviceInstanceID == currentScope.serviceInstanceID &&
+                (record.scope.accountID == currentScope.accountID || record.scope.accountID == accountName) &&
+                MordeClientInstallationPolicy.canRevoke(
+                    record.scope.installationID, currentInstallationID: currentInstallationID)
+        }
     }
 }
 

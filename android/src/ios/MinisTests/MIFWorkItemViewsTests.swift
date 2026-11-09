@@ -34,37 +34,35 @@ final class MIFWorkItemViewsTests: XCTestCase {
         XCTAssertFalse(MIFWorkItemPresentation.matches(openAssigned, filter: .unclaimed))
         XCTAssertEqual(MIFWorkItemPresentation.assigneeLabel(blockedUnassigned.assignee_id), "待认领")
         XCTAssertEqual(MIFWorkItemPresentation.assigneeLabel(openAssigned.assignee_id), "已分配给 u1234567")
-        XCTAssertTrue(MIFWorkItemPresentation.canClaim(item: blockedUnassigned, supportsV2: true,
+        XCTAssertTrue(MIFWorkItemPresentation.canClaim(item: blockedUnassigned,
                                                        canClaim: true, role: "member"))
-        XCTAssertFalse(MIFWorkItemPresentation.canClaim(item: openAssigned, supportsV2: true,
+        XCTAssertFalse(MIFWorkItemPresentation.canClaim(item: openAssigned,
                                                         canClaim: true, role: "member"))
     }
 
-    func testClaimRequiresV2PermissionUnassignedAndNotDelivered() throws {
+    func testClaimRequiresPermissionUnassignedAndNotDelivered() throws {
         let openUnassigned = try workItem(state: "open", assigneeID: nil)
         let deliveredUnassigned = try workItem(state: "delivered", assigneeID: nil)
 
-        XCTAssertTrue(MIFWorkItemPresentation.canClaim(item: openUnassigned, supportsV2: true,
+        XCTAssertTrue(MIFWorkItemPresentation.canClaim(item: openUnassigned,
                                                        canClaim: true, role: "owner"))
-        XCTAssertTrue(MIFWorkItemPresentation.canClaim(item: openUnassigned, supportsV2: true,
+        XCTAssertTrue(MIFWorkItemPresentation.canClaim(item: openUnassigned,
                                                        canClaim: true, role: "member"))
-        XCTAssertFalse(MIFWorkItemPresentation.canClaim(item: openUnassigned, supportsV2: true,
+        XCTAssertFalse(MIFWorkItemPresentation.canClaim(item: openUnassigned,
                                                         canClaim: true, role: "viewer"))
-        XCTAssertFalse(MIFWorkItemPresentation.canClaim(item: openUnassigned, supportsV2: true,
+        XCTAssertFalse(MIFWorkItemPresentation.canClaim(item: openUnassigned,
                                                         canClaim: false, role: "member"))
-        XCTAssertFalse(MIFWorkItemPresentation.canClaim(item: openUnassigned, supportsV2: false,
-                                                        canClaim: true, role: "member"))
-        XCTAssertFalse(MIFWorkItemPresentation.canClaim(item: deliveredUnassigned, supportsV2: true,
+        XCTAssertFalse(MIFWorkItemPresentation.canClaim(item: deliveredUnassigned,
                                                         canClaim: true, role: "member"))
         XCTAssertEqual(MIFWorkItemPresentation.stateLabel("delivered"), "已交付")
     }
 
-    func testV2CreationOptionsPreserveLegacyBehavior() {
-        XCTAssertNil(MIFWorkItemPresentation.categoryForCreation("bug", supportsV2: false))
-        XCTAssertFalse(MIFWorkItemPresentation.createsUnassigned(supportsV2: false))
-        XCTAssertEqual(MIFWorkItemPresentation.categoryForCreation("bug", supportsV2: true), "bug")
-        XCTAssertEqual(MIFWorkItemPresentation.categoryForCreation("request", supportsV2: true), "request")
-        XCTAssertTrue(MIFWorkItemPresentation.createsUnassigned(supportsV2: true))
+    func testCreationRequiresV2CapabilityAndManagerRole() {
+        XCTAssertFalse(MIFWorkItemPresentation.canCreate(supportsV2: false, role: "owner"))
+        XCTAssertFalse(MIFWorkItemPresentation.canCreate(supportsV2: false, role: "member"))
+        XCTAssertFalse(MIFWorkItemPresentation.canCreate(supportsV2: true, role: "viewer"))
+        XCTAssertTrue(MIFWorkItemPresentation.canCreate(supportsV2: true, role: "owner"))
+        XCTAssertTrue(MIFWorkItemPresentation.canCreate(supportsV2: true, role: "member"))
     }
 
     func testEditingRequiresOwnerOrMemberAndMatchesCurrentState() throws {

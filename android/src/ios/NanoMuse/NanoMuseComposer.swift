@@ -25,7 +25,11 @@ struct NanoMuseComposerPill<Field: View>: View {
     var canEnqueue: Bool
     var showsAttachments = true
     var showsMicrophone = true
+    /// Uses the compact single-field geometry from the Morde design while keeping
+    /// the existing 44 pt interactive target.
+    var designCompactLayout = false
     var sendAccessibilityIdentifier = "nanoMuse.composer.send"
+    var microphoneAccessibilityIdentifier = "nanoMuse.composer.mic"
     var onCamera: () -> Void
     var onPhotos: () -> Void
     var onFile: () -> Void
@@ -47,20 +51,22 @@ struct NanoMuseComposerPill<Field: View>: View {
 
     private let glyph: CGFloat = 44
     /// The send disc's diameter, the size the `arrow.up.circle.fill` glyph had.
-    private let disc: CGFloat = 30
+    private var disc: CGFloat { designCompactLayout ? 34 : 30 }
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: 2) {
+        HStack(alignment: .bottom, spacing: designCompactLayout ? 8 : 2) {
             if showsAttachments { plusButton }
             // One line as tall as a glyph, so its text sits on the plus and the mic's centre line;
             // the row stays bottom-aligned, so a longer text keeps them level with its last line.
             field()
+                .font(designCompactLayout ? .system(size: FontSettings.shared.scaledChatInput(15)) : nil)
                 .padding(.vertical, max(4, (glyph - UIFont.systemFont(
                     ofSize: FontSettings.shared.scaledChatInput(16.5)).lineHeight.rounded(.up)) / 2))
             trailingButton
         }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 4)
+        .padding(.leading, designCompactLayout ? 12 : 6)
+        .padding(.trailing, designCompactLayout ? 1 : 6)
+        .padding(.vertical, designCompactLayout ? 0 : 4)
     }
 
     // MARK: Plus
@@ -162,6 +168,7 @@ struct NanoMuseComposerPill<Field: View>: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text("Voice input", comment: "Mic button opens voice panel"))
+            .accessibilityIdentifier(microphoneAccessibilityIdentifier)
         } else if let onIdleSend {
             Button(action: onIdleSend) {
                 inkDisc("arrow.up", enabled: true)

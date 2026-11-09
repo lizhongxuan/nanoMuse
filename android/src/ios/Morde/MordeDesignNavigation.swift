@@ -27,13 +27,70 @@ enum MordeDesignTab: String, CaseIterable, Hashable, Identifiable {
         }
     }
 
-    var symbol: String {
+    var symbol: String? {
         switch self {
         case .chat: "bubble.left"
         case .tasks: "checkmark.square"
         case .approvals: "checkmark.shield"
-        case .resources: "square.grid.2x2"
+        case .resources: nil
         }
+    }
+
+    var customGlyph: MordeDesignGlyphKind? {
+        self == .resources ? .resources : nil
+    }
+}
+
+enum MordeDesignGlyphKind: Hashable {
+    case resources
+    case library
+    case workItems
+}
+
+private struct MordeDesignGlyphShape: Shape {
+    let kind: MordeDesignGlyphKind
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        switch kind {
+        case .resources:
+            path.move(to: CGPoint(x: 9.2, y: 3.8))
+            path.addLine(to: CGPoint(x: 4, y: 9))
+            path.addLine(to: CGPoint(x: 9.2, y: 14.2))
+            path.addLine(to: CGPoint(x: 14.4, y: 9))
+            path.closeSubpath()
+            path.addEllipse(in: CGRect(x: 12.2, y: 12.8, width: 7.2, height: 7.2))
+            path.addRoundedRect(in: CGRect(x: 4.2, y: 14.6, width: 6.4, height: 6.4),
+                                cornerSize: CGSize(width: 1.6, height: 1.6), style: .circular)
+        case .library:
+            path.addRoundedRect(in: CGRect(x: 3.5, y: 5.5, width: 17, height: 13),
+                                cornerSize: CGSize(width: 1.5, height: 1.5), style: .circular)
+            path.move(to: CGPoint(x: 3.5, y: 10))
+            path.addLine(to: CGPoint(x: 20.5, y: 10))
+            path.move(to: CGPoint(x: 7, y: 14.2))
+            path.addLine(to: CGPoint(x: 11, y: 14.2))
+        case .workItems:
+            path.addRoundedRect(in: CGRect(x: 5, y: 4, width: 14, height: 17),
+                                cornerSize: CGSize(width: 2.5, height: 2.5), style: .circular)
+            path.move(to: CGPoint(x: 9, y: 4.5))
+            path.addLine(to: CGPoint(x: 9, y: 3))
+            path.addLine(to: CGPoint(x: 15, y: 3))
+            path.addLine(to: CGPoint(x: 15, y: 4.5))
+            path.move(to: CGPoint(x: 9, y: 11))
+            path.addLine(to: CGPoint(x: 15, y: 11))
+            path.move(to: CGPoint(x: 9, y: 15))
+            path.addLine(to: CGPoint(x: 13, y: 15))
+        }
+        return path.applying(CGAffineTransform(scaleX: rect.width / 24, y: rect.height / 24))
+    }
+}
+
+private struct MordeDesignGlyph: View {
+    let kind: MordeDesignGlyphKind
+
+    var body: some View {
+        MordeDesignGlyphShape(kind: kind)
+            .stroke(Color.primary, style: StrokeStyle(lineWidth: 1.8, lineCap: .round, lineJoin: .round))
     }
 }
 
@@ -44,6 +101,7 @@ enum MordeDesignRoute: Hashable {
     case eventChain
     case resources
     case library
+    case projects
     case workItems
     case friends
     case toolChats
@@ -59,10 +117,11 @@ enum MordeDesignRoute: Hashable {
     var primaryTab: MordeDesignTab? {
         switch self {
         case .chat, .chatConversation: .chat
-        case .tasks, .eventChain, .workItems, .task: .tasks
+        case .tasks: .tasks
         case .approvals: .approvals
-        case .resources, .library, .workspace, .computer, .file: .resources
-        case .friends, .toolChats, .settings, .settingsDetail, .search: nil
+        case .resources: .resources
+        case .eventChain, .library, .projects, .workItems, .friends, .toolChats,
+             .settings, .settingsDetail, .search, .task, .workspace, .computer, .file: nil
         }
     }
 
@@ -92,6 +151,9 @@ extension MIFDrawerDestination {
         case .library: .library
         case .workItems: .workItems
         case .friends: .friends
+        #if MORDE_CANONICAL
+        case .projects: .projects
+        #endif
         case .toolChats: .toolChats
         }
     }
@@ -101,15 +163,17 @@ struct MordeDesignDrawerItem: Identifiable {
     let id: String
     let title: String
     let systemImage: String?
+    let customGlyph: MordeDesignGlyphKind?
     let route: MordeDesignRoute
     var badge: Int? = nil
     var isSelected = false
 
     init(id: String, title: String, systemImage: String?, route: MordeDesignRoute,
-         badge: Int? = nil, isSelected: Bool = false) {
+         customGlyph: MordeDesignGlyphKind? = nil, badge: Int? = nil, isSelected: Bool = false) {
         self.id = id
         self.title = title
         self.systemImage = systemImage
+        self.customGlyph = customGlyph
         self.route = route
         self.badge = badge
         self.isSelected = isSelected
@@ -147,7 +211,7 @@ struct MordeDesignDrawerFooter {
 
 struct MordeDesignNavigationShell<Content: View>: View {
     private let selectedRoute: MordeDesignRoute
-    private let selectedTab: MordeDesignTab
+    private let selectedTab: MordeDesignTab?
     private let approvalCount: Int?
     private let brandTitle: String
     private let drawerSections: [MordeDesignDrawerSection]
@@ -164,7 +228,7 @@ struct MordeDesignNavigationShell<Content: View>: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isDrawerOpen = false
 
-    init(selectedRoute: MordeDesignRoute, selectedTab: MordeDesignTab, approvalCount: Int?,
+    init(selectedRoute: MordeDesignRoute, selectedTab: MordeDesignTab?, approvalCount: Int?,
          brandTitle: String = "Morde", drawerSections: [MordeDesignDrawerSection],
          footer: MordeDesignDrawerFooter, searchText: Binding<String>,
          onSelectTab: @escaping (MordeDesignTab) -> Void,
@@ -318,14 +382,19 @@ struct MordeDesignNavigationShell<Content: View>: View {
             closeDrawer()
             onSelectRoute(item.route)
         } label: {
-            HStack(spacing: item.systemImage == nil ? 0 : 13) {
-                if let systemImage = item.systemImage {
+            HStack(spacing: item.systemImage == nil && item.customGlyph == nil ? 0 : 13) {
+                if let customGlyph = item.customGlyph {
+                    MordeDesignGlyph(kind: customGlyph)
+                        .frame(width: 22, height: 22)
+                        .frame(width: 24)
+                } else if let systemImage = item.systemImage {
                     Image(systemName: systemImage)
                         .font(.system(size: 22, weight: .regular))
                         .frame(width: 24)
                 }
                 Text(item.title)
-                    .font(item.systemImage == nil ? .system(size: 16, weight: .medium) : .body.weight(.semibold))
+                    .font(item.systemImage == nil && item.customGlyph == nil
+                          ? .system(size: 16, weight: .medium) : .body.weight(.semibold))
                     .lineLimit(1)
                 Spacer(minLength: 8)
                 if let badge = item.badge, badge > 0 {
@@ -402,12 +471,12 @@ struct MordeDesignNavigationShell<Content: View>: View {
     private func openDrawer() {
         onOpenDrawer()
         if reduceMotion { isDrawerOpen = true }
-        else { withAnimation(.easeInOut(duration: 0.3)) { isDrawerOpen = true } }
+        else { withAnimation(.timingCurve(0.32, 0.72, 0.24, 1, duration: 0.34)) { isDrawerOpen = true } }
     }
 
     private func closeDrawer() {
         if reduceMotion { isDrawerOpen = false }
-        else { withAnimation(.easeInOut(duration: 0.3)) { isDrawerOpen = false } }
+        else { withAnimation(.timingCurve(0.32, 0.72, 0.24, 1, duration: 0.34)) { isDrawerOpen = false } }
     }
 
     private var displayedDrawerSections: [MordeDesignDrawerSection] {
@@ -424,7 +493,7 @@ struct MordeDesignNavigationShell<Content: View>: View {
 }
 
 struct MordeDesignTabBar: View {
-    let selectedTab: MordeDesignTab
+    let selectedTab: MordeDesignTab?
     let approvalCount: Int?
     let onSelectTab: (MordeDesignTab) -> Void
 
@@ -445,10 +514,17 @@ struct MordeDesignTabBar: View {
         let isSelected = selectedTab == tab
         return Button { onSelectTab(tab) } label: {
             ZStack(alignment: .topTrailing) {
-                Image(systemName: tab.symbol)
-                    .font(.system(size: 22, weight: .regular))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .contentShape(Capsule())
+                Group {
+                    if let customGlyph = tab.customGlyph {
+                        MordeDesignGlyph(kind: customGlyph)
+                            .frame(width: 23, height: 23)
+                    } else if let symbol = tab.symbol {
+                        Image(systemName: symbol)
+                            .font(.system(size: 22, weight: .regular))
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Capsule())
                 if tab == .approvals, let approvalCount, approvalCount > 0 {
                     Text(approvalCount > 99 ? "99+" : String(approvalCount))
                         .font(.caption2.weight(.bold))
@@ -469,12 +545,13 @@ struct MordeDesignTabBar: View {
         .accessibilityLabel(Text(tab.title))
         .accessibilityValue(isSelected ? Text("Selected") : Text(""))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityRemoveTraits(isSelected ? [] : .isSelected)
         .accessibilityIdentifier("morde.nav.tab.\(tab.id)")
     }
 }
 
 struct MordeFilePreviewNavigation {
-    let selectedTab: MordeDesignTab
+    let selectedTab: MordeDesignTab?
     let approvalCount: Int?
     let onSelectTab: (MordeDesignTab) -> Void
 }

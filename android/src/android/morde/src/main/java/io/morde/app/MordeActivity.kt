@@ -204,7 +204,7 @@ class MordeActivity : ComponentActivity() {
             workspaces = api.page("/api/workspaces")
             models = api.page("/api/available-models").filter {
                 val caps = it.optJSONObject("capabilities")
-                caps?.optBoolean("text") == true && caps.optBoolean("tools")
+                caps?.optBoolean("text") == true
             }
             conversations = api.page("/api/conversations?limit=100")
             tasks = api.page("/api/tasks?limit=100")
@@ -228,19 +228,38 @@ class MordeActivity : ComponentActivity() {
 
     private fun send() {
         val text = draft.trim()
-        val host = conversations.firstOrNull { it.optString("id") == selectedConversation }?.optString("host_id") ?: selectedHost
-        if (text.isEmpty() || host.isBlank() || selectedModel.isBlank() || busy) return
+        val conversationID = selectedConversation
+        val hasConversation = conversationID.isNotBlank()
+        val host = conversations.firstOrNull { it.optString("id") == conversationID }?.optString("host_id") ?: selectedHost
+        if (!canSendMordeMessage(text, busy, hasConversation, host.isNotBlank(), selectedModel.isNotBlank())) return
         val fingerprint = "$selectedConversation|$host|$selectedModel|$text"
         if (retrySend?.first != fingerprint) retrySend = fingerprint to UUID.randomUUID().toString()
         lifecycleScope.launch {
             busy = true
             try {
-                val reply = if (selectedConversation.isBlank()) api.request("/api/tasks", "POST",
-                    MordeClient.json("host_id" to host, "model_id" to selectedModel, "objective" to text), retrySend?.second)
-                else api.request("/api/conversations/${MordeClient.encode(selectedConversation)}/messages", "POST",
-                    MordeClient.json("host_id" to host, "model_id" to selectedModel, "content" to text), retrySend?.second).getJSONObject("task")
-                retrySend = null; draft = ""; selectedConversation = reply.getString("conversation_id"); selectedTask = reply
-                load(); startStream(reply.getString("id"))
+                if (!hasConversation) {
+                    val reply = api.request("/api/tasks", "POST",
+                        MordeClient.json("host_id" to host, "model_id" to selectedModel, "objective" to text), retrySend?.second)
+                    retrySend = null; draft = ""; selectedConversation = reply.getString("conversation_id"); selectedTask = reply
+                    load(); startStream(reply.getString("id"))
+                } else {
+                    val clientMessageID = retrySend?.second ?: throw IllegalStateException("Message identity is unavailable")
+                    val serviceInstanceID = api.request("/api/capabilities", authorized = false).getString("service_instance_id")
+                    val actorID = api.request("/api/me").getString("id")
+                    val body = JSONObject().put("client_message_id", clientMessageID).put("content", text)
+                    if (host.isNotBlank()) body.put("host_id", host)
+                    if (selectedModel.isNotBlank()) body.put("model_id", selectedModel)
+                    val response = api.request("/api/conversations/${MordeClient.encode(conversationID)}/messages", "POST", body,
+                        key = clientMessageID, serviceInstanceID = serviceInstanceID, actorID = actorID)
+                    val message = response.optJSONObject("message")
+                        ?: throw IllegalStateException("Message receipt is missing; the draft was kept for retry")
+                    check(message.optString("conversation_id") == conversationID && message.optString("role") == "user" &&
+                        message.optString("client_message_id") == clientMessageID && message.optString("content") == text) {
+                        "Message receipt does not match this conversation; the draft was kept for retry"
+                    }
+                    retrySend = null; draft = ""
+                    load()
+                }
             } catch (reason: Throwable) { fail(reason) }
             finally { busy = false }
         }
@@ -498,6 +517,6 @@ class MordeActivity : ComponentActivity() {
         Text("Model")
         models.forEach { model -> Text("${if (selectedModel == model.optString("id")) "●" else "○"} ${model.optString("name")}", modifier = Modifier.clickable { selectedModel = model.optString("id") }) }
         OutlinedTextField(draft, { draft = it }, label = { Text("Describe the task") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
-        Button(onClick = ::send, enabled = !busy && draft.isNotBlank() && (selectedConversation.isNotBlank() || selectedHost.isNotBlank()) && selectedModel.isNotBlank()) { Text("Send") }
+        Button(onClick = ::send, enabled = canSendMordeMessage(draft, busy, selectedConversation.isNotBlank(), selectedHost.isNotBlank(), selectedModel.isNotBlank())) { Text("Send") }
     }
 }
